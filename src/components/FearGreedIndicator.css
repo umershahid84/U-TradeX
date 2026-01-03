@@ -1,0 +1,96 @@
+.fear-greed-indicator {
+  background: #141938;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.indicator-header h3 {
+  color: #e0e0e0;
+  margin-bottom: 16px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.gauge-container {
+  margin-bottom: 12px;
+}
+
+.gauge {
+  width: 100%;
+  height: 20px;
+  background: #1a1e3f;
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+}
+
+.gauge-fill {
+  height: 100%;
+  transition: width 0.5s ease, background 0.5s ease;
+  border-radius: 10px;
+}
+
+.gauge-value {
+  text-align: center;
+  font-size: 32px;
+  font-weight: 700;
+  margin: 12px 0;
+}
+
+.level-label {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  margin-bottom: 16px;
+}
+
+.signal-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.signal {
+  padding: 8px 24px;
+  border-radius: 20px;
+  color: white;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+}
+
+.market-conditions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.condition {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.condition.oversold {
+  background: rgba(239, 83, 80, 0.2);
+  color: #ef5350;
+}
+
+.condition.overbought {
+  background: rgba(38, 166, 154, 0.2);
+  color: #26a69a;
+}
+
+.condition.neutral {
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffc107;
+}
+
+.condition .icon {
+  font-size: 14px;
+}

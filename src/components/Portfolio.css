@@ -1,0 +1,261 @@
+.portfolio {
+  background: #141938;
+  border-radius: 8px;
+  padding: 20px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.portfolio-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.portfolio-header h3 {
+  color: #e0e0e0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.reset-btn {
+  padding: 6px 12px;
+  background: #ef5350;
+  border: none;
+  border-radius: 4px;
+  color: white;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.reset-btn:hover {
+  background: #f26663;
+}
+
+.account-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.summary-card {
+  background: #1a1e3f;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.card-label {
+  color: #a0a0a0;
+  font-size: 11px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.card-value {
+  color: #e0e0e0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.card-value.positive {
+  color: #26a69a;
+}
+
+.card-value.negative {
+  color: #ef5350;
+}
+
+.positions-section,
+.orders-section,
+.options-section {
+  margin-bottom: 24px;
+}
+
+.positions-section h4,
+.orders-section h4,
+.options-section h4 {
+  color: #e0e0e0;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.empty-state {
+  color: #606080;
+  font-size: 13px;
+  text-align: center;
+  padding: 20px;
+}
+
+.positions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.position-card {
+  background: #1a1e3f;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.position-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.position-symbol {
+  color: #e0e0e0;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.position-qty {
+  color: #a0a0a0;
+  font-size: 12px;
+}
+
+.position-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #a0a0a0;
+}
+
+.detail-row span:last-child {
+  color: #e0e0e0;
+}
+
+.detail-row .positive {
+  color: #26a69a;
+}
+
+.detail-row .negative {
+  color: #ef5350;
+}
+
+.orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.order-item {
+  background: #1a1e3f;
+  border-radius: 4px;
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.order-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.order-side {
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  font-size: 10px;
+}
+
+.order-side.buy {
+  background: rgba(38, 166, 154, 0.2);
+  color: #26a69a;
+}
+
+.order-side.sell {
+  background: rgba(239, 83, 80, 0.2);
+  color: #ef5350;
+}
+
+.order-symbol {
+  color: #e0e0e0;
+  font-weight: 600;
+}
+
+.order-qty {
+  color: #a0a0a0;
+}
+
+.order-status {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.order-status.pending {
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffc107;
+}
+
+.order-status.filled {
+  background: rgba(38, 166, 154, 0.2);
+  color: #26a69a;
+}
+
+.order-status.cancelled {
+  background: rgba(239, 83, 80, 0.2);
+  color: #ef5350;
+}
+
+.options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.option-item {
+  background: #1a1e3f;
+  border-radius: 4px;
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.option-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #a0a0a0;
+}
+
+.option-type {
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  font-size: 10px;
+}
+
+.option-type.call {
+  background: rgba(38, 166, 154, 0.2);
+  color: #26a69a;
+}
+
+.option-type.put {
+  background: rgba(239, 83, 80, 0.2);
+  color: #ef5350;
+}
+
+.option-value {
+  color: #e0e0e0;
+  font-size: 12px;
+  font-weight: 500;
+}
