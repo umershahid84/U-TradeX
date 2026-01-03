@@ -200,7 +200,7 @@ export class RealMarketDataService {
   ): ChartData[] {
     console.warn(`Using fallback data for ${symbol}`);
     const data: ChartData[] = [];
-    let basePrice = this.priceCache.get(symbol) || 100 + Math.random() * 100;
+    let basePrice = this.priceCache.get(symbol) || this.getRealisticPrice(symbol);
     
     const bars = this.getBarsForRange(range);
     const now = Date.now();
@@ -263,5 +263,107 @@ export class RealMarketDataService {
       '3mo': 90 * 24 * 60 * 60 * 1000,
     };
     return map[timeframe] || 60 * 1000;
+  }
+
+  // Get realistic starting price based on symbol
+  private getRealisticPrice(symbol: string): number {
+    // Common stock/crypto prices (approximate realistic values)
+    const priceMap: Record<string, number> = {
+      // Major stocks
+      'AAPL': 175,
+      'MSFT': 380,
+      'GOOGL': 140,
+      'GOOG': 142,
+      'AMZN': 155,
+      'TSLA': 250,
+      'META': 485,
+      'NVDA': 495,
+      'AMD': 155,
+      'INTC': 45,
+      'NFLX': 480,
+      'DIS': 95,
+      'BA': 180,
+      'JPM': 200,
+      'V': 280,
+      'MA': 460,
+      'WMT': 75,
+      'JNJ': 150,
+      'PG': 165,
+      'KO': 62,
+      'PEP': 170,
+      'COST': 880,
+      'HD': 390,
+      'NKE': 80,
+      'MCD': 295,
+      'SBUX': 98,
+      'IBM': 190,
+      'ORCL': 145,
+      'CRM': 310,
+      'ADBE': 480,
+      'PYPL': 78,
+      'SQ': 75,
+      'SHOP': 82,
+      'UBER': 68,
+      'LYFT': 12,
+      'SNAP': 11,
+      'PINS': 32,
+      'TWTR': 53,
+      'SPOT': 350,
+      'ROKU': 68,
+      'ZM': 71,
+      'DOCU': 58,
+      'CRWD': 340,
+      'ZS': 195,
+      'OKTA': 100,
+      'DDOG': 125,
+      'SNOW': 155,
+      'MDB': 410,
+      'TEAM': 210,
+      'PANW': 350,
+      'FTNT': 73,
+      'NET': 88,
+      'DKNG': 42,
+      'PENN': 20,
+      'MGM': 43,
+      'WYNN': 95,
+      'LVS': 42,
+      
+      // Crypto (in USD)
+      'BTC': 42000,
+      'BTC-USD': 42000,
+      'ETH': 2200,
+      'ETH-USD': 2200,
+      'DOGE': 0.08,
+      'DOGE-USD': 0.08,
+      'ADA': 0.50,
+      'ADA-USD': 0.50,
+      'SOL': 100,
+      'SOL-USD': 100,
+      'MATIC': 0.85,
+      'MATIC-USD': 0.85,
+      'DOT': 7.5,
+      'DOT-USD': 7.5,
+      'LINK': 14,
+      'LINK-USD': 14,
+      'UNI': 6,
+      'UNI-USD': 6,
+      'AVAX': 36,
+      'AVAX-USD': 36,
+    };
+    
+    // Check if symbol is in the map
+    const upperSymbol = symbol.toUpperCase();
+    if (priceMap[upperSymbol]) {
+      return priceMap[upperSymbol];
+    }
+    
+    // If not found, return a reasonable default based on symbol characteristics
+    // Crypto symbols typically end with -USD or are 3-4 letters
+    if (upperSymbol.endsWith('-USD') || (upperSymbol.length <= 4 && !upperSymbol.match(/^[A-Z]{1,5}$/))) {
+      return 1000 + Math.random() * 9000; // Random crypto-like price (1k-10k)
+    }
+    
+    // Default to typical stock price range
+    return 50 + Math.random() * 150; // Random stock price (50-200)
   }
 }

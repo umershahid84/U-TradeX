@@ -15,6 +15,7 @@
   right: 10px;
   z-index: 10;
   display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
@@ -32,4 +33,37 @@
 .indicator-toggle:hover {
   background: rgba(52, 56, 99, 0.9);
   border-color: #4a4e8f;
+}
+
+.indicator-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: rgba(42, 46, 79, 0.95);
+  border: 1px solid #3a3e6f;
+  border-radius: 4px;
+  max-width: 150px;
+}
+
+.indicator-checkboxes label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #e0e0e0;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.2s;
+}
+
+.indicator-checkboxes label:hover {
+  color: #4CAF50;
+}
+
+.indicator-checkboxes input[type="checkbox"] {
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+  accent-color: #4CAF50;
 }
