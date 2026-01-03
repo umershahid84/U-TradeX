@@ -65,7 +65,7 @@ function App() {
     }
   }, [symbol, timeframe, timeRange]);
 
-  // Subscribe to live price updates
+  // Subscribe to live price updates for current symbol
   useEffect(() => {
     const unsubscribe = marketData.subscribeToPrice(symbol, (price) => {
       setCurrentPrice(price);
@@ -87,19 +87,36 @@ function App() {
         return newData;
       });
 
-      // Update position prices
-      account.positions.forEach((pos) => {
-        if (pos.symbol === symbol) {
-          updatePositionPrices(symbol, price);
-        }
-      });
+      // Update position prices for current symbol
+      updatePositionPrices(symbol, price);
 
       // Check TP/SL
       checkTPSL(symbol, price);
     });
 
     return unsubscribe;
-  }, [symbol, account.positions, updatePositionPrices]);
+  }, [symbol, updatePositionPrices]);
+
+  // Subscribe to price updates for all open positions
+  useEffect(() => {
+    const unsubscribers: (() => void)[] = [];
+
+    account.positions.forEach((position) => {
+      // Skip if it's the current symbol (already subscribed above)
+      if (position.symbol === symbol) return;
+
+      const unsubscribe = marketData.subscribeToPrice(position.symbol, (price) => {
+        updatePositionPrices(position.symbol, price);
+        checkTPSL(position.symbol, price);
+      });
+
+      unsubscribers.push(unsubscribe);
+    });
+
+    return () => {
+      unsubscribers.forEach(unsub => unsub());
+    };
+  }, [account.positions, symbol, updatePositionPrices]);
 
   // Calculate Fear & Greed indicator
   useEffect(() => {

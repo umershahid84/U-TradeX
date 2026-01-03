@@ -27,7 +27,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null) as any;
-  const [showIndicators, setShowIndicators] = useState(true);
+  const [showIndicators, setShowIndicators] = useState(false);
+  const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -48,6 +49,19 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         timeVisible: true,
         secondsVisible: false,
         borderColor: '#2a2e4f',
+        rightOffset: 10,
+        barSpacing: 6,
+      },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: true,
+      },
+      handleScale: {
+        axisPressedMouseMove: true,
+        mouseWheel: true,
+        pinch: true,
       },
       rightPriceScale: {
         borderColor: '#2a2e4f',
@@ -193,8 +207,11 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       onPriceUpdate(data[data.length - 1].close);
     }
 
-    // Fit content
-    chartRef.current?.timeScale().fitContent();
+    // Fit content only on initial load
+    if (isInitialLoadRef.current && data.length > 0) {
+      chartRef.current?.timeScale().fitContent();
+      isInitialLoadRef.current = false;
+    }
   }, [data, showIndicators, onPriceUpdate]);
 
   return (
