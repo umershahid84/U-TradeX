@@ -358,8 +358,8 @@ export class RealMarketDataService {
     }
     
     // If not found, return a reasonable default based on symbol characteristics
-    // Crypto symbols typically end with -USD or are 3-4 letters
-    if (upperSymbol.endsWith('-USD') || (upperSymbol.length <= 4 && !upperSymbol.match(/^[A-Z]{1,5}$/))) {
+    // Crypto symbols typically end with -USD
+    if (upperSymbol.endsWith('-USD')) {
       return 1000 + Math.random() * 9000; // Random crypto-like price (1k-10k)
     }
     

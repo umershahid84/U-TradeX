@@ -10,7 +10,7 @@ import {
   LineSeries
 } from 'lightweight-charts';
 import { ChartData, TimeFrame } from '../types';
-import { calculateEMA, calculateRipsterEMACloud } from '../utils/indicators';
+import { calculateRipsterEMACloud, calculateSMA } from '../utils/indicators';
 import './TradingChart.css';
 
 interface TradingChartProps {
@@ -196,7 +196,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
       // Add SMA 20
       if (indicators.sma20) {
-        const sma20 = calculateEMA(closes, 20);
+        const sma20 = calculateSMA(closes, 20);
         const sma20Series = chartRef.current.addSeries(LineSeries, {
           color: '#FFC107',
           lineWidth: 2,
@@ -211,7 +211,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
       // Add SMA 50
       if (indicators.sma50) {
-        const sma50 = calculateEMA(closes, 50);
+        const sma50 = calculateSMA(closes, 50);
         const sma50Series = chartRef.current.addSeries(LineSeries, {
           color: '#FF9800',
           lineWidth: 2,
