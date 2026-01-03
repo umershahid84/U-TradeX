@@ -35,21 +35,43 @@ export class RealMarketDataService {
     return RealMarketDataService.instance;
   }
 
-  // Fetch real historical data from Yahoo Finance
+  // Fetch real historical data from Yahoo Finance with CORS proxy
   async fetchChartData(
     symbol: string,
     interval: string = '5m',
     range: string = '1d'
   ): Promise<ChartData[]> {
     try {
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
-      const params = {
+      // Try direct API call first (works in some environments)
+      const baseUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
+      const params = new URLSearchParams({
         interval,
         range,
-        includePrePost: false,
-      };
-
-      const response = await axios.get(url, { params });
+        includePrePost: 'false',
+      });
+      
+      let response;
+      try {
+        // Try direct call first
+        response = await axios.get(`${baseUrl}?${params.toString()}`, { 
+          timeout: 8000,
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0'
+          }
+        });
+      } catch (directError) {
+        // If direct fails, try with CORS proxy
+        const corsProxy = 'https://corsproxy.io/?';
+        const proxiedUrl = `${corsProxy}${encodeURIComponent(`${baseUrl}?${params.toString()}`)}`;
+        response = await axios.get(proxiedUrl, { 
+          timeout: 10000,
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+      }
+      
       const result = response.data.chart.result[0];
 
       if (!result || !result.timestamp) {
@@ -71,7 +93,9 @@ export class RealMarketDataService {
 
       // Cache latest price
       if (chartData.length > 0) {
-        this.priceCache.set(symbol, chartData[chartData.length - 1].close);
+        const latestPrice = chartData[chartData.length - 1].close;
+        this.priceCache.set(symbol, latestPrice);
+        console.log(`✅ Fetched REAL-TIME data for ${symbol}: $${latestPrice.toFixed(2)}`);
       }
 
       return chartData;
@@ -84,18 +108,40 @@ export class RealMarketDataService {
   // Get current quote for a symbol
   async getCurrentPrice(symbol: string): Promise<number> {
     try {
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
-      const params = {
+      const baseUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
+      const params = new URLSearchParams({
         interval: '1m',
         range: '1d',
-      };
-
-      const response = await axios.get(url, { params });
+      });
+      
+      let response;
+      try {
+        // Try direct call first
+        response = await axios.get(`${baseUrl}?${params.toString()}`, { 
+          timeout: 8000,
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0'
+          }
+        });
+      } catch (directError) {
+        // If direct fails, try with CORS proxy
+        const corsProxy = 'https://corsproxy.io/?';
+        const proxiedUrl = `${corsProxy}${encodeURIComponent(`${baseUrl}?${params.toString()}`)}`;
+        response = await axios.get(proxiedUrl, { 
+          timeout: 10000,
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+      }
+      
       const result = response.data.chart.result[0];
       
       if (result && result.meta && result.meta.regularMarketPrice) {
         const price = result.meta.regularMarketPrice;
         this.priceCache.set(symbol, price);
+        console.log(`✅ REAL-TIME price for ${symbol}: $${price.toFixed(2)}`);
         return price;
       }
 
@@ -110,10 +156,31 @@ export class RealMarketDataService {
   // Fetch real options chain data
   async fetchOptionsChain(symbol: string, expirationDate?: string): Promise<OptionChain[]> {
     try {
-      const url = `https://query1.finance.yahoo.com/v7/finance/options/${symbol}`;
-      const params = expirationDate ? { date: expirationDate } : {};
-
-      const response = await axios.get(url, { params });
+      const baseUrl = `https://query1.finance.yahoo.com/v7/finance/options/${symbol}`;
+      const params = expirationDate ? `?date=${expirationDate}` : '';
+      
+      let response;
+      try {
+        // Try direct call first
+        response = await axios.get(`${baseUrl}${params}`, { 
+          timeout: 8000,
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0'
+          }
+        });
+      } catch (directError) {
+        // If direct fails, try with CORS proxy
+        const corsProxy = 'https://corsproxy.io/?';
+        const proxiedUrl = `${corsProxy}${encodeURIComponent(`${baseUrl}${params}`)}`;
+        response = await axios.get(proxiedUrl, { 
+          timeout: 10000,
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+      }
+      
       const result = response.data.optionChain.result[0];
 
       if (!result || !result.options) {
@@ -145,6 +212,7 @@ export class RealMarketDataService {
         })) || [],
       }));
 
+      console.log(`✅ Fetched REAL options data for ${symbol}`);
       return optionChains;
     } catch (error) {
       console.error('Error fetching options chain:', error);
@@ -155,8 +223,30 @@ export class RealMarketDataService {
   // Get available expiration dates for options
   async getOptionExpirations(symbol: string): Promise<string[]> {
     try {
-      const url = `https://query1.finance.yahoo.com/v7/finance/options/${symbol}`;
-      const response = await axios.get(url);
+      const baseUrl = `https://query1.finance.yahoo.com/v7/finance/options/${symbol}`;
+      
+      let response;
+      try {
+        // Try direct call first
+        response = await axios.get(baseUrl, { 
+          timeout: 8000,
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0'
+          }
+        });
+      } catch (directError) {
+        // If direct fails, try with CORS proxy
+        const corsProxy = 'https://corsproxy.io/?';
+        const proxiedUrl = `${corsProxy}${encodeURIComponent(baseUrl)}`;
+        response = await axios.get(proxiedUrl, { 
+          timeout: 10000,
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+      }
+      
       const result = response.data.optionChain.result[0];
 
       if (!result || !result.expirationDates) {
