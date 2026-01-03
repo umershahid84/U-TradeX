@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { OptionContract } from '../types';
+import { RealMarketDataService, OptionChainData } from '../services/realMarketData';
 import './OptionsPanel.css';
 
 interface OptionsPanelProps {
@@ -16,12 +17,63 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
   onBuyOption,
 }) => {
   const [optionType, setOptionType] = useState<'call' | 'put'>('call');
-  const [strike, setStrike] = useState<string>(currentPrice.toFixed(2));
-  const [expiry, setExpiry] = useState<string>('');
-  const [premium, setPremium] = useState<string>('1.00');
+  const [expiryDates, setExpiryDates] = useState<string[]>([]);
+  const [selectedExpiry, setSelectedExpiry] = useState<string>('');
+  const [optionsChain, setOptionsChain] = useState<{ calls: OptionChainData[], puts: OptionChainData[] }>({ calls: [], puts: [] });
+  const [selectedOption, setSelectedOption] = useState<OptionChainData | null>(null);
   const [quantity, setQuantity] = useState<string>('1');
+  const [loading, setLoading] = useState(false);
 
-  // Generate expiry dates (next 4 Fridays)
+  const marketData = RealMarketDataService.getInstance();
+
+  // Load expiration dates
+  useEffect(() => {
+    const loadExpirations = async () => {
+      setLoading(true);
+      try {
+        const dates = await marketData.getOptionExpirations(symbol);
+        setExpiryDates(dates);
+        if (dates.length > 0) {
+          setSelectedExpiry(dates[0]);
+        }
+      } catch (error) {
+        console.error('Error loading expirations:', error);
+        // Fallback to generated dates
+        setExpiryDates(generateExpiryDates());
+        if (expiryDates.length > 0) {
+          setSelectedExpiry(expiryDates[0]);
+        }
+      }
+      setLoading(false);
+    };
+
+    loadExpirations();
+  }, [symbol]);
+
+  // Load options chain when expiry changes
+  useEffect(() => {
+    if (!selectedExpiry) return;
+
+    const loadOptionsChain = async () => {
+      setLoading(true);
+      try {
+        const chains = await marketData.fetchOptionsChain(symbol, selectedExpiry);
+        if (chains.length > 0) {
+          setOptionsChain({
+            calls: chains[0].calls || [],
+            puts: chains[0].puts || [],
+          });
+        }
+      } catch (error) {
+        console.error('Error loading options chain:', error);
+      }
+      setLoading(false);
+    };
+
+    loadOptionsChain();
+  }, [symbol, selectedExpiry]);
+
+  // Generate expiry dates (fallback)
   const generateExpiryDates = () => {
     const dates = [];
     const today = new Date();
@@ -35,26 +87,25 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
     return dates;
   };
 
-  const expiryDates = generateExpiryDates();
+  const handleOptionSelect = (option: OptionChainData) => {
+    setSelectedOption(option);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const strikePrice = parseFloat(strike);
-    const premiumPrice = parseFloat(premium);
+    if (!selectedOption) {
+      alert('Please select an option from the chain');
+      return;
+    }
+
     const qty = parseInt(quantity);
-
-    if (isNaN(strikePrice) || isNaN(premiumPrice) || isNaN(qty)) {
-      alert('Please enter valid values');
+    if (isNaN(qty) || qty < 1) {
+      alert('Please enter a valid quantity');
       return;
     }
 
-    if (!expiry) {
-      alert('Please select an expiry date');
-      return;
-    }
-
-    const cost = premiumPrice * qty * 100;
+    const cost = selectedOption.lastPrice * qty * 100;
     if (cost > balance) {
       alert('Insufficient balance');
       return;
@@ -63,16 +114,19 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
     onBuyOption({
       symbol,
       type: optionType,
-      strike: strikePrice,
-      expiry,
-      premium: premiumPrice,
+      strike: selectedOption.strike,
+      expiry: selectedExpiry,
+      premium: selectedOption.lastPrice,
       quantity: qty,
     });
 
     setQuantity('1');
+    setSelectedOption(null);
   };
 
-  const estimatedCost = parseFloat(premium) * parseInt(quantity) * 100 || 0;
+  const estimatedCost = selectedOption ? selectedOption.lastPrice * parseInt(quantity || '1') * 100 : 0;
+
+  const currentOptions = optionType === 'call' ? optionsChain.calls : optionsChain.puts;
 
   return (
     <div className="options-panel">
@@ -100,43 +154,12 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
         </div>
 
         <div className="form-group">
-          <label>Strike Price</label>
-          <input
-            type="number"
-            value={strike}
-            onChange={(e) => setStrike(e.target.value)}
-            step="0.5"
-            min="0"
-            required
-          />
-          <div className="strike-presets">
-            <button
-              type="button"
-              onClick={() => setStrike((currentPrice * 0.95).toFixed(2))}
-            >
-              -5%
-            </button>
-            <button
-              type="button"
-              onClick={() => setStrike(currentPrice.toFixed(2))}
-            >
-              ATM
-            </button>
-            <button
-              type="button"
-              onClick={() => setStrike((currentPrice * 1.05).toFixed(2))}
-            >
-              +5%
-            </button>
-          </div>
-        </div>
-
-        <div className="form-group">
           <label>Expiry Date</label>
           <select
-            value={expiry}
-            onChange={(e) => setExpiry(e.target.value)}
+            value={selectedExpiry}
+            onChange={(e) => setSelectedExpiry(e.target.value)}
             required
+            disabled={loading}
           >
             <option value="">Select expiry date</option>
             {expiryDates.map((date) => (
@@ -151,55 +174,103 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
           </select>
         </div>
 
-        <div className="form-group">
-          <label>Premium per Contract</label>
-          <input
-            type="number"
-            value={premium}
-            onChange={(e) => setPremium(e.target.value)}
-            step="0.01"
-            min="0.01"
-            required
-          />
-        </div>
+        {loading ? (
+          <div className="loading">Loading options chain...</div>
+        ) : currentOptions.length > 0 ? (
+          <div className="options-chain">
+            <div className="chain-header">
+              <span>Strike</span>
+              <span>Last</span>
+              <span>Bid/Ask</span>
+              <span>Vol</span>
+            </div>
+            <div className="chain-list">
+              {currentOptions
+                .filter(opt => Math.abs(opt.strike - currentPrice) / currentPrice < 0.2) // Show strikes within 20% of current price
+                .slice(0, 10) // Limit to 10 options
+                .map((option) => (
+                  <div
+                    key={option.strike}
+                    className={`chain-row ${selectedOption?.strike === option.strike ? 'selected' : ''} ${option.inTheMoney ? 'itm' : 'otm'}`}
+                    onClick={() => handleOptionSelect(option)}
+                  >
+                    <span className="strike">${option.strike.toFixed(2)}</span>
+                    <span className="last">${option.lastPrice.toFixed(2)}</span>
+                    <span className="bid-ask">
+                      ${option.bid.toFixed(2)}/${option.ask.toFixed(2)}
+                    </span>
+                    <span className="volume">{option.volume.toLocaleString()}</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        ) : (
+          <div className="no-data">No options data available</div>
+        )}
 
-        <div className="form-group">
-          <label>Number of Contracts</label>
-          <input
-            type="number"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            min="1"
-            step="1"
-            required
-          />
-        </div>
+        {selectedOption && (
+          <>
+            <div className="selected-option-info">
+              <h4>Selected Option</h4>
+              <div className="info-grid">
+                <div>
+                  <label>Strike:</label>
+                  <span>${selectedOption.strike.toFixed(2)}</span>
+                </div>
+                <div>
+                  <label>Premium:</label>
+                  <span>${selectedOption.lastPrice.toFixed(2)}</span>
+                </div>
+                <div>
+                  <label>IV:</label>
+                  <span>{(selectedOption.impliedVolatility * 100).toFixed(1)}%</span>
+                </div>
+                <div>
+                  <label>OI:</label>
+                  <span>{selectedOption.openInterest.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
 
-        <div className="option-summary">
-          <div className="summary-row">
-            <span>Current Price:</span>
-            <span className="value">${currentPrice.toFixed(2)}</span>
-          </div>
-          <div className="summary-row">
-            <span>Total Cost:</span>
-            <span className="value">${estimatedCost.toFixed(2)}</span>
-          </div>
-          <div className="summary-row">
-            <span>Available Balance:</span>
-            <span className="value">${balance.toFixed(2)}</span>
-          </div>
-          <div className="summary-info">
-            Each contract represents 100 shares
-          </div>
-        </div>
+            <div className="form-group">
+              <label>Number of Contracts</label>
+              <input
+                type="number"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                min="1"
+                step="1"
+                required
+              />
+            </div>
 
-        <button
-          type="submit"
-          className={`submit-btn ${optionType}`}
-          disabled={estimatedCost > balance}
-        >
-          Buy {optionType.toUpperCase()} Option
-        </button>
+            <div className="option-summary">
+              <div className="summary-row">
+                <span>Current Price:</span>
+                <span className="value">${currentPrice.toFixed(2)}</span>
+              </div>
+              <div className="summary-row">
+                <span>Total Cost:</span>
+                <span className="value">${estimatedCost.toFixed(2)}</span>
+              </div>
+              <div className="summary-row">
+                <span>Available Balance:</span>
+                <span className="value">${balance.toFixed(2)}</span>
+              </div>
+              <div className="summary-info">
+                Each contract represents 100 shares
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className={`submit-btn ${optionType}`}
+              disabled={estimatedCost > balance}
+            >
+              Buy {optionType.toUpperCase()} Option
+            </button>
+          </>
+        )}
       </form>
     </div>
   );
