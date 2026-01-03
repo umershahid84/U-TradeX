@@ -39,9 +39,10 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
       } catch (error) {
         console.error('Error loading expirations:', error);
         // Fallback to generated dates
-        setExpiryDates(generateExpiryDates());
-        if (expiryDates.length > 0) {
-          setSelectedExpiry(expiryDates[0]);
+        const fallbackDates = generateExpiryDates();
+        setExpiryDates(fallbackDates);
+        if (fallbackDates.length > 0) {
+          setSelectedExpiry(fallbackDates[0]);
         }
       }
       setLoading(false);
