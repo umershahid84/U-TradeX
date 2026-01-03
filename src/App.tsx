@@ -7,7 +7,7 @@ import { FearGreedIndicator } from './components/FearGreedIndicator';
 import { TPSLPanel } from './components/TPSLPanel';
 import { OptionsPanel } from './components/OptionsPanel';
 import { usePaperTrading } from './hooks/usePaperTrading';
-import { MarketDataService } from './services/marketData';
+import { RealMarketDataService } from './services/realMarketData';
 import {
   calculateFearGreed,
   calculateSMA,
@@ -16,7 +16,7 @@ import {
 import { TimeFrame, TimeRange, ChartData, FearGreedData, TakeProfitStopLoss } from './types';
 import './App.css';
 
-const marketData = MarketDataService.getInstance();
+const marketData = RealMarketDataService.getInstance();
 
 function App() {
   const [symbol, setSymbol] = useState('AAPL');
@@ -41,31 +41,58 @@ function App() {
     buyOption,
   } = usePaperTrading();
 
-  // Calculate number of bars based on time range
-  const getBarsCount = (range: TimeRange): number => {
-    const counts: Record<TimeRange, number> = {
-      today: 100,
-      '1d': 100,
-      '5d': 200,
-      '1w': 300,
-      '1y': 365,
-      max: 1000,
+  // Map TimeRange to Yahoo Finance range format
+  const getYahooRange = (range: TimeRange): string => {
+    const map: Record<TimeRange, string> = {
+      today: '1d',
+      '1d': '1d',
+      '5d': '5d',
+      '1w': '1mo',
+      '1y': '1y',
+      max: '5y',
     };
-    return counts[range];
+    return map[range] || '1d';
+  };
+
+  // Map TimeFrame to Yahoo Finance interval format
+  const getYahooInterval = (tf: TimeFrame): string => {
+    const map: Record<TimeFrame, string> = {
+      '1m': '1m',
+      '2m': '2m',
+      '3m': '5m',
+      '5m': '5m',
+      '10m': '15m',
+      '15m': '15m',
+      '30m': '30m',
+      '1h': '1h',
+      '4h': '1d',
+      '1d': '1d',
+      '1w': '1wk',
+      '1M': '1mo',
+      '3M': '3mo',
+      '1y': '3mo',
+    };
+    return map[tf] || '5m';
   };
 
   // Load chart data when symbol or timeframe changes
   useEffect(() => {
-    const bars = getBarsCount(timeRange);
-    const data = marketData.generateChartData(symbol, timeframe, bars);
-    setChartData(data);
-    
-    if (data.length > 0) {
-      setCurrentPrice(data[data.length - 1].close);
-    }
+    const loadData = async () => {
+      const yahooRange = getYahooRange(timeRange);
+      const yahooInterval = getYahooInterval(timeframe);
+      
+      const data = await marketData.fetchChartData(symbol, yahooInterval, yahooRange);
+      setChartData(data);
+      
+      if (data.length > 0) {
+        setCurrentPrice(data[data.length - 1].close);
+      }
+    };
+
+    loadData();
   }, [symbol, timeframe, timeRange]);
 
-  // Subscribe to live price updates
+  // Subscribe to live price updates for current symbol
   useEffect(() => {
     const unsubscribe = marketData.subscribeToPrice(symbol, (price) => {
       setCurrentPrice(price);
@@ -87,19 +114,36 @@ function App() {
         return newData;
       });
 
-      // Update position prices
-      account.positions.forEach((pos) => {
-        if (pos.symbol === symbol) {
-          updatePositionPrices(symbol, price);
-        }
-      });
+      // Update position prices for current symbol
+      updatePositionPrices(symbol, price);
 
       // Check TP/SL
       checkTPSL(symbol, price);
     });
 
     return unsubscribe;
-  }, [symbol, account.positions, updatePositionPrices]);
+  }, [symbol, updatePositionPrices]);
+
+  // Subscribe to price updates for all open positions
+  useEffect(() => {
+    const unsubscribers: (() => void)[] = [];
+
+    account.positions.forEach((position) => {
+      // Skip if it's the current symbol (already subscribed above)
+      if (position.symbol === symbol) return;
+
+      const unsubscribe = marketData.subscribeToPrice(position.symbol, (price) => {
+        updatePositionPrices(position.symbol, price);
+        checkTPSL(position.symbol, price);
+      });
+
+      unsubscribers.push(unsubscribe);
+    });
+
+    return () => {
+      unsubscribers.forEach(unsub => unsub());
+    };
+  }, [account.positions, symbol, updatePositionPrices]);
 
   // Calculate Fear & Greed indicator
   useEffect(() => {
