@@ -1,0 +1,170 @@
+.options-panel {
+  background: #141938;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.options-panel h3 {
+  color: #e0e0e0;
+  margin-bottom: 16px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.options-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  color: #a0a0a0;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.form-group input,
+.form-group select {
+  padding: 10px;
+  background: #1a1e3f;
+  border: 1px solid #2a2e4f;
+  border-radius: 4px;
+  color: #e0e0e0;
+  font-size: 14px;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #3a4aaf;
+}
+
+.option-type-selector {
+  display: flex;
+  gap: 8px;
+}
+
+.option-type-selector button {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.option-type-selector button.call {
+  background: transparent;
+  border-color: #26a69a;
+  color: #26a69a;
+}
+
+.option-type-selector button.call.active {
+  background: #26a69a;
+  color: white;
+}
+
+.option-type-selector button.put {
+  background: transparent;
+  border-color: #ef5350;
+  color: #ef5350;
+}
+
+.option-type-selector button.put.active {
+  background: #ef5350;
+  color: white;
+}
+
+.strike-presets {
+  display: flex;
+  gap: 4px;
+}
+
+.strike-presets button {
+  flex: 1;
+  padding: 6px;
+  background: #1a1e3f;
+  border: 1px solid #2a2e4f;
+  border-radius: 3px;
+  color: #a0a0a0;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.strike-presets button:hover {
+  background: #2a2e4f;
+  color: #e0e0e0;
+}
+
+.option-summary {
+  background: #1a1e3f;
+  border-radius: 4px;
+  padding: 12px;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  color: #a0a0a0;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.summary-row:last-of-type {
+  margin-bottom: 0;
+}
+
+.summary-row .value {
+  color: #e0e0e0;
+  font-weight: 500;
+}
+
+.summary-info {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #2a2e4f;
+  color: #606080;
+  font-size: 11px;
+  text-align: center;
+}
+
+.submit-btn {
+  padding: 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: white;
+}
+
+.submit-btn.call {
+  background: #26a69a;
+}
+
+.submit-btn.call:hover:not(:disabled) {
+  background: #2cb8a9;
+}
+
+.submit-btn.put {
+  background: #ef5350;
+}
+
+.submit-btn.put:hover:not(:disabled) {
+  background: #f26663;
+}
+
+.submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

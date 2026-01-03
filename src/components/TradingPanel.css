@@ -1,0 +1,163 @@
+.trading-panel {
+  background: #141938;
+  border-radius: 8px;
+  padding: 20px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.panel-title {
+  color: #e0e0e0;
+  margin-bottom: 16px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.order-type-selector {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.order-type-selector button {
+  flex: 1;
+  padding: 8px;
+  background: #1a1e3f;
+  border: 1px solid #2a2e4f;
+  border-radius: 4px;
+  color: #a0a0a0;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.order-type-selector button.active {
+  background: #2a3a8f;
+  border-color: #3a4aaf;
+  color: #e0e0e0;
+}
+
+.order-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  color: #a0a0a0;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.form-group input {
+  padding: 10px;
+  background: #1a1e3f;
+  border: 1px solid #2a2e4f;
+  border-radius: 4px;
+  color: #e0e0e0;
+  font-size: 14px;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #3a4aaf;
+}
+
+.side-selector {
+  display: flex;
+  gap: 8px;
+}
+
+.side-selector button {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.side-selector button.buy {
+  background: transparent;
+  border-color: #26a69a;
+  color: #26a69a;
+}
+
+.side-selector button.buy.active {
+  background: #26a69a;
+  color: white;
+}
+
+.side-selector button.sell {
+  background: transparent;
+  border-color: #ef5350;
+  color: #ef5350;
+}
+
+.side-selector button.sell.active {
+  background: #ef5350;
+  color: white;
+}
+
+.order-summary {
+  background: #1a1e3f;
+  border-radius: 4px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  color: #a0a0a0;
+  font-size: 13px;
+}
+
+.summary-row .price,
+.summary-row .cost,
+.summary-row .balance {
+  color: #e0e0e0;
+  font-weight: 500;
+}
+
+.submit-btn {
+  padding: 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.submit-btn.buy {
+  background: #26a69a;
+  color: white;
+}
+
+.submit-btn.buy:hover:not(:disabled) {
+  background: #2cb8a9;
+}
+
+.submit-btn.sell {
+  background: #ef5350;
+  color: white;
+}
+
+.submit-btn.sell:hover:not(:disabled) {
+  background: #f26663;
+}
+
+.submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
