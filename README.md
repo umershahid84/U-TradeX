@@ -4,6 +4,21 @@
 
 U-TradeX is a comprehensive trading platform designed for charting and paper trading with advanced features similar to TradingView.
 
+## Important Note on Real-Time Data
+
+This platform attempts to fetch **real-time market data** from Yahoo Finance API. Due to browser CORS (Cross-Origin Resource Sharing) restrictions, the API calls may be blocked in certain environments. 
+
+**How it works:**
+1. First attempts direct API call to Yahoo Finance
+2. If blocked by CORS, attempts to use a CORS proxy (https://corsproxy.io)
+3. If both fail, falls back to realistic simulated data
+
+**For production use:**
+- Deploy the application on a web server with a backend proxy
+- Use environment without strict CORS policies
+- Consider using a paid API service with proper CORS support
+- The application will automatically display real prices when API access is available
+
 ## Features
 
 ### 📊 Advanced Charting

@@ -10,7 +10,7 @@ import {
   LineSeries
 } from 'lightweight-charts';
 import { ChartData, TimeFrame } from '../types';
-import { calculateEMA, calculateRipsterEMACloud } from '../utils/indicators';
+import { calculateRipsterEMACloud, calculateSMA } from '../utils/indicators';
 import './TradingChart.css';
 
 interface TradingChartProps {
@@ -18,6 +18,15 @@ interface TradingChartProps {
   timeframe: TimeFrame;
   data: ChartData[];
   onPriceUpdate?: (price: number) => void;
+}
+
+interface IndicatorState {
+  ema5: boolean;
+  ema8: boolean;
+  ema9: boolean;
+  ema13: boolean;
+  sma20: boolean;
+  sma50: boolean;
 }
 
 export const TradingChart: React.FC<TradingChartProps> = ({
@@ -28,6 +37,14 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null) as any;
   const [showIndicators, setShowIndicators] = useState(false);
+  const [indicators, setIndicators] = useState<IndicatorState>({
+    ema5: true,
+    ema8: true,
+    ema9: true,
+    ema13: true,
+    sma20: true,
+    sma50: true,
+  });
   const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
@@ -116,90 +133,96 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
     candleSeriesRef.current.setData(chartData);
 
-    // Add Ripster EMA Cloud
+    // Add indicators based on selection
     if (showIndicators && chartRef.current) {
       const closes = data.map(d => d.close);
       const emaCloud = calculateRipsterEMACloud(closes);
 
-      // Add EMA lines
-      const ema5Series = chartRef.current.addSeries(LineSeries, {
-        color: '#2196F3',
-        lineWidth: 1,
-        title: 'EMA 5',
-      });
+      // Add EMA 5
+      if (indicators.ema5) {
+        const ema5Series = chartRef.current.addSeries(LineSeries, {
+          color: '#2196F3',
+          lineWidth: 1,
+          title: 'EMA 5',
+        });
+        const ema5Data: LineData[] = emaCloud.ema5.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value || data[i].close,
+        }));
+        ema5Series.setData(ema5Data);
+      }
 
-      const ema8Series = chartRef.current.addSeries(LineSeries, {
-        color: '#00BCD4',
-        lineWidth: 1,
-        title: 'EMA 8',
-      });
+      // Add EMA 8
+      if (indicators.ema8) {
+        const ema8Series = chartRef.current.addSeries(LineSeries, {
+          color: '#00BCD4',
+          lineWidth: 1,
+          title: 'EMA 8',
+        });
+        const ema8Data: LineData[] = emaCloud.ema8.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value || data[i].close,
+        }));
+        ema8Series.setData(ema8Data);
+      }
 
-      const ema9Series = chartRef.current.addSeries(LineSeries, {
-        color: '#009688',
-        lineWidth: 1,
-        title: 'EMA 9',
-      });
+      // Add EMA 9
+      if (indicators.ema9) {
+        const ema9Series = chartRef.current.addSeries(LineSeries, {
+          color: '#009688',
+          lineWidth: 1,
+          title: 'EMA 9',
+        });
+        const ema9Data: LineData[] = emaCloud.ema9.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value || data[i].close,
+        }));
+        ema9Series.setData(ema9Data);
+      }
 
-      const ema13Series = chartRef.current.addSeries(LineSeries, {
-        color: '#4CAF50',
-        lineWidth: 1,
-        title: 'EMA 13',
-      });
+      // Add EMA 13
+      if (indicators.ema13) {
+        const ema13Series = chartRef.current.addSeries(LineSeries, {
+          color: '#4CAF50',
+          lineWidth: 1,
+          title: 'EMA 13',
+        });
+        const ema13Data: LineData[] = emaCloud.ema13.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value || data[i].close,
+        }));
+        ema13Series.setData(ema13Data);
+      }
 
-      // Set EMA data
-      const ema5Data: LineData[] = emaCloud.ema5.map((value, i) => ({
-        time: (data[i].time / 1000) as Time,
-        value: value || data[i].close,
-      }));
+      // Add SMA 20
+      if (indicators.sma20) {
+        const sma20 = calculateSMA(closes, 20);
+        const sma20Series = chartRef.current.addSeries(LineSeries, {
+          color: '#FFC107',
+          lineWidth: 2,
+          title: 'SMA 20',
+        });
+        const sma20Data: LineData[] = sma20.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value || data[i].close,
+        }));
+        sma20Series.setData(sma20Data);
+      }
 
-      const ema8Data: LineData[] = emaCloud.ema8.map((value, i) => ({
-        time: (data[i].time / 1000) as Time,
-        value: value || data[i].close,
-      }));
-
-      const ema9Data: LineData[] = emaCloud.ema9.map((value, i) => ({
-        time: (data[i].time / 1000) as Time,
-        value: value || data[i].close,
-      }));
-
-      const ema13Data: LineData[] = emaCloud.ema13.map((value, i) => ({
-        time: (data[i].time / 1000) as Time,
-        value: value || data[i].close,
-      }));
-
-      ema5Series.setData(ema5Data);
-      ema8Series.setData(ema8Data);
-      ema9Series.setData(ema9Data);
-      ema13Series.setData(ema13Data);
-
-      // Add SMA lines for MTF
-      const sma20 = calculateEMA(closes, 20);
-      const sma50 = calculateEMA(closes, 50);
-
-      const sma20Series = chartRef.current.addSeries(LineSeries, {
-        color: '#FFC107',
-        lineWidth: 2,
-        title: 'SMA 20',
-      });
-
-      const sma50Series = chartRef.current.addSeries(LineSeries, {
-        color: '#FF9800',
-        lineWidth: 2,
-        title: 'SMA 50',
-      });
-
-      const sma20Data: LineData[] = sma20.map((value, i) => ({
-        time: (data[i].time / 1000) as Time,
-        value: value || data[i].close,
-      }));
-
-      const sma50Data: LineData[] = sma50.map((value, i) => ({
-        time: (data[i].time / 1000) as Time,
-        value: value || data[i].close,
-      }));
-
-      sma20Series.setData(sma20Data);
-      sma50Series.setData(sma50Data);
+      // Add SMA 50
+      if (indicators.sma50) {
+        const sma50 = calculateSMA(closes, 50);
+        const sma50Series = chartRef.current.addSeries(LineSeries, {
+          color: '#FF9800',
+          lineWidth: 2,
+          title: 'SMA 50',
+        });
+        const sma50Data: LineData[] = sma50.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value || data[i].close,
+        }));
+        sma50Series.setData(sma50Data);
+      }
     }
 
     // Notify parent of latest price
@@ -212,7 +235,11 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       chartRef.current?.timeScale().fitContent();
       isInitialLoadRef.current = false;
     }
-  }, [data, showIndicators, onPriceUpdate]);
+  }, [data, showIndicators, indicators, onPriceUpdate]);
+
+  const toggleIndicator = (key: keyof IndicatorState) => {
+    setIndicators(prev => ({ ...prev, [key]: !prev[key] }));
+  };
 
   return (
     <div className="trading-chart-container">
@@ -221,8 +248,60 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           className="indicator-toggle"
           onClick={() => setShowIndicators(!showIndicators)}
         >
-          {showIndicators ? '📊 Hide Indicators' : '📊 Show Indicators'}
+          {showIndicators ? '📊 Hide All Indicators' : '📊 Show Indicators'}
         </button>
+        {showIndicators && (
+          <div className="indicator-checkboxes">
+            <label>
+              <input
+                type="checkbox"
+                checked={indicators.ema5}
+                onChange={() => toggleIndicator('ema5')}
+              />
+              EMA 5
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={indicators.ema8}
+                onChange={() => toggleIndicator('ema8')}
+              />
+              EMA 8
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={indicators.ema9}
+                onChange={() => toggleIndicator('ema9')}
+              />
+              EMA 9
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={indicators.ema13}
+                onChange={() => toggleIndicator('ema13')}
+              />
+              EMA 13
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={indicators.sma20}
+                onChange={() => toggleIndicator('sma20')}
+              />
+              SMA 20
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={indicators.sma50}
+                onChange={() => toggleIndicator('sma50')}
+              />
+              SMA 50
+            </label>
+          </div>
+        )}
       </div>
       <div ref={chartContainerRef} className="chart" />
     </div>
