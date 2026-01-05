@@ -21,7 +21,7 @@ const marketData = RealMarketDataService.getInstance();
 function App() {
   const [symbol, setSymbol] = useState('AAPL');
   const [timeframe, setTimeframe] = useState<TimeFrame>('5m');
-  const [timeRange, setTimeRange] = useState<TimeRange>('1d');
+  const [timeRange, setTimeRange] = useState<TimeRange>('1D');
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [currentPrice, setCurrentPrice] = useState<number>(0);
   const [fearGreedData, setFearGreedData] = useState<FearGreedData>({
@@ -44,12 +44,15 @@ function App() {
   // Map TimeRange to Yahoo Finance range format
   const getYahooRange = (range: TimeRange): string => {
     const map: Record<TimeRange, string> = {
-      today: '1d',
-      '1d': '1d',
-      '5d': '5d',
-      '1w': '1mo',
-      '1y': '1y',
-      max: '5y',
+      '1D': '1d',
+      '5D': '5d',
+      '1M': '1mo',
+      '3M': '3mo',
+      '6M': '6mo',
+      'YTD': 'ytd',
+      '1Y': '1y',
+      '5Y': '5y',
+      'MAX': 'max',
     };
     return map[range] || '1d';
   };
@@ -59,18 +62,17 @@ function App() {
     const map: Record<TimeFrame, string> = {
       '1m': '1m',
       '2m': '2m',
-      '3m': '5m',
       '5m': '5m',
       '10m': '15m',
       '15m': '15m',
       '30m': '30m',
       '1h': '1h',
       '4h': '1d',
-      '1d': '1d',
-      '1w': '1wk',
-      '1M': '1mo',
-      '3M': '3mo',
-      '1y': '3mo',
+      'D': '1d',
+      'W': '1wk',
+      'M': '1mo',
+      '1Q': '3mo',
+      '1Y': '3mo',
     };
     return map[tf] || '5m';
   };
@@ -247,6 +249,16 @@ function App() {
               <h2>{symbol}</h2>
               <div className="price-display">
                 <span className="current-price">${currentPrice.toFixed(2)}</span>
+              </div>
+            </div>
+            <div className="bid-ask-display">
+              <div className="bid-price">
+                <span className="label">BID:</span>
+                <span className="value">${(currentPrice - 0.01).toFixed(2)}</span>
+              </div>
+              <div className="ask-price">
+                <span className="label">ASK:</span>
+                <span className="value">${(currentPrice + 0.01).toFixed(2)}</span>
               </div>
             </div>
           </div>

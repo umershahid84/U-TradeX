@@ -144,3 +144,52 @@ export const calculateRipsterEMACloud = (prices: number[]) => {
     ema13: calculateEMA(prices, 13),
   };
 };
+
+// VWAP calculation
+export const calculateVWAP = (data: { close: number; volume: number; high: number; low: number }[]): number[] => {
+  const result: number[] = [];
+  let cumulativeTPV = 0; // Typical Price * Volume
+  let cumulativeVolume = 0;
+
+  for (let i = 0; i < data.length; i++) {
+    const typicalPrice = (data[i].high + data[i].low + data[i].close) / 3;
+    cumulativeTPV += typicalPrice * data[i].volume;
+    cumulativeVolume += data[i].volume;
+    
+    if (cumulativeVolume > 0) {
+      result.push(cumulativeTPV / cumulativeVolume);
+    } else {
+      result.push(data[i].close);
+    }
+  }
+  
+  return result;
+};
+
+// Bollinger Bands calculation
+export const calculateBollingerBands = (
+  prices: number[],
+  period: number = 20,
+  stdDev: number = 2
+): { upper: number[]; middle: number[]; lower: number[] } => {
+  const middle = calculateSMA(prices, period);
+  const upper: number[] = [];
+  const lower: number[] = [];
+
+  for (let i = 0; i < prices.length; i++) {
+    if (i < period - 1) {
+      upper.push(NaN);
+      lower.push(NaN);
+    } else {
+      const slice = prices.slice(i - period + 1, i + 1);
+      const mean = middle[i];
+      const variance = slice.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / period;
+      const std = Math.sqrt(variance);
+      
+      upper.push(mean + stdDev * std);
+      lower.push(mean - stdDev * std);
+    }
+  }
+
+  return { upper, middle, lower };
+};

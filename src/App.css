@@ -53,6 +53,9 @@
 .chart-header {
   padding: 16px 20px;
   border-bottom: 1px solid #2a2e4f;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .symbol-info {
@@ -77,6 +80,39 @@
 .current-price {
   color: #26a69a;
   font-size: 28px;
+  font-weight: 700;
+}
+
+.bid-ask-display {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+}
+
+.bid-price,
+.ask-price {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bid-price .label,
+.ask-price .label {
+  color: #7a7e9f;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.bid-price .value {
+  color: #ef5350;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.ask-price .value {
+  color: #26a69a;
+  font-size: 18px;
   font-weight: 700;
 }
 

@@ -59,8 +59,8 @@ export interface FearGreedData {
   overbought: boolean;
 }
 
-export type TimeFrame = '1m' | '2m' | '3m' | '5m' | '10m' | '15m' | '30m' | '1h' | '4h' | '1d' | '1w' | '1M' | '3M' | '1y';
-export type TimeRange = 'today' | '1d' | '5d' | '1w' | '1y' | 'max';
+export type TimeFrame = '1m' | '2m' | '5m' | '10m' | '15m' | '30m' | '1h' | '4h' | 'D' | 'W' | 'M' | '1Q' | '1Y';
+export type TimeRange = '1D' | '5D' | '1M' | '3M' | '6M' | 'YTD' | '1Y' | '5Y' | 'MAX';
 
 export interface ChartData {
   time: number;
