@@ -32,6 +32,7 @@ function App() {
     overbought: false,
   });
   const [tpslSettings, setTpslSettings] = useState<Map<string, TakeProfitStopLoss>>(new Map());
+  const [includeAfterHours, setIncludeAfterHours] = useState(false);
 
   const {
     account,
@@ -83,7 +84,7 @@ function App() {
       const yahooRange = getYahooRange(timeRange);
       const yahooInterval = getYahooInterval(timeframe);
       
-      const data = await marketData.fetchChartData(symbol, yahooInterval, yahooRange);
+      const data = await marketData.fetchChartData(symbol, yahooInterval, yahooRange, includeAfterHours);
       setChartData(data);
       
       if (data.length > 0) {
@@ -92,7 +93,7 @@ function App() {
     };
 
     loadData();
-  }, [symbol, timeframe, timeRange]);
+  }, [symbol, timeframe, timeRange, includeAfterHours]);
 
   // Subscribe to live price updates for current symbol
   useEffect(() => {
@@ -259,6 +260,16 @@ function App() {
               <div className="ask-price">
                 <span className="label">ASK:</span>
                 <span className="value">${(currentPrice + 0.01).toFixed(2)}</span>
+              </div>
+              <div className="after-hours-toggle">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={includeAfterHours}
+                    onChange={(e) => setIncludeAfterHours(e.target.checked)}
+                  />
+                  <span>After Hours</span>
+                </label>
               </div>
             </div>
           </div>

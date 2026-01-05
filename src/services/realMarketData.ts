@@ -39,7 +39,8 @@ export class RealMarketDataService {
   async fetchChartData(
     symbol: string,
     interval: string = '5m',
-    range: string = '1d'
+    range: string = '1d',
+    includePrePost: boolean = false
   ): Promise<ChartData[]> {
     try {
       // Try direct API call first (works in some environments)
@@ -47,7 +48,7 @@ export class RealMarketDataService {
       const params = new URLSearchParams({
         interval,
         range,
-        includePrePost: 'false',
+        includePrePost: includePrePost ? 'true' : 'false',
       });
       
       let response;
@@ -95,7 +96,7 @@ export class RealMarketDataService {
       if (chartData.length > 0) {
         const latestPrice = chartData[chartData.length - 1].close;
         this.priceCache.set(symbol, latestPrice);
-        console.log(`✅ Fetched REAL-TIME data for ${symbol}: $${latestPrice.toFixed(2)}`);
+        console.log(`✅ Fetched REAL-TIME data for ${symbol}: $${latestPrice.toFixed(2)}${includePrePost ? ' (with pre/post market)' : ''}`);
       }
 
       return chartData;

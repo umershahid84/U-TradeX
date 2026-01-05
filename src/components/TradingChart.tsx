@@ -10,7 +10,7 @@ import {
   LineSeries
 } from 'lightweight-charts';
 import { ChartData, TimeFrame } from '../types';
-import { calculateRipsterEMACloud, calculateSMA, calculateVWAP, calculateBollingerBands, calculateRSI } from '../utils/indicators';
+import { calculateRipsterEMACloud, calculateSMA, calculateVWAP, calculateBollingerBands } from '../utils/indicators';
 import './TradingChart.css';
 
 interface TradingChartProps {

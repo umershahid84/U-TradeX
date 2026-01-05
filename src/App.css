@@ -116,6 +116,28 @@
   font-weight: 700;
 }
 
+.after-hours-toggle {
+  margin-left: 12px;
+  padding-left: 24px;
+  border-left: 1px solid #2a2e4f;
+}
+
+.after-hours-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: #e0e0e0;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.after-hours-toggle input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
 .sidebar-panels {
   display: flex;
   flex-direction: column;
