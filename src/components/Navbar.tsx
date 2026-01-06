@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { TimeFrame, TimeRange } from '../types';
+import { Logo } from './Logo';
 import './Navbar.css';
 
 interface NavbarProps {
@@ -48,8 +49,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <nav className="navbar">
       <div className="navbar-brand">
-        <h1>U-TradeX</h1>
-        <span className="brand-tagline">Professional Trading Platform</span>
+        <div className="brand-logo-container">
+          <Logo size={36} />
+          <div className="brand-text">
+            <h1>U-TradeX</h1>
+            <span className="brand-tagline">Professional Trading Platform</span>
+          </div>
+        </div>
       </div>
 
       <form onSubmit={handleSearch} className="symbol-search">

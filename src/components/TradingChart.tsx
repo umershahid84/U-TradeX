@@ -28,8 +28,11 @@ interface IndicatorState {
   ema13: boolean;
   sma20: boolean;
   sma50: boolean;
+  sma100: boolean;
+  sma200: boolean;
   vwap: boolean;
   rsi: boolean;
+  macd: boolean;
   bb: boolean;
   volume: boolean;
 }
@@ -51,6 +54,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
   const drawingsRef = useRef<DrawingObject[]>([]);
   const [showIndicators, setShowIndicators] = useState(false);
+  const [showFibonacci, setShowFibonacci] = useState(false);
   const [selectedTool, setSelectedTool] = useState<DrawingTool>('none');
   const [indicators, setIndicators] = useState<IndicatorState>({
     ema5: true,
@@ -59,10 +63,13 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     ema13: true,
     sma20: true,
     sma50: true,
+    sma100: false,
+    sma200: false,
     vwap: false,
     rsi: false,
+    macd: false,
     bb: false,
-    volume: false,
+    volume: true,
   });
   const isInitialLoadRef = useRef(true);
 
@@ -157,10 +164,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       onPriceUpdate(data[data.length - 1].close);
     }
 
-    // Fit content only on initial load
-    if (isInitialLoadRef.current && data.length > 0) {
-      chartRef.current?.timeScale().fitContent();
-      isInitialLoadRef.current = false;
+    // Fit content when symbol changes or on initial load
+    if (chartRef.current && data.length > 0) {
+      chartRef.current.timeScale().fitContent();
     }
   }, [data, onPriceUpdate]);
 
@@ -271,6 +277,38 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         indicatorSeriesRef.current.set('sma50', sma50Series);
       }
 
+      // Add SMA 100
+      if (indicators.sma100) {
+        const sma100 = calculateSMA(closes, 100);
+        const sma100Series = chartRef.current.addSeries(LineSeries, {
+          color: '#FF5722',
+          lineWidth: 2,
+          title: 'SMA 100',
+        });
+        const sma100Data: LineData[] = sma100.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value || data[i].close,
+        }));
+        sma100Series.setData(sma100Data);
+        indicatorSeriesRef.current.set('sma100', sma100Series);
+      }
+
+      // Add SMA 200
+      if (indicators.sma200) {
+        const sma200 = calculateSMA(closes, 200);
+        const sma200Series = chartRef.current.addSeries(LineSeries, {
+          color: '#F44336',
+          lineWidth: 3,
+          title: 'SMA 200',
+        });
+        const sma200Data: LineData[] = sma200.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value || data[i].close,
+        }));
+        sma200Series.setData(sma200Data);
+        indicatorSeriesRef.current.set('sma200', sma200Series);
+      }
+
       // Add VWAP
       if (indicators.vwap) {
         const vwapData = calculateVWAP(data);
@@ -350,6 +388,13 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const addFibonacciLevels = () => {
     if (!chartRef.current || data.length === 0) return;
 
+    // If already showing, remove them (toggle off)
+    if (showFibonacci) {
+      removeFibonacciLevels();
+      setShowFibonacci(false);
+      return;
+    }
+
     // Calculate Fibonacci levels based on recent price action
     const recentData = data.slice(-50); // Last 50 bars
     const high = Math.max(...recentData.map(d => d.high));
@@ -397,6 +442,20 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         data: fibData,
       });
     });
+    
+    setShowFibonacci(true);
+  };
+
+  const removeFibonacciLevels = () => {
+    // Remove only Fibonacci drawings
+    const fibDrawings = drawingsRef.current.filter(d => d.type === 'fibonacci');
+    fibDrawings.forEach((drawing) => {
+      if (drawing.series && chartRef.current) {
+        chartRef.current.removeSeries(drawing.series);
+      }
+    });
+    // Keep only non-fibonacci drawings
+    drawingsRef.current = drawingsRef.current.filter(d => d.type !== 'fibonacci');
   };
 
   const toggleIndicator = (key: keyof IndicatorState) => {
@@ -405,94 +464,152 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
   return (
     <div className="trading-chart-container">
-      <DrawingTools
-        selectedTool={selectedTool}
-        onToolSelect={handleToolSelect}
-        onClearAll={handleClearAllDrawings}
-      />
-      
-      <div className="chart-controls">
-        <button
-          className="indicator-toggle"
-          onClick={() => setShowIndicators(!showIndicators)}
-        >
-          {showIndicators ? '📊 Hide All Indicators' : '📊 Show Indicators'}
-        </button>
-        <button
-          className="fibonacci-btn"
-          onClick={addFibonacciLevels}
-        >
-          🔢 Add Fibonacci
-        </button>
-        {showIndicators && (
-          <div className="indicator-checkboxes">
-            <label>
-              <input
-                type="checkbox"
-                checked={indicators.ema5}
-                onChange={() => toggleIndicator('ema5')}
-              />
-              EMA 5
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={indicators.ema8}
-                onChange={() => toggleIndicator('ema8')}
-              />
-              EMA 8
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={indicators.ema9}
-                onChange={() => toggleIndicator('ema9')}
-              />
-              EMA 9
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={indicators.ema13}
-                onChange={() => toggleIndicator('ema13')}
-              />
-              EMA 13
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={indicators.sma20}
-                onChange={() => toggleIndicator('sma20')}
-              />
-              SMA 20
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={indicators.sma50}
-                onChange={() => toggleIndicator('sma50')}
-              />
-              SMA 50
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={indicators.vwap}
-                onChange={() => toggleIndicator('vwap')}
-              />
-              VWAP
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={indicators.bb}
-                onChange={() => toggleIndicator('bb')}
-              />
-              Bollinger Bands
-            </label>
-          </div>
-        )}
+      <div className="chart-top-controls">
+        <DrawingTools
+          selectedTool={selectedTool}
+          onToolSelect={handleToolSelect}
+          onClearAll={handleClearAllDrawings}
+        />
+        
+        <div className="chart-control-buttons">
+          <button
+            className={`fibonacci-btn ${showFibonacci ? 'active' : ''}`}
+            onClick={addFibonacciLevels}
+          >
+            🔢 {showFibonacci ? 'Hide' : 'Add'} Fibonacci
+          </button>
+          
+          <button
+            className="indicator-toggle"
+            onClick={() => setShowIndicators(!showIndicators)}
+          >
+            {showIndicators ? '📊 Hide Indicators' : '📊 Show Indicators'}
+          </button>
+        </div>
       </div>
+      
+      {showIndicators && (
+        <div className="indicator-panel">
+          <div className="indicator-checkboxes">
+            <div className="indicator-group">
+              <h4>EMAs</h4>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.ema5}
+                  onChange={() => toggleIndicator('ema5')}
+                />
+                EMA 5
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.ema8}
+                  onChange={() => toggleIndicator('ema8')}
+                />
+                EMA 8
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.ema9}
+                  onChange={() => toggleIndicator('ema9')}
+                />
+                EMA 9
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.ema13}
+                  onChange={() => toggleIndicator('ema13')}
+                />
+                EMA 13
+              </label>
+            </div>
+            
+            <div className="indicator-group">
+              <h4>SMAs</h4>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.sma20}
+                  onChange={() => toggleIndicator('sma20')}
+                />
+                SMA 20
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.sma50}
+                  onChange={() => toggleIndicator('sma50')}
+                />
+                SMA 50
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.sma100}
+                  onChange={() => toggleIndicator('sma100')}
+                />
+                SMA 100
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.sma200}
+                  onChange={() => toggleIndicator('sma200')}
+                />
+                SMA 200
+              </label>
+            </div>
+            
+            <div className="indicator-group">
+              <h4>Others</h4>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.vwap}
+                  onChange={() => toggleIndicator('vwap')}
+                />
+                VWAP
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.bb}
+                  onChange={() => toggleIndicator('bb')}
+                />
+                Bollinger Bands
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.rsi}
+                  onChange={() => toggleIndicator('rsi')}
+                />
+                RSI (Panel)
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.macd}
+                  onChange={() => toggleIndicator('macd')}
+                />
+                MACD (Panel)
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.volume}
+                  onChange={() => toggleIndicator('volume')}
+                />
+                Volume
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div ref={chartContainerRef} className="chart" />
     </div>
   );
