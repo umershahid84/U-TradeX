@@ -145,7 +145,9 @@ export const calculateRipsterEMACloud = (prices: number[]) => {
   };
 };
 
-// VWAP calculation
+// VWAP calculation (daily reset for intraday data)
+// Note: This is a session-based VWAP that accumulates from the start of the data
+// For true daily VWAP, implement session boundary detection
 export const calculateVWAP = (data: { close: number; volume: number; high: number; low: number }[]): number[] => {
   const result: number[] = [];
   let cumulativeTPV = 0; // Typical Price * Volume

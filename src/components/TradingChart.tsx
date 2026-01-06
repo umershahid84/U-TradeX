@@ -332,9 +332,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
   const handleToolSelect = (tool: DrawingTool) => {
     setSelectedTool(tool);
-    if (tool !== 'none') {
-      alert(`Drawing tool selected: ${tool}. Click on the chart to add drawing points. Feature in development - basic price lines will be added.`);
-    }
+    // Note: Full drawing implementation requires interactive chart click handling
+    // This is a placeholder for future enhancement
   };
 
   const handleClearAllDrawings = () => {
@@ -369,8 +368,13 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
     const colors = ['#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#00bcd4', '#009688'];
 
+    // Safely add Fibonacci levels with proper null checks
+    if (!chartRef.current) return;
+
     fibLevels.forEach((fib, index) => {
-      const fibSeries = chartRef.current!.addSeries(LineSeries, {
+      if (!chartRef.current) return; // Check again in loop
+      
+      const fibSeries = chartRef.current.addSeries(LineSeries, {
         color: colors[index],
         lineWidth: 1,
         lineStyle: 2, // Dashed line

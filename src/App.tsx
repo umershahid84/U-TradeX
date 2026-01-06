@@ -255,11 +255,11 @@ function App() {
             <div className="bid-ask-display">
               <div className="bid-price">
                 <span className="label">BID:</span>
-                <span className="value">${(currentPrice - 0.01).toFixed(2)}</span>
+                <span className="value">${(currentPrice * 0.9995).toFixed(2)}</span>
               </div>
               <div className="ask-price">
                 <span className="label">ASK:</span>
-                <span className="value">${(currentPrice + 0.01).toFixed(2)}</span>
+                <span className="value">${(currentPrice * 1.0005).toFixed(2)}</span>
               </div>
               <div className="after-hours-toggle">
                 <label>
