@@ -63,6 +63,11 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     isDrawing: false,
     startPoint: null,
   });
+  // selectedToolRef: Tracks the current tool selection for the click handler.
+  // We need both ref and state because:
+  // - The ref is used in the chart click handler (set up once in useEffect with empty deps)
+  //   to avoid stale closures
+  // - The state is used for React re-renders to update the UI
   const selectedToolRef = useRef<DrawingTool>('none');
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [showIndicators, setShowIndicators] = useState(false);
