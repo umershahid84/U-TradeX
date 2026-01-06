@@ -47,6 +47,7 @@ interface DrawingObject {
 }
 
 export const TradingChart: React.FC<TradingChartProps> = ({
+  symbol,
   data,
   onPriceUpdate,
 }) => {
@@ -83,6 +84,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   });
 
   const handleChartClick = (time: Time, price: number) => {
+    // Validate inputs
+    if (!time || !price || isNaN(price)) return;
     if (selectedTool === 'none') return;
 
     if (!drawingStateRef.current.isDrawing) {
@@ -343,12 +346,18 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     if (onPriceUpdate && data.length > 0) {
       onPriceUpdate(data[data.length - 1].close);
     }
-
-    // Fit content when symbol changes or on initial load
-    if (chartRef.current && data.length > 0) {
-      chartRef.current.timeScale().fitContent();
-    }
   }, [data, onPriceUpdate]);
+
+  // Separate effect for fitting content when symbol changes
+  useEffect(() => {
+    if (chartRef.current && data.length > 0) {
+      // Use a small delay to ensure chart has rendered
+      const timeoutId = setTimeout(() => {
+        chartRef.current?.timeScale().fitContent();
+      }, 100);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [symbol, data.length]);
 
   // Separate effect for managing indicators
   useEffect(() => {

@@ -101,6 +101,10 @@ function App() {
         if (data.length > 0) {
           setCurrentPrice(data[data.length - 1].close);
           setConnectionStatus('connected');
+        } else {
+          // No data returned, but request succeeded
+          setConnectionStatus('disconnected');
+          console.warn('No chart data returned for symbol:', symbol);
         }
       } catch (error) {
         console.error('Error loading data:', error);
