@@ -42,6 +42,8 @@ interface DrawingObject {
   type: DrawingTool;
   series?: ISeriesApi<'Line'>;
   data: LineData[];
+  startPoint?: { time: Time; price: number };
+  endPoint?: { time: Time; price: number };
 }
 
 export const TradingChart: React.FC<TradingChartProps> = ({
@@ -53,6 +55,14 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null) as any;
   const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
   const drawingsRef = useRef<DrawingObject[]>([]);
+  const drawingStateRef = useRef<{
+    isDrawing: boolean;
+    startPoint: { time: Time; price: number } | null;
+  }>({
+    isDrawing: false,
+    startPoint: null,
+  });
+  const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [showIndicators, setShowIndicators] = useState(false);
   const [showFibonacci, setShowFibonacci] = useState(false);
   const [selectedTool, setSelectedTool] = useState<DrawingTool>('none');
@@ -71,7 +81,167 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     bb: false,
     volume: true,
   });
-  const isInitialLoadRef = useRef(true);
+
+  const handleChartClick = (time: Time, price: number) => {
+    if (selectedTool === 'none') return;
+
+    if (!drawingStateRef.current.isDrawing) {
+      // First click - start drawing
+      drawingStateRef.current = {
+        isDrawing: true,
+        startPoint: { time, price },
+      };
+      setIsDrawingMode(true);
+    } else {
+      // Second click - finish drawing
+      const startPoint = drawingStateRef.current.startPoint;
+      if (!startPoint) return;
+
+      const endPoint = { time, price };
+      createDrawing(selectedTool, startPoint, endPoint);
+
+      // Reset drawing state
+      drawingStateRef.current = {
+        isDrawing: false,
+        startPoint: null,
+      };
+      setIsDrawingMode(false);
+      
+      // Reset tool to cursor after drawing
+      setSelectedTool('none');
+    }
+  };
+
+  const createDrawing = (
+    type: DrawingTool,
+    startPoint: { time: Time; price: number },
+    endPoint: { time: Time; price: number }
+  ) => {
+    if (!chartRef.current) return;
+
+    const drawingId = `${type}-${Date.now()}`;
+    let series: ISeriesApi<'Line'> | undefined;
+    let lineData: LineData[] = [];
+
+    switch (type) {
+      case 'trendline':
+        // Create a trend line between two points
+        series = chartRef.current.addSeries(LineSeries, {
+          color: '#2196F3',
+          lineWidth: 2,
+          title: 'Trend Line',
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+        lineData = [
+          { time: startPoint.time, value: startPoint.price },
+          { time: endPoint.time, value: endPoint.price },
+        ];
+        series.setData(lineData);
+        break;
+
+      case 'horizontal':
+        // Create a horizontal line at the clicked price
+        series = chartRef.current.addSeries(LineSeries, {
+          color: '#FFC107',
+          lineWidth: 2,
+          lineStyle: 2, // Dashed
+          title: 'H-Line',
+          priceLineVisible: true,
+          lastValueVisible: true,
+        });
+        
+        // Use all available data points for horizontal line
+        const minTime = Math.min(Number(startPoint.time), Number(endPoint.time));
+        const maxTime = Math.max(Number(startPoint.time), Number(endPoint.time));
+        
+        lineData = [
+          { time: minTime as Time, value: startPoint.price },
+          { time: maxTime as Time, value: startPoint.price },
+        ];
+        series.setData(lineData);
+        break;
+
+      case 'rectangle':
+        // Create a rectangle using 4 lines
+        const rectMinTime = Math.min(Number(startPoint.time), Number(endPoint.time));
+        const rectMaxTime = Math.max(Number(startPoint.time), Number(endPoint.time));
+        const rectMinPrice = Math.min(startPoint.price, endPoint.price);
+        const rectMaxPrice = Math.max(startPoint.price, endPoint.price);
+
+        // Top line
+        const topSeries = chartRef.current.addSeries(LineSeries, {
+          color: '#9C27B0',
+          lineWidth: 2,
+          title: 'Rectangle',
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+        topSeries.setData([
+          { time: rectMinTime as Time, value: rectMaxPrice },
+          { time: rectMaxTime as Time, value: rectMaxPrice },
+        ]);
+
+        // Bottom line
+        const bottomSeries = chartRef.current.addSeries(LineSeries, {
+          color: '#9C27B0',
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+        bottomSeries.setData([
+          { time: rectMinTime as Time, value: rectMinPrice },
+          { time: rectMaxTime as Time, value: rectMinPrice },
+        ]);
+
+        // Left line
+        const leftSeries = chartRef.current.addSeries(LineSeries, {
+          color: '#9C27B0',
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+        leftSeries.setData([
+          { time: rectMinTime as Time, value: rectMinPrice },
+          { time: rectMinTime as Time, value: rectMaxPrice },
+        ]);
+
+        // Right line
+        const rightSeries = chartRef.current.addSeries(LineSeries, {
+          color: '#9C27B0',
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+        rightSeries.setData([
+          { time: rectMaxTime as Time, value: rectMinPrice },
+          { time: rectMaxTime as Time, value: rectMaxPrice },
+        ]);
+
+        // Store all rectangle parts as separate drawings
+        drawingsRef.current.push(
+          { id: `${drawingId}-top`, type: 'rectangle', series: topSeries, data: [], startPoint, endPoint },
+          { id: `${drawingId}-bottom`, type: 'rectangle', series: bottomSeries, data: [], startPoint, endPoint },
+          { id: `${drawingId}-left`, type: 'rectangle', series: leftSeries, data: [], startPoint, endPoint },
+          { id: `${drawingId}-right`, type: 'rectangle', series: rightSeries, data: [], startPoint, endPoint }
+        );
+        return; // Early return since we already added to drawingsRef
+
+      default:
+        return;
+    }
+
+    if (series) {
+      drawingsRef.current.push({
+        id: drawingId,
+        type,
+        series,
+        data: lineData,
+        startPoint,
+        endPoint,
+      });
+    }
+  };
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -126,6 +296,16 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     });
 
     candleSeriesRef.current = candleSeries;
+
+    // Add click handler for drawing tools
+    chart.subscribeClick((param) => {
+      if (!param.time || !param.point) return;
+      
+      const price = candleSeries.coordinateToPrice(param.point.y);
+      if (!price) return;
+
+      handleChartClick(param.time as Time, price as number);
+    });
 
     // Handle resize
     const handleResize = () => {
@@ -370,8 +550,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
   const handleToolSelect = (tool: DrawingTool) => {
     setSelectedTool(tool);
-    // Note: Full drawing implementation requires interactive chart click handling
-    // This is a placeholder for future enhancement
+    // Reset drawing state when changing tools
+    drawingStateRef.current = {
+      isDrawing: false,
+      startPoint: null,
+    };
+    setIsDrawingMode(false);
   };
 
   const handleClearAllDrawings = () => {
@@ -464,6 +648,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
   return (
     <div className="trading-chart-container">
+      {isDrawingMode && (
+        <div className="drawing-mode-indicator">
+          Click on chart to complete {selectedTool}
+        </div>
+      )}
+      
       <div className="chart-top-controls">
         <DrawingTools
           selectedTool={selectedTool}

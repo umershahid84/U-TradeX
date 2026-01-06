@@ -35,6 +35,7 @@ function App() {
   });
   const [tpslSettings, setTpslSettings] = useState<Map<string, TakeProfitStopLoss>>(new Map());
   const [includeAfterHours, setIncludeAfterHours] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
   const [showLeftSidebar, setShowLeftSidebar] = useState(() => {
     return localStorage.getItem('showLeftSidebar') !== 'false';
   });
@@ -89,14 +90,21 @@ function App() {
   // Load chart data when symbol or timeframe changes
   useEffect(() => {
     const loadData = async () => {
+      setConnectionStatus('connecting');
       const yahooRange = getYahooRange(timeRange);
       const yahooInterval = getYahooInterval(timeframe);
       
-      const data = await marketData.fetchChartData(symbol, yahooInterval, yahooRange, includeAfterHours);
-      setChartData(data);
-      
-      if (data.length > 0) {
-        setCurrentPrice(data[data.length - 1].close);
+      try {
+        const data = await marketData.fetchChartData(symbol, yahooInterval, yahooRange, includeAfterHours);
+        setChartData(data);
+        
+        if (data.length > 0) {
+          setCurrentPrice(data[data.length - 1].close);
+          setConnectionStatus('connected');
+        }
+      } catch (error) {
+        console.error('Error loading data:', error);
+        setConnectionStatus('disconnected');
       }
     };
 
@@ -302,6 +310,14 @@ function App() {
                   />
                   <span>After Hours</span>
                 </label>
+              </div>
+              <div className={`connection-status ${connectionStatus}`}>
+                <span className="status-dot"></span>
+                <span className="status-text">
+                  {connectionStatus === 'connected' ? 'Live' : 
+                   connectionStatus === 'connecting' ? 'Connecting...' : 
+                   'Disconnected'}
+                </span>
               </div>
             </div>
           </div>

@@ -268,7 +268,7 @@ export class RealMarketDataService {
     symbol: string,
     callback: (price: number) => void
   ): () => void {
-    // Poll every 5 seconds for real-time updates
+    // Poll every 3 seconds for better real-time updates (reduced from 5s)
     const intervalId = setInterval(async () => {
       try {
         const price = await this.getCurrentPrice(symbol);
@@ -278,7 +278,7 @@ export class RealMarketDataService {
       } catch (error) {
         console.error('Error in price subscription:', error);
       }
-    }, 5000);
+    }, 3000);
 
     return () => clearInterval(intervalId);
   }
