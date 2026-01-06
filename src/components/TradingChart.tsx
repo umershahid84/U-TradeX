@@ -28,8 +28,11 @@ interface IndicatorState {
   ema13: boolean;
   sma20: boolean;
   sma50: boolean;
+  sma100: boolean;
+  sma200: boolean;
   vwap: boolean;
   rsi: boolean;
+  macd: boolean;
   bb: boolean;
   volume: boolean;
 }
@@ -39,9 +42,12 @@ interface DrawingObject {
   type: DrawingTool;
   series?: ISeriesApi<'Line'>;
   data: LineData[];
+  startPoint?: { time: Time; price: number };
+  endPoint?: { time: Time; price: number };
 }
 
 export const TradingChart: React.FC<TradingChartProps> = ({
+  symbol,
   data,
   onPriceUpdate,
 }) => {
@@ -50,7 +56,16 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null) as any;
   const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
   const drawingsRef = useRef<DrawingObject[]>([]);
+  const drawingStateRef = useRef<{
+    isDrawing: boolean;
+    startPoint: { time: Time; price: number } | null;
+  }>({
+    isDrawing: false,
+    startPoint: null,
+  });
+  const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [showIndicators, setShowIndicators] = useState(false);
+  const [showFibonacci, setShowFibonacci] = useState(false);
   const [selectedTool, setSelectedTool] = useState<DrawingTool>('none');
   const [indicators, setIndicators] = useState<IndicatorState>({
     ema5: true,
@@ -59,12 +74,177 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     ema13: true,
     sma20: true,
     sma50: true,
+    sma100: false,
+    sma200: false,
     vwap: false,
     rsi: false,
+    macd: false,
     bb: false,
-    volume: false,
+    volume: true,
   });
-  const isInitialLoadRef = useRef(true);
+
+  const handleChartClick = (time: Time, price: number) => {
+    // Validate inputs
+    if (!time || !price || isNaN(price)) return;
+    if (selectedTool === 'none') return;
+
+    if (!drawingStateRef.current.isDrawing) {
+      // First click - start drawing
+      drawingStateRef.current = {
+        isDrawing: true,
+        startPoint: { time, price },
+      };
+      setIsDrawingMode(true);
+    } else {
+      // Second click - finish drawing
+      const startPoint = drawingStateRef.current.startPoint;
+      if (!startPoint) return;
+
+      const endPoint = { time, price };
+      createDrawing(selectedTool, startPoint, endPoint);
+
+      // Reset drawing state
+      drawingStateRef.current = {
+        isDrawing: false,
+        startPoint: null,
+      };
+      setIsDrawingMode(false);
+      
+      // Reset tool to cursor after drawing
+      setSelectedTool('none');
+    }
+  };
+
+  const createDrawing = (
+    type: DrawingTool,
+    startPoint: { time: Time; price: number },
+    endPoint: { time: Time; price: number }
+  ) => {
+    if (!chartRef.current) return;
+
+    const drawingId = `${type}-${Date.now()}`;
+    let series: ISeriesApi<'Line'> | undefined;
+    let lineData: LineData[] = [];
+
+    switch (type) {
+      case 'trendline':
+        // Create a trend line between two points
+        series = chartRef.current.addSeries(LineSeries, {
+          color: '#2196F3',
+          lineWidth: 2,
+          title: 'Trend Line',
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+        lineData = [
+          { time: startPoint.time, value: startPoint.price },
+          { time: endPoint.time, value: endPoint.price },
+        ];
+        series.setData(lineData);
+        break;
+
+      case 'horizontal':
+        // Create a horizontal line at the clicked price
+        series = chartRef.current.addSeries(LineSeries, {
+          color: '#FFC107',
+          lineWidth: 2,
+          lineStyle: 2, // Dashed
+          title: 'H-Line',
+          priceLineVisible: true,
+          lastValueVisible: true,
+        });
+        
+        // Use all available data points for horizontal line
+        const minTime = Math.min(Number(startPoint.time), Number(endPoint.time));
+        const maxTime = Math.max(Number(startPoint.time), Number(endPoint.time));
+        
+        lineData = [
+          { time: minTime as Time, value: startPoint.price },
+          { time: maxTime as Time, value: startPoint.price },
+        ];
+        series.setData(lineData);
+        break;
+
+      case 'rectangle':
+        // Create a rectangle using 4 lines
+        const rectMinTime = Math.min(Number(startPoint.time), Number(endPoint.time));
+        const rectMaxTime = Math.max(Number(startPoint.time), Number(endPoint.time));
+        const rectMinPrice = Math.min(startPoint.price, endPoint.price);
+        const rectMaxPrice = Math.max(startPoint.price, endPoint.price);
+
+        // Top line
+        const topSeries = chartRef.current.addSeries(LineSeries, {
+          color: '#9C27B0',
+          lineWidth: 2,
+          title: 'Rectangle',
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+        topSeries.setData([
+          { time: rectMinTime as Time, value: rectMaxPrice },
+          { time: rectMaxTime as Time, value: rectMaxPrice },
+        ]);
+
+        // Bottom line
+        const bottomSeries = chartRef.current.addSeries(LineSeries, {
+          color: '#9C27B0',
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+        bottomSeries.setData([
+          { time: rectMinTime as Time, value: rectMinPrice },
+          { time: rectMaxTime as Time, value: rectMinPrice },
+        ]);
+
+        // Left line
+        const leftSeries = chartRef.current.addSeries(LineSeries, {
+          color: '#9C27B0',
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+        leftSeries.setData([
+          { time: rectMinTime as Time, value: rectMinPrice },
+          { time: rectMinTime as Time, value: rectMaxPrice },
+        ]);
+
+        // Right line
+        const rightSeries = chartRef.current.addSeries(LineSeries, {
+          color: '#9C27B0',
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+        rightSeries.setData([
+          { time: rectMaxTime as Time, value: rectMinPrice },
+          { time: rectMaxTime as Time, value: rectMaxPrice },
+        ]);
+
+        // Store all rectangle parts as separate drawings
+        drawingsRef.current.push(
+          { id: `${drawingId}-top`, type: 'rectangle', series: topSeries, data: [], startPoint, endPoint },
+          { id: `${drawingId}-bottom`, type: 'rectangle', series: bottomSeries, data: [], startPoint, endPoint },
+          { id: `${drawingId}-left`, type: 'rectangle', series: leftSeries, data: [], startPoint, endPoint },
+          { id: `${drawingId}-right`, type: 'rectangle', series: rightSeries, data: [], startPoint, endPoint }
+        );
+        return; // Early return since we already added to drawingsRef
+
+      default:
+        return;
+    }
+
+    if (series) {
+      drawingsRef.current.push({
+        id: drawingId,
+        type,
+        series,
+        data: lineData,
+        startPoint,
+        endPoint,
+      });
+    }
+  };
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -120,6 +300,16 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
     candleSeriesRef.current = candleSeries;
 
+    // Add click handler for drawing tools
+    chart.subscribeClick((param) => {
+      if (!param.time || !param.point) return;
+      
+      const price = candleSeries.coordinateToPrice(param.point.y);
+      if (!price) return;
+
+      handleChartClick(param.time as Time, price as number);
+    });
+
     // Handle resize
     const handleResize = () => {
       if (chartContainerRef.current && chartRef.current) {
@@ -156,13 +346,18 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     if (onPriceUpdate && data.length > 0) {
       onPriceUpdate(data[data.length - 1].close);
     }
-
-    // Fit content only on initial load
-    if (isInitialLoadRef.current && data.length > 0) {
-      chartRef.current?.timeScale().fitContent();
-      isInitialLoadRef.current = false;
-    }
   }, [data, onPriceUpdate]);
+
+  // Separate effect for fitting content when symbol changes
+  useEffect(() => {
+    if (chartRef.current && data.length > 0) {
+      // Use a small delay to ensure chart has rendered
+      const timeoutId = setTimeout(() => {
+        chartRef.current?.timeScale().fitContent();
+      }, 100);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [symbol, data.length]);
 
   // Separate effect for managing indicators
   useEffect(() => {
@@ -271,6 +466,38 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         indicatorSeriesRef.current.set('sma50', sma50Series);
       }
 
+      // Add SMA 100
+      if (indicators.sma100) {
+        const sma100 = calculateSMA(closes, 100);
+        const sma100Series = chartRef.current.addSeries(LineSeries, {
+          color: '#FF5722',
+          lineWidth: 2,
+          title: 'SMA 100',
+        });
+        const sma100Data: LineData[] = sma100.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value || data[i].close,
+        }));
+        sma100Series.setData(sma100Data);
+        indicatorSeriesRef.current.set('sma100', sma100Series);
+      }
+
+      // Add SMA 200
+      if (indicators.sma200) {
+        const sma200 = calculateSMA(closes, 200);
+        const sma200Series = chartRef.current.addSeries(LineSeries, {
+          color: '#F44336',
+          lineWidth: 3,
+          title: 'SMA 200',
+        });
+        const sma200Data: LineData[] = sma200.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value || data[i].close,
+        }));
+        sma200Series.setData(sma200Data);
+        indicatorSeriesRef.current.set('sma200', sma200Series);
+      }
+
       // Add VWAP
       if (indicators.vwap) {
         const vwapData = calculateVWAP(data);
@@ -332,8 +559,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
   const handleToolSelect = (tool: DrawingTool) => {
     setSelectedTool(tool);
-    // Note: Full drawing implementation requires interactive chart click handling
-    // This is a placeholder for future enhancement
+    // Reset drawing state when changing tools
+    drawingStateRef.current = {
+      isDrawing: false,
+      startPoint: null,
+    };
+    setIsDrawingMode(false);
   };
 
   const handleClearAllDrawings = () => {
@@ -349,6 +580,13 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
   const addFibonacciLevels = () => {
     if (!chartRef.current || data.length === 0) return;
+
+    // If already showing, remove them (toggle off)
+    if (showFibonacci) {
+      removeFibonacciLevels();
+      setShowFibonacci(false);
+      return;
+    }
 
     // Calculate Fibonacci levels based on recent price action
     const recentData = data.slice(-50); // Last 50 bars
@@ -397,6 +635,20 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         data: fibData,
       });
     });
+    
+    setShowFibonacci(true);
+  };
+
+  const removeFibonacciLevels = () => {
+    // Remove only Fibonacci drawings
+    const fibDrawings = drawingsRef.current.filter(d => d.type === 'fibonacci');
+    fibDrawings.forEach((drawing) => {
+      if (drawing.series && chartRef.current) {
+        chartRef.current.removeSeries(drawing.series);
+      }
+    });
+    // Keep only non-fibonacci drawings
+    drawingsRef.current = drawingsRef.current.filter(d => d.type !== 'fibonacci');
   };
 
   const toggleIndicator = (key: keyof IndicatorState) => {
@@ -405,94 +657,158 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
   return (
     <div className="trading-chart-container">
-      <DrawingTools
-        selectedTool={selectedTool}
-        onToolSelect={handleToolSelect}
-        onClearAll={handleClearAllDrawings}
-      />
+      {isDrawingMode && (
+        <div className="drawing-mode-indicator">
+          Click on chart to complete {selectedTool}
+        </div>
+      )}
       
-      <div className="chart-controls">
-        <button
-          className="indicator-toggle"
-          onClick={() => setShowIndicators(!showIndicators)}
-        >
-          {showIndicators ? '📊 Hide All Indicators' : '📊 Show Indicators'}
-        </button>
-        <button
-          className="fibonacci-btn"
-          onClick={addFibonacciLevels}
-        >
-          🔢 Add Fibonacci
-        </button>
-        {showIndicators && (
-          <div className="indicator-checkboxes">
-            <label>
-              <input
-                type="checkbox"
-                checked={indicators.ema5}
-                onChange={() => toggleIndicator('ema5')}
-              />
-              EMA 5
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={indicators.ema8}
-                onChange={() => toggleIndicator('ema8')}
-              />
-              EMA 8
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={indicators.ema9}
-                onChange={() => toggleIndicator('ema9')}
-              />
-              EMA 9
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={indicators.ema13}
-                onChange={() => toggleIndicator('ema13')}
-              />
-              EMA 13
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={indicators.sma20}
-                onChange={() => toggleIndicator('sma20')}
-              />
-              SMA 20
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={indicators.sma50}
-                onChange={() => toggleIndicator('sma50')}
-              />
-              SMA 50
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={indicators.vwap}
-                onChange={() => toggleIndicator('vwap')}
-              />
-              VWAP
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={indicators.bb}
-                onChange={() => toggleIndicator('bb')}
-              />
-              Bollinger Bands
-            </label>
-          </div>
-        )}
+      <div className="chart-top-controls">
+        <DrawingTools
+          selectedTool={selectedTool}
+          onToolSelect={handleToolSelect}
+          onClearAll={handleClearAllDrawings}
+        />
+        
+        <div className="chart-control-buttons">
+          <button
+            className={`fibonacci-btn ${showFibonacci ? 'active' : ''}`}
+            onClick={addFibonacciLevels}
+          >
+            🔢 {showFibonacci ? 'Hide' : 'Add'} Fibonacci
+          </button>
+          
+          <button
+            className="indicator-toggle"
+            onClick={() => setShowIndicators(!showIndicators)}
+          >
+            {showIndicators ? '📊 Hide Indicators' : '📊 Show Indicators'}
+          </button>
+        </div>
       </div>
+      
+      {showIndicators && (
+        <div className="indicator-panel">
+          <div className="indicator-checkboxes">
+            <div className="indicator-group">
+              <h4>EMAs</h4>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.ema5}
+                  onChange={() => toggleIndicator('ema5')}
+                />
+                EMA 5
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.ema8}
+                  onChange={() => toggleIndicator('ema8')}
+                />
+                EMA 8
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.ema9}
+                  onChange={() => toggleIndicator('ema9')}
+                />
+                EMA 9
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.ema13}
+                  onChange={() => toggleIndicator('ema13')}
+                />
+                EMA 13
+              </label>
+            </div>
+            
+            <div className="indicator-group">
+              <h4>SMAs</h4>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.sma20}
+                  onChange={() => toggleIndicator('sma20')}
+                />
+                SMA 20
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.sma50}
+                  onChange={() => toggleIndicator('sma50')}
+                />
+                SMA 50
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.sma100}
+                  onChange={() => toggleIndicator('sma100')}
+                />
+                SMA 100
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.sma200}
+                  onChange={() => toggleIndicator('sma200')}
+                />
+                SMA 200
+              </label>
+            </div>
+            
+            <div className="indicator-group">
+              <h4>Others</h4>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.vwap}
+                  onChange={() => toggleIndicator('vwap')}
+                />
+                VWAP
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.bb}
+                  onChange={() => toggleIndicator('bb')}
+                />
+                Bollinger Bands
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.rsi}
+                  onChange={() => toggleIndicator('rsi')}
+                />
+                RSI (Panel)
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.macd}
+                  onChange={() => toggleIndicator('macd')}
+                />
+                MACD (Panel)
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.volume}
+                  onChange={() => toggleIndicator('volume')}
+                />
+                Volume
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div ref={chartContainerRef} className="chart" />
     </div>
   );

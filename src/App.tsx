@@ -19,7 +19,9 @@ import './App.css';
 const marketData = RealMarketDataService.getInstance();
 
 function App() {
-  const [symbol, setSymbol] = useState('AAPL');
+  const [symbol, setSymbol] = useState(() => {
+    return localStorage.getItem('lastViewedSymbol') || 'AAPL';
+  });
   const [timeframe, setTimeframe] = useState<TimeFrame>('5m');
   const [timeRange, setTimeRange] = useState<TimeRange>('1D');
   const [chartData, setChartData] = useState<ChartData[]>([]);
@@ -33,6 +35,13 @@ function App() {
   });
   const [tpslSettings, setTpslSettings] = useState<Map<string, TakeProfitStopLoss>>(new Map());
   const [includeAfterHours, setIncludeAfterHours] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
+  const [showLeftSidebar, setShowLeftSidebar] = useState(() => {
+    return localStorage.getItem('showLeftSidebar') !== 'false';
+  });
+  const [showRightSidebar, setShowRightSidebar] = useState(() => {
+    return localStorage.getItem('showRightSidebar') !== 'false';
+  });
 
   const {
     account,
@@ -81,14 +90,25 @@ function App() {
   // Load chart data when symbol or timeframe changes
   useEffect(() => {
     const loadData = async () => {
+      setConnectionStatus('connecting');
       const yahooRange = getYahooRange(timeRange);
       const yahooInterval = getYahooInterval(timeframe);
       
-      const data = await marketData.fetchChartData(symbol, yahooInterval, yahooRange, includeAfterHours);
-      setChartData(data);
-      
-      if (data.length > 0) {
-        setCurrentPrice(data[data.length - 1].close);
+      try {
+        const data = await marketData.fetchChartData(symbol, yahooInterval, yahooRange, includeAfterHours);
+        setChartData(data);
+        
+        if (data.length > 0) {
+          setCurrentPrice(data[data.length - 1].close);
+          setConnectionStatus('connected');
+        } else {
+          // No data returned, but request succeeded
+          setConnectionStatus('disconnected');
+          console.warn('No chart data returned for symbol:', symbol);
+        }
+      } catch (error) {
+        console.error('Error loading data:', error);
+        setConnectionStatus('disconnected');
       }
     };
 
@@ -213,6 +233,7 @@ function App() {
 
   const handleSymbolChange = useCallback((newSymbol: string) => {
     setSymbol(newSymbol);
+    localStorage.setItem('lastViewedSymbol', newSymbol);
   }, []);
 
   const handleTimeframeChange = useCallback((tf: TimeFrame) => {
@@ -228,6 +249,18 @@ function App() {
     alert(`TP/SL set for ${tpsl.symbol}`);
   };
 
+  const toggleLeftSidebar = () => {
+    const newValue = !showLeftSidebar;
+    setShowLeftSidebar(newValue);
+    localStorage.setItem('showLeftSidebar', String(newValue));
+  };
+
+  const toggleRightSidebar = () => {
+    const newValue = !showRightSidebar;
+    setShowRightSidebar(newValue);
+    localStorage.setItem('showRightSidebar', String(newValue));
+  };
+
   return (
     <div className="app">
       <Navbar
@@ -240,9 +273,20 @@ function App() {
       />
       
       <div className="main-content">
-        <div className="left-sidebar">
-          <Portfolio account={account} onReset={resetAccount} />
-        </div>
+        {showLeftSidebar && (
+          <div className="left-sidebar">
+            <button className="sidebar-toggle left" onClick={toggleLeftSidebar} title="Hide sidebar">
+              ◀
+            </button>
+            <Portfolio account={account} onReset={resetAccount} />
+          </div>
+        )}
+        
+        {!showLeftSidebar && (
+          <button className="sidebar-toggle-collapsed left" onClick={toggleLeftSidebar} title="Show sidebar">
+            ▶
+          </button>
+        )}
 
         <div className="chart-area">
           <div className="chart-header">
@@ -271,6 +315,14 @@ function App() {
                   <span>After Hours</span>
                 </label>
               </div>
+              <div className={`connection-status ${connectionStatus}`}>
+                <span className="status-dot"></span>
+                <span className="status-text">
+                  {connectionStatus === 'connected' ? 'Live' : 
+                   connectionStatus === 'connecting' ? 'Connecting...' : 
+                   'Disconnected'}
+                </span>
+              </div>
             </div>
           </div>
           
@@ -282,30 +334,41 @@ function App() {
           />
         </div>
 
-        <div className="right-sidebar">
-          <div className="sidebar-panels">
-            <FearGreedIndicator data={fearGreedData} />
-            
-            <TradingPanel
-              symbol={symbol}
-              currentPrice={currentPrice}
-              balance={account.balance}
-              onPlaceOrder={placeOrder}
-            />
+        {showRightSidebar && (
+          <div className="right-sidebar">
+            <button className="sidebar-toggle right" onClick={toggleRightSidebar} title="Hide sidebar">
+              ▶
+            </button>
+            <div className="sidebar-panels">
+              <FearGreedIndicator data={fearGreedData} />
+              
+              <TradingPanel
+                symbol={symbol}
+                currentPrice={currentPrice}
+                balance={account.balance}
+                onPlaceOrder={placeOrder}
+              />
 
-            <TPSLPanel
-              positions={account.positions}
-              onSet={handleTPSLSet}
-            />
+              <TPSLPanel
+                positions={account.positions}
+                onSet={handleTPSLSet}
+              />
 
-            <OptionsPanel
-              symbol={symbol}
-              currentPrice={currentPrice}
-              balance={account.balance}
-              onBuyOption={buyOption}
-            />
+              <OptionsPanel
+                symbol={symbol}
+                currentPrice={currentPrice}
+                balance={account.balance}
+                onBuyOption={buyOption}
+              />
+            </div>
           </div>
-        </div>
+        )}
+        
+        {!showRightSidebar && (
+          <button className="sidebar-toggle-collapsed right" onClick={toggleRightSidebar} title="Show sidebar">
+            ◀
+          </button>
+        )}
       </div>
     </div>
   );

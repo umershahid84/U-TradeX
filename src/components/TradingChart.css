@@ -2,21 +2,64 @@
   position: relative;
   width: 100%;
   height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.drawing-mode-indicator {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 20;
+  background: rgba(33, 150, 243, 0.9);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.chart-top-controls {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.chart-control-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.indicator-panel {
+  position: absolute;
+  top: 60px;
+  left: 10px;
+  z-index: 10;
+  background: rgba(42, 46, 79, 0.95);
+  border: 1px solid #3a3e6f;
+  border-radius: 4px;
+  padding: 10px;
 }
 
 .chart {
   width: 100%;
   height: 100%;
-}
-
-.chart-controls {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 
 .indicator-toggle,
@@ -48,15 +91,35 @@
   border-color: #ba68c8;
 }
 
+.fibonacci-btn.active {
+  background: rgba(76, 175, 80, 0.8);
+  border-color: #4CAF50;
+}
+
+.fibonacci-btn.active:hover {
+  background: rgba(76, 175, 80, 0.95);
+  border-color: #66BB6A;
+}
+
 .indicator-checkboxes {
+  display: flex;
+  gap: 15px;
+  max-width: 500px;
+}
+
+.indicator-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 10px;
-  background: rgba(42, 46, 79, 0.95);
-  border: 1px solid #3a3e6f;
-  border-radius: 4px;
-  max-width: 150px;
+}
+
+.indicator-group h4 {
+  margin: 0 0 4px 0;
+  color: #26a69a;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .indicator-checkboxes label {
@@ -68,6 +131,7 @@
   cursor: pointer;
   user-select: none;
   transition: color 0.2s;
+  white-space: nowrap;
 }
 
 .indicator-checkboxes label:hover {
