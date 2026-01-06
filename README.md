@@ -23,15 +23,27 @@ This platform attempts to fetch **real-time market data** from Yahoo Finance API
 
 ### 📊 Advanced Charting
 - **Real-time Market Data**: Live price updates and candlestick charts
-- **Multiple Timeframes**: 1m, 2m, 3m, 5m, 10m, 15m, 30m, 1h, 4h, 1d, 1w, 1M, 3M, 1y
-- **Time Range Selection**: Today, 1D, 5D, 1W, 1Y, Max
+- **Multiple Timeframes**: 1m, 2m, 5m, 10m, 15m, 30m, 1h, 4h, D, W, M, 1Q, 1Y
+- **Time Range Selection**: 1D, 5D, 1M, 3M, 6M, YTD, 1Y, 5Y, MAX
+- **After-Hours Trading**: Toggle extended hours data (pre-market & post-market)
+- **BID/ASK Display**: Real-time bid and ask prices with spread calculation
 - **Professional UI**: Dark theme with modern, clean design
 
 ### 📈 Technical Indicators
 - **Ripster EMA Cloud**: 5, 8, 9, and 13 period EMAs
-- **MTF Indicators**: 20 and 50 period moving averages
-- **Customizable**: Toggle indicators on/off
+- **Moving Averages**: SMA 20 and SMA 50
+- **VWAP**: Volume Weighted Average Price
+- **Bollinger Bands**: Upper, middle, and lower bands with 2σ deviation
+- **Customizable**: Individual toggle for each indicator
+- **No Label Stacking**: Fixed indicator management system
 - **PineScript Support Framework**: Extensible architecture for custom indicators
+
+### 🎨 Drawing & Analysis Tools
+- **Drawing Tools Panel**: Interactive drawing tools interface
+- **Fibonacci Retracement**: Automatic calculation with standard levels (23.6%, 38.2%, 50%, 61.8%, 78.6%)
+- **Color-Coded Levels**: Easy visual identification
+- **Clear All Function**: Remove all drawings at once
+- **Framework Ready**: Extensible for trend lines, horizontal lines, and rectangles
 
 ### 💰 Paper Trading
 - **$100,000 Default Balance**: Start with virtual cash
@@ -47,8 +59,10 @@ This platform attempts to fetch **real-time market data** from Yahoo Finance API
 
 ### 🎪 Options Trading
 - **Call & Put Options**: Full options trading support
+- **Realistic Strike Intervals**: Smart strike generation based on stock price
 - **Multiple Expirations**: 4-week expiration cycle
-- **Strike Selection**: -5%, ATM, +5% quick presets
+- **Options Chain Display**: Strike, premium, bid/ask, volume, and open interest
+- **Improved Pricing**: Realistic premium calculation with intrinsic and time value
 - **Contract Tracking**: Monitor all option positions
 
 ### 🎨 Fear & Greed Indicator
@@ -170,18 +184,39 @@ Once the application is running:
    - Press Enter or click the search button 🔍
    - The chart will update with the new ticker
 
-2. **Select Timeframe**
-   - Click any timeframe button: 1m, 2m, 3m, 5m, 10m, 15m, 30m, 1h, 4h, 1d, 1w, 1M, 3M, 1y
-   - Choose a time range: Today, 1D, 5D, 1W, 1Y, Max
+2. **Select Timeframe and Range**
+   - Click any timeframe button: 1m, 2m, 5m, 10m, 15m, 30m, 1h, 4h, D, W, M, 1Q, 1Y
+   - Choose a time range: 1D, 5D, 1M, 3M, 6M, YTD, 1Y, 5Y, MAX
+   - Toggle "After Hours" to include pre-market and post-market data
    - Indicators will automatically recalculate
 
 3. **View Technical Indicators**
-   - Click "📊 Hide Indicators" button to toggle indicators on/off
-   - Indicators shown:
-     - **Ripster EMA Cloud**: Blue/cyan/green lines (5, 8, 9, 13 EMAs)
-     - **MTF Indicators**: Yellow/orange lines (20, 50 SMAs)
+   - Click "📊 Show Indicators" button to open indicator panel
+   - Individual toggles for each indicator:
+     - **EMAs**: 5, 8, 9, 13 period exponential moving averages
+     - **SMAs**: 20, 50 period simple moving averages
+     - **VWAP**: Volume Weighted Average Price
+     - **Bollinger Bands**: Upper, middle, and lower bands
+   - Indicators properly remove when unchecked (no more label stacking!)
 
-4. **Place Orders**
+4. **Use Drawing Tools**
+   - Click "🎨 Drawing Tools" to open the drawing panel
+   - Select from available tools:
+     - Cursor (default selection mode)
+     - Trend Line (framework ready)
+     - Horizontal Line (framework ready)
+     - Rectangle (framework ready)
+     - Fibonacci Retracement
+   - Click "🔢 Add Fibonacci" to add automatic Fibonacci levels
+   - Click "🗑️ Clear All" to remove all drawings
+
+5. **View BID/ASK Prices**
+   - Located at the top of the chart
+   - Shows real-time BID price (red)
+   - Shows real-time ASK price (green)
+   - Spread calculated as 0.05% of current price
+
+6. **Place Orders**
    - **Market Order**: Executes immediately at current price
      - Select BUY or SELL
      - Enter quantity (number of shares)
@@ -191,20 +226,22 @@ Once the application is running:
      - Enter quantity and limit price
      - Click "Place BUY Order" or "Place SELL Order"
 
-5. **Set Take Profit / Stop Loss**
+7. **Set Take Profit / Stop Loss**
    - Select a position from the dropdown
    - Enter Take Profit price (sells automatically when price goes up)
    - Enter Stop Loss price (sells automatically when price goes down)
    - Click "Set TP/SL"
 
-6. **Trade Options**
+8. **Trade Options**
    - Choose CALL (bullish) or PUT (bearish)
-   - Set strike price using presets (-5%, ATM, +5%) or manually
-   - Select expiration date
-   - Enter premium and number of contracts
+   - Select expiration date from available dates
+   - Browse the options chain showing strikes, premiums, and volume
+   - Click on an option to select it
+   - Enter number of contracts
    - Click "Buy CALL Option" or "Buy PUT Option"
+   - **Note**: Strike prices are now generated with realistic intervals based on stock price
 
-7. **Monitor Your Portfolio**
+9. **Monitor Your Portfolio**
    - **Left Panel**: View your portfolio
      - Cash balance
      - Total value

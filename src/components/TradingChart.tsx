@@ -10,7 +10,8 @@ import {
   LineSeries
 } from 'lightweight-charts';
 import { ChartData, TimeFrame } from '../types';
-import { calculateRipsterEMACloud, calculateSMA } from '../utils/indicators';
+import { calculateRipsterEMACloud, calculateSMA, calculateVWAP, calculateBollingerBands } from '../utils/indicators';
+import { DrawingTools, DrawingTool } from './DrawingTools';
 import './TradingChart.css';
 
 interface TradingChartProps {
@@ -27,6 +28,17 @@ interface IndicatorState {
   ema13: boolean;
   sma20: boolean;
   sma50: boolean;
+  vwap: boolean;
+  rsi: boolean;
+  bb: boolean;
+  volume: boolean;
+}
+
+interface DrawingObject {
+  id: string;
+  type: DrawingTool;
+  series?: ISeriesApi<'Line'>;
+  data: LineData[];
 }
 
 export const TradingChart: React.FC<TradingChartProps> = ({
@@ -36,7 +48,10 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null) as any;
+  const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  const drawingsRef = useRef<DrawingObject[]>([]);
   const [showIndicators, setShowIndicators] = useState(false);
+  const [selectedTool, setSelectedTool] = useState<DrawingTool>('none');
   const [indicators, setIndicators] = useState<IndicatorState>({
     ema5: true,
     ema8: true,
@@ -44,6 +59,10 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     ema13: true,
     sma20: true,
     sma50: true,
+    vwap: false,
+    rsi: false,
+    bb: false,
+    volume: false,
   });
   const isInitialLoadRef = useRef(true);
 
@@ -133,8 +152,30 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
     candleSeriesRef.current.setData(chartData);
 
+    // Notify parent of latest price
+    if (onPriceUpdate && data.length > 0) {
+      onPriceUpdate(data[data.length - 1].close);
+    }
+
+    // Fit content only on initial load
+    if (isInitialLoadRef.current && data.length > 0) {
+      chartRef.current?.timeScale().fitContent();
+      isInitialLoadRef.current = false;
+    }
+  }, [data, onPriceUpdate]);
+
+  // Separate effect for managing indicators
+  useEffect(() => {
+    if (!chartRef.current || !data.length) return;
+
+    // Remove all existing indicator series
+    indicatorSeriesRef.current.forEach((series) => {
+      chartRef.current?.removeSeries(series);
+    });
+    indicatorSeriesRef.current.clear();
+
     // Add indicators based on selection
-    if (showIndicators && chartRef.current) {
+    if (showIndicators) {
       const closes = data.map(d => d.close);
       const emaCloud = calculateRipsterEMACloud(closes);
 
@@ -150,6 +191,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           value: value || data[i].close,
         }));
         ema5Series.setData(ema5Data);
+        indicatorSeriesRef.current.set('ema5', ema5Series);
       }
 
       // Add EMA 8
@@ -164,6 +206,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           value: value || data[i].close,
         }));
         ema8Series.setData(ema8Data);
+        indicatorSeriesRef.current.set('ema8', ema8Series);
       }
 
       // Add EMA 9
@@ -178,6 +221,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           value: value || data[i].close,
         }));
         ema9Series.setData(ema9Data);
+        indicatorSeriesRef.current.set('ema9', ema9Series);
       }
 
       // Add EMA 13
@@ -192,6 +236,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           value: value || data[i].close,
         }));
         ema13Series.setData(ema13Data);
+        indicatorSeriesRef.current.set('ema13', ema13Series);
       }
 
       // Add SMA 20
@@ -207,6 +252,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           value: value || data[i].close,
         }));
         sma20Series.setData(sma20Data);
+        indicatorSeriesRef.current.set('sma20', sma20Series);
       }
 
       // Add SMA 50
@@ -222,20 +268,136 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           value: value || data[i].close,
         }));
         sma50Series.setData(sma50Data);
+        indicatorSeriesRef.current.set('sma50', sma50Series);
+      }
+
+      // Add VWAP
+      if (indicators.vwap) {
+        const vwapData = calculateVWAP(data);
+        const vwapSeries = chartRef.current.addSeries(LineSeries, {
+          color: '#9C27B0',
+          lineWidth: 2,
+          title: 'VWAP',
+        });
+        const vwapLineData: LineData[] = vwapData.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value,
+        }));
+        vwapSeries.setData(vwapLineData);
+        indicatorSeriesRef.current.set('vwap', vwapSeries);
+      }
+
+      // Add Bollinger Bands
+      if (indicators.bb) {
+        const bb = calculateBollingerBands(closes, 20, 2);
+        
+        const bbUpperSeries = chartRef.current.addSeries(LineSeries, {
+          color: '#E91E63',
+          lineWidth: 1,
+          title: 'BB Upper',
+        });
+        const bbUpperData: LineData[] = bb.upper.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value || data[i].close,
+        }));
+        bbUpperSeries.setData(bbUpperData);
+        indicatorSeriesRef.current.set('bbUpper', bbUpperSeries);
+
+        const bbMiddleSeries = chartRef.current.addSeries(LineSeries, {
+          color: '#F06292',
+          lineWidth: 1,
+          title: 'BB Middle',
+        });
+        const bbMiddleData: LineData[] = bb.middle.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value || data[i].close,
+        }));
+        bbMiddleSeries.setData(bbMiddleData);
+        indicatorSeriesRef.current.set('bbMiddle', bbMiddleSeries);
+
+        const bbLowerSeries = chartRef.current.addSeries(LineSeries, {
+          color: '#E91E63',
+          lineWidth: 1,
+          title: 'BB Lower',
+        });
+        const bbLowerData: LineData[] = bb.lower.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value || data[i].close,
+        }));
+        bbLowerSeries.setData(bbLowerData);
+        indicatorSeriesRef.current.set('bbLower', bbLowerSeries);
       }
     }
+  }, [data, showIndicators, indicators]);
 
-    // Notify parent of latest price
-    if (onPriceUpdate && data.length > 0) {
-      onPriceUpdate(data[data.length - 1].close);
-    }
+  const handleToolSelect = (tool: DrawingTool) => {
+    setSelectedTool(tool);
+    // Note: Full drawing implementation requires interactive chart click handling
+    // This is a placeholder for future enhancement
+  };
 
-    // Fit content only on initial load
-    if (isInitialLoadRef.current && data.length > 0) {
-      chartRef.current?.timeScale().fitContent();
-      isInitialLoadRef.current = false;
-    }
-  }, [data, showIndicators, indicators, onPriceUpdate]);
+  const handleClearAllDrawings = () => {
+    // Remove all drawing series from the chart
+    drawingsRef.current.forEach((drawing) => {
+      if (drawing.series && chartRef.current) {
+        chartRef.current.removeSeries(drawing.series);
+      }
+    });
+    drawingsRef.current = [];
+    setSelectedTool('none');
+  };
+
+  const addFibonacciLevels = () => {
+    if (!chartRef.current || data.length === 0) return;
+
+    // Calculate Fibonacci levels based on recent price action
+    const recentData = data.slice(-50); // Last 50 bars
+    const high = Math.max(...recentData.map(d => d.high));
+    const low = Math.min(...recentData.map(d => d.low));
+    const diff = high - low;
+
+    const fibLevels = [
+      { ratio: 0, level: high, label: '0%' },
+      { ratio: 0.236, level: high - diff * 0.236, label: '23.6%' },
+      { ratio: 0.382, level: high - diff * 0.382, label: '38.2%' },
+      { ratio: 0.5, level: high - diff * 0.5, label: '50%' },
+      { ratio: 0.618, level: high - diff * 0.618, label: '61.8%' },
+      { ratio: 0.786, level: high - diff * 0.786, label: '78.6%' },
+      { ratio: 1, level: low, label: '100%' },
+    ];
+
+    const colors = ['#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#00bcd4', '#009688'];
+
+    // Safely add Fibonacci levels with proper null checks
+    if (!chartRef.current) return;
+
+    fibLevels.forEach((fib, index) => {
+      if (!chartRef.current) return; // Check again in loop
+      
+      const fibSeries = chartRef.current.addSeries(LineSeries, {
+        color: colors[index],
+        lineWidth: 1,
+        lineStyle: 2, // Dashed line
+        title: `Fib ${fib.label}`,
+        priceLineVisible: false,
+        lastValueVisible: true,
+      });
+
+      const fibData: LineData[] = recentData.map((d) => ({
+        time: (d.time / 1000) as Time,
+        value: fib.level,
+      }));
+
+      fibSeries.setData(fibData);
+
+      drawingsRef.current.push({
+        id: `fib-${index}`,
+        type: 'fibonacci',
+        series: fibSeries,
+        data: fibData,
+      });
+    });
+  };
 
   const toggleIndicator = (key: keyof IndicatorState) => {
     setIndicators(prev => ({ ...prev, [key]: !prev[key] }));
@@ -243,12 +405,24 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
   return (
     <div className="trading-chart-container">
+      <DrawingTools
+        selectedTool={selectedTool}
+        onToolSelect={handleToolSelect}
+        onClearAll={handleClearAllDrawings}
+      />
+      
       <div className="chart-controls">
         <button
           className="indicator-toggle"
           onClick={() => setShowIndicators(!showIndicators)}
         >
           {showIndicators ? '📊 Hide All Indicators' : '📊 Show Indicators'}
+        </button>
+        <button
+          className="fibonacci-btn"
+          onClick={addFibonacciLevels}
+        >
+          🔢 Add Fibonacci
         </button>
         {showIndicators && (
           <div className="indicator-checkboxes">
@@ -299,6 +473,22 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                 onChange={() => toggleIndicator('sma50')}
               />
               SMA 50
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={indicators.vwap}
+                onChange={() => toggleIndicator('vwap')}
+              />
+              VWAP
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={indicators.bb}
+                onChange={() => toggleIndicator('bb')}
+              />
+              Bollinger Bands
             </label>
           </div>
         )}

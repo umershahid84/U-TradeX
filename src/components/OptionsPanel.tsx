@@ -107,12 +107,15 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
   // Generate fallback options chain when API fails
   const generateFallbackOptionsChain = (_symbol: string, currentPrice: number, _expiry: string) => {
     const strikes: number[] = [];
-    const strikeCount = 10;
-    const strikeStep = currentPrice * 0.05; // 5% increments
     
-    // Generate strikes around current price
-    for (let i = -strikeCount / 2; i < strikeCount / 2; i++) {
-      const strike = currentPrice + (i * strikeStep);
+    // Generate strikes with better logic
+    // Round current price to nearest strike interval
+    const strikeInterval = currentPrice < 25 ? 1 : currentPrice < 100 ? 2.5 : currentPrice < 200 ? 5 : 10;
+    const atmStrike = Math.round(currentPrice / strikeInterval) * strikeInterval;
+    
+    // Generate 10 strikes above and below ATM
+    for (let i = -10; i <= 10; i++) {
+      const strike = atmStrike + (i * strikeInterval);
       if (strike > 0) {
         strikes.push(Math.round(strike * 100) / 100);
       }
@@ -121,14 +124,16 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
     const calls: OptionChainData[] = strikes.map(strike => {
       const inTheMoney = currentPrice > strike;
       const intrinsicValue = Math.max(0, currentPrice - strike);
-      const timeValue = strike * 0.05 * (1 + Math.random() * 0.5);
+      // More realistic time value calculation based on distance from ATM
+      const distanceFromATM = Math.abs(strike - currentPrice) / currentPrice;
+      const timeValue = currentPrice * 0.03 * Math.exp(-distanceFromATM * 3);
       const premium = intrinsicValue + timeValue;
       
       return {
         strike,
-        lastPrice: Math.round(premium * 100) / 100,
-        bid: Math.round((premium * 0.95) * 100) / 100,
-        ask: Math.round((premium * 1.05) * 100) / 100,
+        lastPrice: Math.max(0.01, Math.round(premium * 100) / 100),
+        bid: Math.max(0.01, Math.round((premium * 0.95) * 100) / 100),
+        ask: Math.max(0.01, Math.round((premium * 1.05) * 100) / 100),
         volume: Math.floor(100 + Math.random() * 1000),
         openInterest: Math.floor(500 + Math.random() * 5000),
         impliedVolatility: 0.2 + Math.random() * 0.3,
@@ -139,14 +144,16 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
     const puts: OptionChainData[] = strikes.map(strike => {
       const inTheMoney = currentPrice < strike;
       const intrinsicValue = Math.max(0, strike - currentPrice);
-      const timeValue = strike * 0.05 * (1 + Math.random() * 0.5);
+      // More realistic time value calculation
+      const distanceFromATM = Math.abs(strike - currentPrice) / currentPrice;
+      const timeValue = currentPrice * 0.03 * Math.exp(-distanceFromATM * 3);
       const premium = intrinsicValue + timeValue;
       
       return {
         strike,
-        lastPrice: Math.round(premium * 100) / 100,
-        bid: Math.round((premium * 0.95) * 100) / 100,
-        ask: Math.round((premium * 1.05) * 100) / 100,
+        lastPrice: Math.max(0.01, Math.round(premium * 100) / 100),
+        bid: Math.max(0.01, Math.round((premium * 0.95) * 100) / 100),
+        ask: Math.max(0.01, Math.round((premium * 1.05) * 100) / 100),
         volume: Math.floor(100 + Math.random() * 1000),
         openInterest: Math.floor(500 + Math.random() * 5000),
         impliedVolatility: 0.2 + Math.random() * 0.3,

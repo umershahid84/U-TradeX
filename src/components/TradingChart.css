@@ -19,7 +19,8 @@
   gap: 8px;
 }
 
-.indicator-toggle {
+.indicator-toggle,
+.fibonacci-btn {
   padding: 8px 16px;
   background: rgba(42, 46, 79, 0.9);
   border: 1px solid #3a3e6f;
@@ -28,11 +29,23 @@
   cursor: pointer;
   font-size: 12px;
   transition: all 0.2s;
+  white-space: nowrap;
 }
 
-.indicator-toggle:hover {
+.indicator-toggle:hover,
+.fibonacci-btn:hover {
   background: rgba(52, 56, 99, 0.9);
   border-color: #4a4e8f;
+}
+
+.fibonacci-btn {
+  background: rgba(156, 39, 176, 0.8);
+  border-color: #9c27b0;
+}
+
+.fibonacci-btn:hover {
+  background: rgba(156, 39, 176, 0.95);
+  border-color: #ba68c8;
 }
 
 .indicator-checkboxes {

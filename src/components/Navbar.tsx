@@ -12,17 +12,20 @@ interface NavbarProps {
 }
 
 const TIMEFRAMES: TimeFrame[] = [
-  '1m', '2m', '3m', '5m', '10m', '15m', '30m',
-  '1h', '4h', '1d', '1w', '1M', '3M', '1y'
+  '1m', '2m', '5m', '10m', '15m', '30m',
+  '1h', '4h', 'D', 'W', 'M', '1Q', '1Y'
 ];
 
 const TIME_RANGES: { label: string; value: TimeRange }[] = [
-  { label: 'Today', value: 'today' },
-  { label: '1D', value: '1d' },
-  { label: '5D', value: '5d' },
-  { label: '1W', value: '1w' },
-  { label: '1Y', value: '1y' },
-  { label: 'Max', value: 'max' },
+  { label: '1D', value: '1D' },
+  { label: '5D', value: '5D' },
+  { label: '1M', value: '1M' },
+  { label: '3M', value: '3M' },
+  { label: '6M', value: '6M' },
+  { label: 'YTD', value: 'YTD' },
+  { label: '1Y', value: '1Y' },
+  { label: '5Y', value: '5Y' },
+  { label: 'MAX', value: 'MAX' },
 ];
 
 export const Navbar: React.FC<NavbarProps> = ({
