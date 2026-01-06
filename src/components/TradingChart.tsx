@@ -11,6 +11,7 @@ import {
 } from 'lightweight-charts';
 import { ChartData, TimeFrame } from '../types';
 import { calculateRipsterEMACloud, calculateSMA, calculateVWAP, calculateBollingerBands } from '../utils/indicators';
+import { DrawingTools, DrawingTool } from './DrawingTools';
 import './TradingChart.css';
 
 interface TradingChartProps {
@@ -33,6 +34,13 @@ interface IndicatorState {
   volume: boolean;
 }
 
+interface DrawingObject {
+  id: string;
+  type: DrawingTool;
+  series?: ISeriesApi<'Line'>;
+  data: LineData[];
+}
+
 export const TradingChart: React.FC<TradingChartProps> = ({
   data,
   onPriceUpdate,
@@ -41,7 +49,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null) as any;
   const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  const drawingsRef = useRef<DrawingObject[]>([]);
   const [showIndicators, setShowIndicators] = useState(false);
+  const [selectedTool, setSelectedTool] = useState<DrawingTool>('none');
   const [indicators, setIndicators] = useState<IndicatorState>({
     ema5: true,
     ema8: true,
@@ -320,18 +330,95 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     }
   }, [data, showIndicators, indicators]);
 
+  const handleToolSelect = (tool: DrawingTool) => {
+    setSelectedTool(tool);
+    if (tool !== 'none') {
+      alert(`Drawing tool selected: ${tool}. Click on the chart to add drawing points. Feature in development - basic price lines will be added.`);
+    }
+  };
+
+  const handleClearAllDrawings = () => {
+    // Remove all drawing series from the chart
+    drawingsRef.current.forEach((drawing) => {
+      if (drawing.series && chartRef.current) {
+        chartRef.current.removeSeries(drawing.series);
+      }
+    });
+    drawingsRef.current = [];
+    setSelectedTool('none');
+  };
+
+  const addFibonacciLevels = () => {
+    if (!chartRef.current || data.length === 0) return;
+
+    // Calculate Fibonacci levels based on recent price action
+    const recentData = data.slice(-50); // Last 50 bars
+    const high = Math.max(...recentData.map(d => d.high));
+    const low = Math.min(...recentData.map(d => d.low));
+    const diff = high - low;
+
+    const fibLevels = [
+      { ratio: 0, level: high, label: '0%' },
+      { ratio: 0.236, level: high - diff * 0.236, label: '23.6%' },
+      { ratio: 0.382, level: high - diff * 0.382, label: '38.2%' },
+      { ratio: 0.5, level: high - diff * 0.5, label: '50%' },
+      { ratio: 0.618, level: high - diff * 0.618, label: '61.8%' },
+      { ratio: 0.786, level: high - diff * 0.786, label: '78.6%' },
+      { ratio: 1, level: low, label: '100%' },
+    ];
+
+    const colors = ['#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#00bcd4', '#009688'];
+
+    fibLevels.forEach((fib, index) => {
+      const fibSeries = chartRef.current!.addSeries(LineSeries, {
+        color: colors[index],
+        lineWidth: 1,
+        lineStyle: 2, // Dashed line
+        title: `Fib ${fib.label}`,
+        priceLineVisible: false,
+        lastValueVisible: true,
+      });
+
+      const fibData: LineData[] = recentData.map((d) => ({
+        time: (d.time / 1000) as Time,
+        value: fib.level,
+      }));
+
+      fibSeries.setData(fibData);
+
+      drawingsRef.current.push({
+        id: `fib-${index}`,
+        type: 'fibonacci',
+        series: fibSeries,
+        data: fibData,
+      });
+    });
+  };
+
   const toggleIndicator = (key: keyof IndicatorState) => {
     setIndicators(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   return (
     <div className="trading-chart-container">
+      <DrawingTools
+        selectedTool={selectedTool}
+        onToolSelect={handleToolSelect}
+        onClearAll={handleClearAllDrawings}
+      />
+      
       <div className="chart-controls">
         <button
           className="indicator-toggle"
           onClick={() => setShowIndicators(!showIndicators)}
         >
           {showIndicators ? '📊 Hide All Indicators' : '📊 Show Indicators'}
+        </button>
+        <button
+          className="fibonacci-btn"
+          onClick={addFibonacciLevels}
+        >
+          🔢 Add Fibonacci
         </button>
         {showIndicators && (
           <div className="indicator-checkboxes">
