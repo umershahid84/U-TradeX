@@ -259,19 +259,20 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
       if (!isNaN(ema12[i]) && !isNaN(ema26[i])) {
         macdLine.push(ema12[i] - ema26[i]);
       } else {
-        macdLine.push(0);
+        macdLine.push(NaN);
       }
     }
     
     // Calculate signal line (9-period EMA of MACD)
-    const validMacd = macdLine.filter(v => v !== 0);
+    // Filter out NaN values (but keep zeros which are valid)
+    const validMacd = macdLine.filter(v => !isNaN(v));
     const signalLineValues = calculateEMA(validMacd, 9);
     const signalLine: number[] = [];
     let signalIndex = 0;
     
     for (let i = 0; i < macdLine.length; i++) {
-      if (macdLine[i] === 0) {
-        signalLine.push(0);
+      if (isNaN(macdLine[i])) {
+        signalLine.push(NaN);
       } else {
         signalLine.push(signalLineValues[signalIndex] || 0);
         signalIndex++;
