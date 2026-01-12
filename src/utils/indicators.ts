@@ -135,14 +135,37 @@ export const calculateMACD = (
   return { macd, signal, histogram };
 };
 
-// Ripster EMA Cloud (8, 9, 5, 13 EMAs)
+// Ripster EMA Cloud (8, 9, 5, 13 EMAs) with Trend Detection
 export const calculateRipsterEMACloud = (prices: number[]) => {
+  const ema5 = calculateEMA(prices, 5);
+  const ema8 = calculateEMA(prices, 8);
+  const ema9 = calculateEMA(prices, 9);
+  const ema13 = calculateEMA(prices, 13);
+  
   return {
-    ema5: calculateEMA(prices, 5),
-    ema8: calculateEMA(prices, 8),
-    ema9: calculateEMA(prices, 9),
-    ema13: calculateEMA(prices, 13),
+    ema5,
+    ema8,
+    ema9,
+    ema13,
   };
+};
+
+// Ripster Trend Detection
+// Bullish: Price > EMA5 > EMA8 > EMA9 > EMA13
+// Bearish: Price < EMA5 < EMA8 < EMA9 < EMA13
+export const calculateRipsterTrend = (
+  price: number,
+  ema5: number,
+  ema8: number,
+  ema9: number,
+  ema13: number
+): 'bullish' | 'bearish' | 'neutral' => {
+  if (price > ema5 && ema5 > ema8 && ema8 > ema9 && ema9 > ema13) {
+    return 'bullish';
+  } else if (price < ema5 && ema5 < ema8 && ema8 < ema9 && ema9 < ema13) {
+    return 'bearish';
+  }
+  return 'neutral';
 };
 
 // VWAP calculation (daily reset for intraday data)

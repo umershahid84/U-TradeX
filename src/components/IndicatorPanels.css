@@ -1,0 +1,27 @@
+.indicator-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.panel-container {
+  background: #0a0e27;
+  border: 1px solid #1a1e3f;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.panel-header {
+  padding: 8px 12px;
+  background: #1a1e3f;
+  color: #e0e0e0;
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 1px solid #2a2e4f;
+}
+
+.panel-chart {
+  width: 100%;
+  height: 120px;
+}
