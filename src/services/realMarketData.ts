@@ -268,7 +268,10 @@ export class RealMarketDataService {
     symbol: string,
     callback: (price: number) => void
   ): () => void {
-    // Poll every 3 seconds for better real-time updates (reduced from 5s)
+    // Poll every 1 second for real-time updates
+    // NOTE: This may increase API calls significantly. Yahoo Finance API 
+    // typically allows reasonable free tier limits, but if rate limiting occurs,
+    // consider implementing exponential backoff or reducing frequency.
     const intervalId = setInterval(async () => {
       try {
         const price = await this.getCurrentPrice(symbol);
@@ -278,7 +281,7 @@ export class RealMarketDataService {
       } catch (error) {
         console.error('Error in price subscription:', error);
       }
-    }, 3000);
+    }, 1000);
 
     return () => clearInterval(intervalId);
   }

@@ -63,6 +63,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     isDrawing: false,
     startPoint: null,
   });
+  // selectedToolRef: Tracks the current tool selection for the click handler.
+  // We need both ref and state because:
+  // - The ref is used in the chart click handler (set up once in useEffect with empty deps)
+  //   to avoid stale closures
+  // - The state is used for React re-renders to update the UI
+  const selectedToolRef = useRef<DrawingTool>('none');
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [showIndicators, setShowIndicators] = useState(false);
   const [showFibonacci, setShowFibonacci] = useState(false);
@@ -86,7 +92,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const handleChartClick = (time: Time, price: number) => {
     // Validate inputs
     if (!time || !price || isNaN(price)) return;
-    if (selectedTool === 'none') return;
+    if (selectedToolRef.current === 'none') return;
 
     if (!drawingStateRef.current.isDrawing) {
       // First click - start drawing
@@ -101,7 +107,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       if (!startPoint) return;
 
       const endPoint = { time, price };
-      createDrawing(selectedTool, startPoint, endPoint);
+      createDrawing(selectedToolRef.current, startPoint, endPoint);
 
       // Reset drawing state
       drawingStateRef.current = {
@@ -112,6 +118,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       
       // Reset tool to cursor after drawing
       setSelectedTool('none');
+      selectedToolRef.current = 'none';
     }
   };
 
@@ -559,6 +566,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
   const handleToolSelect = (tool: DrawingTool) => {
     setSelectedTool(tool);
+    selectedToolRef.current = tool;
     // Reset drawing state when changing tools
     drawingStateRef.current = {
       isDrawing: false,
@@ -576,6 +584,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     });
     drawingsRef.current = [];
     setSelectedTool('none');
+    selectedToolRef.current = 'none';
   };
 
   const addFibonacciLevels = () => {
@@ -671,19 +680,21 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         />
         
         <div className="chart-control-buttons">
-          <button
-            className={`fibonacci-btn ${showFibonacci ? 'active' : ''}`}
-            onClick={addFibonacciLevels}
-          >
-            🔢 {showFibonacci ? 'Hide' : 'Add'} Fibonacci
-          </button>
-          
-          <button
-            className="indicator-toggle"
-            onClick={() => setShowIndicators(!showIndicators)}
-          >
-            {showIndicators ? '📊 Hide Indicators' : '📊 Show Indicators'}
-          </button>
+          <div className="button-row">
+            <button
+              className={`fibonacci-btn ${showFibonacci ? 'active' : ''}`}
+              onClick={addFibonacciLevels}
+            >
+              🔢 {showFibonacci ? 'Hide' : 'Add'} Fibonacci
+            </button>
+            
+            <button
+              className="indicator-toggle"
+              onClick={() => setShowIndicators(!showIndicators)}
+            >
+              {showIndicators ? '📊 Hide Indicators' : '📊 Show Indicators'}
+            </button>
+          </div>
         </div>
       </div>
       
