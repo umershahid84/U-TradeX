@@ -13,7 +13,7 @@ interface NavbarProps {
 }
 
 const TIMEFRAMES: TimeFrame[] = [
-  '1m', '2m', '5m', '10m', '15m', '30m',
+  '1s', '5s', '10s', '30s', '1m', '2m', '5m', '10m', '15m', '30m',
   '1h', '4h', 'D', 'W', 'M', '1Q', '1Y'
 ];
 

@@ -150,3 +150,29 @@
   height: 14px;
   accent-color: #4CAF50;
 }
+
+.trend-indicator {
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.trend-indicator.trend-bullish {
+  background: rgba(76, 175, 80, 0.9);
+  border: 1px solid #4CAF50;
+}
+
+.trend-indicator.trend-bearish {
+  background: rgba(239, 83, 80, 0.9);
+  border: 1px solid #ef5350;
+}
+
+.trend-indicator.trend-neutral {
+  background: rgba(255, 152, 0, 0.9);
+  border: 1px solid #FF9800;
+}
+

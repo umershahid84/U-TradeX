@@ -10,8 +10,9 @@ import {
   LineSeries
 } from 'lightweight-charts';
 import { ChartData, TimeFrame } from '../types';
-import { calculateRipsterEMACloud, calculateSMA, calculateVWAP, calculateBollingerBands } from '../utils/indicators';
+import { calculateRipsterEMACloud, calculateRipsterTrend, calculateSMA, calculateVWAP, calculateBollingerBands } from '../utils/indicators';
 import { DrawingTools, DrawingTool } from './DrawingTools';
+import { IndicatorPanels } from './IndicatorPanels';
 import './TradingChart.css';
 
 interface TradingChartProps {
@@ -73,6 +74,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const [showIndicators, setShowIndicators] = useState(false);
   const [showFibonacci, setShowFibonacci] = useState(false);
   const [selectedTool, setSelectedTool] = useState<DrawingTool>('none');
+  const [ripsterTrend, setRipsterTrend] = useState<'bullish' | 'bearish' | 'neutral'>('neutral');
   const [indicators, setIndicators] = useState<IndicatorState>({
     ema5: true,
     ema8: true,
@@ -564,6 +566,28 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     }
   }, [data, showIndicators, indicators]);
 
+  // Calculate Ripster Trend
+  useEffect(() => {
+    if (!data.length || !showIndicators) return;
+    
+    const closes = data.map(d => d.close);
+    const emaCloud = calculateRipsterEMACloud(closes);
+    
+    if (data.length > 0 && emaCloud.ema5.length > 0) {
+      const lastIndex = data.length - 1;
+      const currentPrice = data[lastIndex].close;
+      const ema5 = emaCloud.ema5[lastIndex];
+      const ema8 = emaCloud.ema8[lastIndex];
+      const ema9 = emaCloud.ema9[lastIndex];
+      const ema13 = emaCloud.ema13[lastIndex];
+      
+      if (!isNaN(ema5) && !isNaN(ema8) && !isNaN(ema9) && !isNaN(ema13)) {
+        const trend = calculateRipsterTrend(currentPrice, ema5, ema8, ema9, ema13);
+        setRipsterTrend(trend);
+      }
+    }
+  }, [data, showIndicators]);
+
   const handleToolSelect = (tool: DrawingTool) => {
     setSelectedTool(tool);
     selectedToolRef.current = tool;
@@ -694,6 +718,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             >
               {showIndicators ? '📊 Hide Indicators' : '📊 Show Indicators'}
             </button>
+            
+            {showIndicators && (indicators.ema5 || indicators.ema8 || indicators.ema9 || indicators.ema13) && (
+              <div className={`trend-indicator trend-${ripsterTrend}`}>
+                Ripster Trend: {ripsterTrend.toUpperCase()}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -791,6 +821,18 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                 />
                 Bollinger Bands
               </label>
+            </div>
+            
+            <div className="indicator-group">
+              <h4>Panels</h4>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={indicators.volume}
+                  onChange={() => toggleIndicator('volume')}
+                />
+                Volume
+              </label>
               <label>
                 <input
                   type="checkbox"
@@ -807,20 +849,19 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                 />
                 MACD (Panel)
               </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={indicators.volume}
-                  onChange={() => toggleIndicator('volume')}
-                />
-                Volume
-              </label>
             </div>
           </div>
         </div>
       )}
       
       <div ref={chartContainerRef} className="chart" />
+      
+      <IndicatorPanels 
+        data={data}
+        showVolume={indicators.volume}
+        showRSI={indicators.rsi}
+        showMACD={indicators.macd}
+      />
     </div>
   );
 };

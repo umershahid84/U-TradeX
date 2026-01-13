@@ -35,6 +35,41 @@ export class RealMarketDataService {
     return RealMarketDataService.instance;
   }
 
+  // Normalize symbol for Yahoo Finance API
+  // SPX -> ^GSPC (S&P 500 Index)
+  // ES -> ES=F (E-mini S&P 500 Futures)
+  // NQ -> NQ=F (E-mini NASDAQ-100 Futures)
+  private normalizeSymbol(symbol: string): string {
+    const symbolMap: Record<string, string> = {
+      // Indices
+      'SPX': '^GSPC',
+      'SPY': 'SPY',
+      'QQQ': 'QQQ',
+      'DIA': 'DIA',
+      'IWM': 'IWM',
+      'VIX': '^VIX',
+      'DJI': '^DJI',
+      'IXIC': '^IXIC',
+      'RUT': '^RUT',
+      'NDX': '^NDX',
+      
+      // Futures
+      'ES': 'ES=F',   // E-mini S&P 500
+      'NQ': 'NQ=F',   // E-mini NASDAQ-100
+      'YM': 'YM=F',   // E-mini Dow
+      'RTY': 'RTY=F', // E-mini Russell 2000
+      'GC': 'GC=F',   // Gold Futures
+      'SI': 'SI=F',   // Silver Futures
+      'CL': 'CL=F',   // Crude Oil Futures
+      'NG': 'NG=F',   // Natural Gas Futures
+      'ZB': 'ZB=F',   // 30-Year T-Bond Futures
+      'ZN': 'ZN=F',   // 10-Year T-Note Futures
+    };
+    
+    const upperSymbol = symbol.toUpperCase();
+    return symbolMap[upperSymbol] || symbol;
+  }
+
   // Fetch real historical data from Yahoo Finance with CORS proxy
   async fetchChartData(
     symbol: string,
@@ -43,8 +78,11 @@ export class RealMarketDataService {
     includePrePost: boolean = false
   ): Promise<ChartData[]> {
     try {
+      // Handle special symbols (SPX, futures, etc.)
+      const yahooSymbol = this.normalizeSymbol(symbol);
+      
       // Try direct API call first (works in some environments)
-      const baseUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
+      const baseUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}`;
       const params = new URLSearchParams({
         interval,
         range,
@@ -422,6 +460,41 @@ export class RealMarketDataService {
       'WYNN': 95,
       'LVS': 42,
       
+      // Indices and ETFs
+      'SPX': 4700,
+      '^GSPC': 4700,
+      'SPY': 470,
+      'QQQ': 395,
+      'DIA': 380,
+      'IWM': 195,
+      '^VIX': 15,
+      '^DJI': 37500,
+      '^IXIC': 14700,
+      '^RUT': 2050,
+      '^NDX': 16500,
+      
+      // Futures
+      'ES': 4700,
+      'ES=F': 4700,
+      'NQ': 16500,
+      'NQ=F': 16500,
+      'YM': 37500,
+      'YM=F': 37500,
+      'RTY': 2050,
+      'RTY=F': 2050,
+      'GC': 2050,
+      'GC=F': 2050,
+      'SI': 24,
+      'SI=F': 24,
+      'CL': 75,
+      'CL=F': 75,
+      'NG': 3.5,
+      'NG=F': 3.5,
+      'ZB': 120,
+      'ZB=F': 120,
+      'ZN': 110,
+      'ZN=F': 110,
+      
       // Crypto (in USD)
       'BTC': 42000,
       'BTC-USD': 42000,
@@ -455,6 +528,16 @@ export class RealMarketDataService {
     // Crypto symbols typically end with -USD
     if (upperSymbol.endsWith('-USD')) {
       return 1000 + Math.random() * 9000; // Random crypto-like price (1k-10k)
+    }
+    
+    // Futures typically end with =F
+    if (upperSymbol.endsWith('=F')) {
+      return 2000 + Math.random() * 8000; // Random futures-like price (2k-10k)
+    }
+    
+    // Indices typically start with ^
+    if (upperSymbol.startsWith('^')) {
+      return 5000 + Math.random() * 15000; // Random index-like price (5k-20k)
     }
     
     // Default to typical stock price range

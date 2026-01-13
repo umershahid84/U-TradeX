@@ -70,6 +70,10 @@ function App() {
   // Map TimeFrame to Yahoo Finance interval format
   const getYahooInterval = (tf: TimeFrame): string => {
     const map: Record<TimeFrame, string> = {
+      '1s': '1m',  // Yahoo doesn't support seconds, use 1m as closest
+      '5s': '1m',
+      '10s': '1m',
+      '30s': '1m',
       '1m': '1m',
       '2m': '2m',
       '5m': '5m',
