@@ -10,9 +10,10 @@ import {
   LineSeries
 } from 'lightweight-charts';
 import { ChartData, TimeFrame } from '../types';
-import { calculateRipsterEMACloud, calculateRipsterTrend, calculateSMA, calculateVWAP, calculateBollingerBands } from '../utils/indicators';
+import { calculateRipsterEMACloud, calculateRipsterTrend, calculateSMA, calculateVWAP, calculateBollingerBands, calculateMTFClouds } from '../utils/indicators';
 import { DrawingTools, DrawingTool } from './DrawingTools';
 import { IndicatorPanels } from './IndicatorPanels';
+import { CustomIndicatorPanel, CustomIndicator } from './CustomIndicatorPanel';
 import './TradingChart.css';
 
 interface TradingChartProps {
@@ -27,6 +28,9 @@ interface IndicatorState {
   ema8: boolean;
   ema9: boolean;
   ema13: boolean;
+  ema34: boolean;
+  ema50: boolean;
+  ema72: boolean;
   sma20: boolean;
   sma50: boolean;
   sma100: boolean;
@@ -36,6 +40,8 @@ interface IndicatorState {
   macd: boolean;
   bb: boolean;
   volume: boolean;
+  ripsterCloud: boolean;
+  mtfClouds: boolean;
 }
 
 interface DrawingObject {
@@ -64,6 +70,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     isDrawing: false,
     startPoint: null,
   });
+  const dataRef = useRef<ChartData[]>([]);
   // selectedToolRef: Tracks the current tool selection for the click handler.
   // We need both ref and state because:
   // - The ref is used in the chart click handler (set up once in useEffect with empty deps)
@@ -75,13 +82,18 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const [showFibonacci, setShowFibonacci] = useState(false);
   const [selectedTool, setSelectedTool] = useState<DrawingTool>('none');
   const [ripsterTrend, setRipsterTrend] = useState<'bullish' | 'bearish' | 'neutral'>('neutral');
+  const [showCustomPanel, setShowCustomPanel] = useState(false);
+  const [customIndicators, setCustomIndicators] = useState<CustomIndicator[]>([]);
   const [indicators, setIndicators] = useState<IndicatorState>({
-    ema5: true,
-    ema8: true,
-    ema9: true,
-    ema13: true,
-    sma20: true,
-    sma50: true,
+    ema5: false,
+    ema8: false,
+    ema9: false,
+    ema13: false,
+    ema34: false,
+    ema50: false,
+    ema72: false,
+    sma20: false,
+    sma50: false,
     sma100: false,
     sma200: false,
     vwap: false,
@@ -89,12 +101,39 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     macd: false,
     bb: false,
     volume: true,
+    ripsterCloud: false,
+    mtfClouds: false,
   });
+
+  // Update dataRef whenever data changes
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
 
   const handleChartClick = (time: Time, price: number) => {
     // Validate inputs
     if (!time || !price || isNaN(price)) return;
     if (selectedToolRef.current === 'none') return;
+
+    // Special case: horizontal line only needs one click
+    if (selectedToolRef.current === 'horizontal') {
+      // Get time range for the line
+      const currentData = dataRef.current;
+      if (!currentData || currentData.length === 0) return;
+      const startTime = currentData[0].time / 1000;
+      const endTime = currentData[currentData.length - 1].time / 1000;
+      
+      createDrawing(
+        'horizontal',
+        { time: startTime as Time, price },
+        { time: endTime as Time, price }
+      );
+      
+      // Reset tool to cursor after drawing
+      setSelectedTool('none');
+      selectedToolRef.current = 'none';
+      return;
+    }
 
     if (!drawingStateRef.current.isDrawing) {
       // First click - start drawing
@@ -181,6 +220,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         const rectMinPrice = Math.min(startPoint.price, endPoint.price);
         const rectMaxPrice = Math.max(startPoint.price, endPoint.price);
 
+        // Get all data points within the time range for better rendering
+        const timeStep = (rectMaxTime - rectMinTime) / RECTANGLE_SEGMENTS;
+        
         // Top line
         const topSeries = chartRef.current.addSeries(LineSeries, {
           color: '#9C27B0',
@@ -189,10 +231,14 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           priceLineVisible: false,
           lastValueVisible: false,
         });
-        topSeries.setData([
-          { time: rectMinTime as Time, value: rectMaxPrice },
-          { time: rectMaxTime as Time, value: rectMaxPrice },
-        ]);
+        const topLineData: LineData[] = [];
+        for (let i = 0; i <= RECTANGLE_SEGMENTS; i++) {
+          topLineData.push({
+            time: (rectMinTime + i * timeStep) as Time,
+            value: rectMaxPrice,
+          });
+        }
+        topSeries.setData(topLineData);
 
         // Bottom line
         const bottomSeries = chartRef.current.addSeries(LineSeries, {
@@ -201,22 +247,31 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           priceLineVisible: false,
           lastValueVisible: false,
         });
-        bottomSeries.setData([
-          { time: rectMinTime as Time, value: rectMinPrice },
-          { time: rectMaxTime as Time, value: rectMinPrice },
-        ]);
+        const bottomLineData: LineData[] = [];
+        for (let i = 0; i <= RECTANGLE_SEGMENTS; i++) {
+          bottomLineData.push({
+            time: (rectMinTime + i * timeStep) as Time,
+            value: rectMinPrice,
+          });
+        }
+        bottomSeries.setData(bottomLineData);
 
-        // Left line
+        // Left line - need multiple time points to show as vertical
         const leftSeries = chartRef.current.addSeries(LineSeries, {
           color: '#9C27B0',
           lineWidth: 2,
           priceLineVisible: false,
           lastValueVisible: false,
         });
-        leftSeries.setData([
-          { time: rectMinTime as Time, value: rectMinPrice },
-          { time: rectMinTime as Time, value: rectMaxPrice },
-        ]);
+        const priceStep = (rectMaxPrice - rectMinPrice) / RECTANGLE_SEGMENTS;
+        const leftLineData: LineData[] = [];
+        for (let i = 0; i <= RECTANGLE_SEGMENTS; i++) {
+          leftLineData.push({
+            time: rectMinTime as Time,
+            value: rectMinPrice + i * priceStep,
+          });
+        }
+        leftSeries.setData(leftLineData);
 
         // Right line
         const rightSeries = chartRef.current.addSeries(LineSeries, {
@@ -225,17 +280,21 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           priceLineVisible: false,
           lastValueVisible: false,
         });
-        rightSeries.setData([
-          { time: rectMaxTime as Time, value: rectMinPrice },
-          { time: rectMaxTime as Time, value: rectMaxPrice },
-        ]);
+        const rightLineData: LineData[] = [];
+        for (let i = 0; i <= RECTANGLE_SEGMENTS; i++) {
+          rightLineData.push({
+            time: rectMaxTime as Time,
+            value: rectMinPrice + i * priceStep,
+          });
+        }
+        rightSeries.setData(rightLineData);
 
         // Store all rectangle parts as separate drawings
         drawingsRef.current.push(
-          { id: `${drawingId}-top`, type: 'rectangle', series: topSeries, data: [], startPoint, endPoint },
-          { id: `${drawingId}-bottom`, type: 'rectangle', series: bottomSeries, data: [], startPoint, endPoint },
-          { id: `${drawingId}-left`, type: 'rectangle', series: leftSeries, data: [], startPoint, endPoint },
-          { id: `${drawingId}-right`, type: 'rectangle', series: rightSeries, data: [], startPoint, endPoint }
+          { id: `${drawingId}-top`, type: 'rectangle', series: topSeries, data: topLineData, startPoint, endPoint },
+          { id: `${drawingId}-bottom`, type: 'rectangle', series: bottomSeries, data: bottomLineData, startPoint, endPoint },
+          { id: `${drawingId}-left`, type: 'rectangle', series: leftSeries, data: leftLineData, startPoint, endPoint },
+          { id: `${drawingId}-right`, type: 'rectangle', series: rightSeries, data: rightLineData, startPoint, endPoint }
         );
         return; // Early return since we already added to drawingsRef
 
@@ -329,10 +388,22 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       }
     };
 
+    // Use ResizeObserver for better responsiveness
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize();
+    });
+
+    if (chartContainerRef.current) {
+      resizeObserver.observe(chartContainerRef.current);
+    }
+
     window.addEventListener('resize', handleResize);
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      if (chartContainerRef.current) {
+        resizeObserver.unobserve(chartContainerRef.current);
+      }
       chart.remove();
     };
   }, []);
@@ -563,6 +634,47 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         bbLowerSeries.setData(bbLowerData);
         indicatorSeriesRef.current.set('bbLower', bbLowerSeries);
       }
+
+      // Add MTF Clouds (EMA 34, 50, 72)
+      if (indicators.mtfClouds) {
+        const mtfClouds = calculateMTFClouds(closes);
+        
+        const ema34Series = chartRef.current.addSeries(LineSeries, {
+          color: '#00BCD4',
+          lineWidth: 2,
+          title: 'EMA 34',
+        });
+        const ema34Data: LineData[] = mtfClouds.ema34.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value || data[i].close,
+        }));
+        ema34Series.setData(ema34Data);
+        indicatorSeriesRef.current.set('ema34', ema34Series);
+
+        const ema50Series = chartRef.current.addSeries(LineSeries, {
+          color: '#03A9F4',
+          lineWidth: 2,
+          title: 'EMA 50',
+        });
+        const ema50Data: LineData[] = mtfClouds.ema50.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value || data[i].close,
+        }));
+        ema50Series.setData(ema50Data);
+        indicatorSeriesRef.current.set('ema50', ema50Series);
+
+        const ema72Series = chartRef.current.addSeries(LineSeries, {
+          color: '#0288D1',
+          lineWidth: 2,
+          title: 'EMA 72',
+        });
+        const ema72Data: LineData[] = mtfClouds.ema72.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value || data[i].close,
+        }));
+        ema72Series.setData(ema72Data);
+        indicatorSeriesRef.current.set('ema72', ema72Series);
+      }
     }
   }, [data, showIndicators, indicators]);
 
@@ -688,6 +800,83 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     setIndicators(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const handleAddCustomIndicator = (indicator: CustomIndicator) => {
+    setCustomIndicators(prev => [...prev, indicator]);
+  };
+
+  const handleRemoveCustomIndicator = (id: string) => {
+    setCustomIndicators(prev => prev.filter(ind => ind.id !== id));
+  };
+
+  // Constants for drawing
+  const RECTANGLE_SEGMENTS = 10; // Number of segments for smooth rectangle rendering
+
+  // Effect to render custom indicators
+  useEffect(() => {
+    if (!chartRef.current || !data.length || customIndicators.length === 0) return;
+
+    // Remove existing custom indicator series
+    customIndicators.forEach(indicator => {
+      const existingSeries = indicatorSeriesRef.current.get(`custom-${indicator.id}`);
+      if (existingSeries && chartRef.current) {
+        chartRef.current.removeSeries(existingSeries);
+        indicatorSeriesRef.current.delete(`custom-${indicator.id}`);
+      }
+    });
+
+    // Add custom indicators
+    customIndicators.forEach(indicator => {
+      if (!indicator.enabled) return;
+
+      try {
+        // Prepare data for formula evaluation
+        const prices = data.map(d => d.close);
+        const opens = data.map(d => d.open);
+        const highs = data.map(d => d.high);
+        const lows = data.map(d => d.low);
+        const volumes = data.map(d => d.volume);
+        
+        // Evaluate the formula
+        // SECURITY NOTE: Using Function() for user formulas in a personal trading app
+        // Users are evaluating their own code. In production, use a proper parser/sandbox.
+        // eslint-disable-next-line no-new-func
+        const calculateValues = new Function(
+          'prices', 'open', 'high', 'low', 'volume', 
+          `return ${indicator.formula}`
+        );
+        
+        const values = calculateValues(prices, opens, highs, lows, volumes);
+        
+        if (!Array.isArray(values) || values.length !== data.length) {
+          console.error('Custom indicator formula must return an array with same length as data');
+          return;
+        }
+
+        // Create series with validated line width
+        if (chartRef.current) {
+          // Ensure lineWidth is within valid range (1-4)
+          const validLineWidth = Math.max(1, Math.min(4, indicator.lineWidth)) as 1 | 2 | 3 | 4;
+          
+          const series = chartRef.current.addSeries(LineSeries, {
+            color: indicator.color,
+            lineWidth: validLineWidth,
+            title: indicator.name,
+          });
+
+          const seriesData: LineData[] = values.map((value, i) => ({
+            time: (data[i].time / 1000) as Time,
+            value: isNaN(value) || value === null || value === undefined ? data[i].close : value,
+          }));
+
+          series.setData(seriesData);
+          indicatorSeriesRef.current.set(`custom-${indicator.id}`, series);
+        }
+      } catch (error) {
+        console.error(`Error evaluating custom indicator "${indicator.name}":`, error);
+      }
+    });
+  }, [data, customIndicators]);
+
   return (
     <div className="trading-chart-container">
       {isDrawingMode && (
@@ -719,6 +908,13 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               {showIndicators ? '📊 Hide Indicators' : '📊 Show Indicators'}
             </button>
             
+            <button
+              className="indicator-toggle"
+              onClick={() => setShowCustomPanel(!showCustomPanel)}
+            >
+              {showCustomPanel ? '🔧 Hide Custom' : '🔧 Custom Indicators'}
+            </button>
+            
             {showIndicators && (indicators.ema5 || indicators.ema8 || indicators.ema9 || indicators.ema13) && (
               <div className={`trend-indicator trend-${ripsterTrend}`}>
                 Ripster Trend: {ripsterTrend.toUpperCase()}
@@ -732,38 +928,36 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         <div className="indicator-panel">
           <div className="indicator-checkboxes">
             <div className="indicator-group">
-              <h4>EMAs</h4>
+              <h4>Ripster EMAs</h4>
               <label>
                 <input
                   type="checkbox"
-                  checked={indicators.ema5}
-                  onChange={() => toggleIndicator('ema5')}
+                  checked={indicators.ripsterCloud}
+                  onChange={() => {
+                    const newValue = !indicators.ripsterCloud;
+                    setIndicators(prev => ({ 
+                      ...prev, 
+                      ripsterCloud: newValue,
+                      ema5: newValue,
+                      ema8: newValue,
+                      ema9: newValue,
+                      ema13: newValue,
+                    }));
+                  }}
                 />
-                EMA 5
+                Ripster Cloud (5,8,9,13)
               </label>
+            </div>
+            
+            <div className="indicator-group">
+              <h4>MTF Clouds</h4>
               <label>
                 <input
                   type="checkbox"
-                  checked={indicators.ema8}
-                  onChange={() => toggleIndicator('ema8')}
+                  checked={indicators.mtfClouds}
+                  onChange={() => toggleIndicator('mtfClouds')}
                 />
-                EMA 8
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={indicators.ema9}
-                  onChange={() => toggleIndicator('ema9')}
-                />
-                EMA 9
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={indicators.ema13}
-                  onChange={() => toggleIndicator('ema13')}
-                />
-                EMA 13
+                MTF Clouds (34,50,72)
               </label>
             </div>
             
@@ -851,6 +1045,16 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               </label>
             </div>
           </div>
+        </div>
+      )}
+      
+      {showCustomPanel && (
+        <div className="custom-panel-overlay">
+          <CustomIndicatorPanel
+            indicators={customIndicators}
+            onAddIndicator={handleAddCustomIndicator}
+            onRemoveIndicator={handleRemoveCustomIndicator}
+          />
         </div>
       )}
       

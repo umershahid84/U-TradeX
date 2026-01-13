@@ -146,10 +146,10 @@ function App() {
 
       // Check TP/SL
       checkTPSL(symbol, price);
-    });
+    }, includeAfterHours);
 
     return unsubscribe;
-  }, [symbol, updatePositionPrices]);
+  }, [symbol, updatePositionPrices, includeAfterHours]);
 
   // Subscribe to price updates for all open positions
   useEffect(() => {

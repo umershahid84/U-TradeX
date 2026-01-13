@@ -25,6 +25,7 @@ export interface OptionChain {
 export class RealMarketDataService {
   private static instance: RealMarketDataService;
   private priceCache: Map<string, number> = new Map();
+  private static readonly PRICE_POLL_INTERVAL_MS = 2000; // Polling interval for price updates
 
   private constructor() {}
 
@@ -144,12 +145,16 @@ export class RealMarketDataService {
   }
 
   // Get current quote for a symbol
-  async getCurrentPrice(symbol: string): Promise<number> {
+  async getCurrentPrice(symbol: string, includePrePost: boolean = true): Promise<number> {
     try {
-      const baseUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
+      // Normalize symbol for Yahoo Finance API
+      const yahooSymbol = this.normalizeSymbol(symbol);
+      
+      const baseUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}`;
       const params = new URLSearchParams({
         interval: '1m',
         range: '1d',
+        includePrePost: includePrePost ? 'true' : 'false',
       });
       
       let response;
@@ -178,7 +183,7 @@ export class RealMarketDataService {
       if (result && result.meta && result.meta.regularMarketPrice) {
         const price = result.meta.regularMarketPrice;
         this.priceCache.set(symbol, price);
-        console.log(`✅ REAL-TIME price for ${symbol}: $${price.toFixed(2)}`);
+        console.log(`✅ REAL-TIME price for ${symbol}: $${price.toFixed(2)}${includePrePost ? ' (with pre/post market)' : ''}`);
         return price;
       }
 
@@ -300,22 +305,26 @@ export class RealMarketDataService {
   // Subscribe to real-time price updates (polling-based for free API)
   subscribeToPrice(
     symbol: string,
-    callback: (price: number) => void
+    callback: (price: number) => void,
+    includePrePost: boolean = false
   ): () => void {
-    // Poll every 1 second for real-time updates
+    // Normalize symbol for Yahoo Finance API
+    const yahooSymbol = this.normalizeSymbol(symbol);
+    
+    // Poll at configured interval for real-time updates
     // NOTE: This may increase API calls significantly. Yahoo Finance API 
     // typically allows reasonable free tier limits, but if rate limiting occurs,
     // consider implementing exponential backoff or reducing frequency.
     const intervalId = setInterval(async () => {
       try {
-        const price = await this.getCurrentPrice(symbol);
+        const price = await this.getCurrentPrice(yahooSymbol, includePrePost);
         if (price > 0) {
           callback(price);
         }
       } catch (error) {
         console.error('Error in price subscription:', error);
       }
-    }, 1000);
+    }, RealMarketDataService.PRICE_POLL_INTERVAL_MS);
 
     return () => clearInterval(intervalId);
   }
