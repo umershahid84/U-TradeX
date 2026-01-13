@@ -4,6 +4,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
+  min-height: 400px;
 }
 
 .drawing-mode-indicator {
@@ -64,8 +65,9 @@
 }
 
 .chart {
+  flex: 1;
+  min-height: 300px;
   width: 100%;
-  height: 100%;
 }
 
 .indicator-toggle,

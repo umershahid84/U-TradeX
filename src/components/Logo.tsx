@@ -28,38 +28,34 @@ export const Logo: React.FC<LogoProps> = ({ size = 40 }) => {
         </filter>
       </defs>
       
-      {/* X - Bottom layer */}
+      {/* T - Bottom layer (Letter T with horizontal bar at top and vertical stem) */}
       <g filter="url(#glow)">
-        <path
-          d="M 25 55 L 45 75 L 35 85 L 15 65 Z"
+        {/* Horizontal bar of T */}
+        <rect
+          x="20"
+          y="50"
+          width="60"
+          height="10"
           fill="url(#goldGradient)"
           stroke="#DAA520"
           strokeWidth="2"
         />
-        <path
-          d="M 55 75 L 75 55 L 85 65 L 65 85 Z"
-          fill="url(#goldGradient)"
-          stroke="#DAA520"
-          strokeWidth="2"
-        />
-        <path
-          d="M 75 55 L 55 35 L 65 25 L 85 45 Z"
-          fill="url(#goldGradient)"
-          stroke="#DAA520"
-          strokeWidth="2"
-        />
-        <path
-          d="M 45 35 L 25 55 L 15 45 L 35 25 Z"
+        {/* Vertical stem of T */}
+        <rect
+          x="45"
+          y="50"
+          width="10"
+          height="45"
           fill="url(#goldGradient)"
           stroke="#DAA520"
           strokeWidth="2"
         />
       </g>
       
-      {/* U - Top layer */}
+      {/* U - Top layer (sitting on top of T) */}
       <g filter="url(#glow)">
         <path
-          d="M 30 15 L 30 40 Q 30 50 40 50 L 60 50 Q 70 50 70 40 L 70 15 L 60 15 L 60 40 Q 60 45 55 45 L 45 45 Q 40 45 40 40 L 40 15 Z"
+          d="M 30 10 L 30 35 Q 30 45 40 45 L 60 45 Q 70 45 70 35 L 70 10 L 62 10 L 62 35 Q 62 40 57 40 L 43 40 Q 38 40 38 35 L 38 10 Z"
           fill="url(#goldGradient)"
           stroke="#DAA520"
           strokeWidth="2"

@@ -64,6 +64,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     isDrawing: false,
     startPoint: null,
   });
+  const dataRef = useRef<ChartData[]>([]);
   // selectedToolRef: Tracks the current tool selection for the click handler.
   // We need both ref and state because:
   // - The ref is used in the chart click handler (set up once in useEffect with empty deps)
@@ -91,10 +92,35 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     volume: true,
   });
 
+  // Update dataRef whenever data changes
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
   const handleChartClick = (time: Time, price: number) => {
     // Validate inputs
     if (!time || !price || isNaN(price)) return;
     if (selectedToolRef.current === 'none') return;
+
+    // Special case: horizontal line only needs one click
+    if (selectedToolRef.current === 'horizontal') {
+      // Get time range for the line
+      const currentData = dataRef.current;
+      if (!currentData || currentData.length === 0) return;
+      const startTime = currentData[0].time / 1000;
+      const endTime = currentData[currentData.length - 1].time / 1000;
+      
+      createDrawing(
+        'horizontal',
+        { time: startTime as Time, price },
+        { time: endTime as Time, price }
+      );
+      
+      // Reset tool to cursor after drawing
+      setSelectedTool('none');
+      selectedToolRef.current = 'none';
+      return;
+    }
 
     if (!drawingStateRef.current.isDrawing) {
       // First click - start drawing
@@ -329,10 +355,22 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       }
     };
 
+    // Use ResizeObserver for better responsiveness
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize();
+    });
+
+    if (chartContainerRef.current) {
+      resizeObserver.observe(chartContainerRef.current);
+    }
+
     window.addEventListener('resize', handleResize);
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      if (chartContainerRef.current) {
+        resizeObserver.unobserve(chartContainerRef.current);
+      }
       chart.remove();
     };
   }, []);
