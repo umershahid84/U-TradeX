@@ -13,6 +13,7 @@ import { ChartData, TimeFrame } from '../types';
 import { calculateRipsterEMACloud, calculateRipsterTrend, calculateSMA, calculateVWAP, calculateBollingerBands, calculateMTFClouds } from '../utils/indicators';
 import { DrawingTools, DrawingTool } from './DrawingTools';
 import { IndicatorPanels } from './IndicatorPanels';
+import { CustomIndicatorPanel, CustomIndicator } from './CustomIndicatorPanel';
 import './TradingChart.css';
 
 interface TradingChartProps {
@@ -81,6 +82,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const [showFibonacci, setShowFibonacci] = useState(false);
   const [selectedTool, setSelectedTool] = useState<DrawingTool>('none');
   const [ripsterTrend, setRipsterTrend] = useState<'bullish' | 'bearish' | 'neutral'>('neutral');
+  const [showCustomPanel, setShowCustomPanel] = useState(false);
+  const [customIndicators, setCustomIndicators] = useState<CustomIndicator[]>([]);
   const [indicators, setIndicators] = useState<IndicatorState>({
     ema5: false,
     ema8: false,
@@ -777,6 +780,75 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     setIndicators(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const handleAddCustomIndicator = (indicator: CustomIndicator) => {
+    setCustomIndicators(prev => [...prev, indicator]);
+  };
+
+  const handleRemoveCustomIndicator = (id: string) => {
+    setCustomIndicators(prev => prev.filter(ind => ind.id !== id));
+  };
+
+  // Effect to render custom indicators
+  useEffect(() => {
+    if (!chartRef.current || !data.length || customIndicators.length === 0) return;
+
+    // Remove existing custom indicator series
+    customIndicators.forEach(indicator => {
+      const existingSeries = indicatorSeriesRef.current.get(`custom-${indicator.id}`);
+      if (existingSeries && chartRef.current) {
+        chartRef.current.removeSeries(existingSeries);
+        indicatorSeriesRef.current.delete(`custom-${indicator.id}`);
+      }
+    });
+
+    // Add custom indicators
+    customIndicators.forEach(indicator => {
+      if (!indicator.enabled) return;
+
+      try {
+        // Prepare data for formula evaluation
+        const prices = data.map(d => d.close);
+        const opens = data.map(d => d.open);
+        const highs = data.map(d => d.high);
+        const lows = data.map(d => d.low);
+        const volumes = data.map(d => d.volume);
+        
+        // Evaluate the formula
+        // eslint-disable-next-line no-new-func
+        const calculateValues = new Function(
+          'prices', 'open', 'high', 'low', 'volume', 
+          `return ${indicator.formula}`
+        );
+        
+        const values = calculateValues(prices, opens, highs, lows, volumes);
+        
+        if (!Array.isArray(values) || values.length !== data.length) {
+          console.error('Custom indicator formula must return an array with same length as data');
+          return;
+        }
+
+        // Create series
+        if (chartRef.current) {
+          const series = chartRef.current.addSeries(LineSeries, {
+            color: indicator.color,
+            lineWidth: indicator.lineWidth as 1 | 2 | 3 | 4,
+            title: indicator.name,
+          });
+
+          const seriesData: LineData[] = values.map((value, i) => ({
+            time: (data[i].time / 1000) as Time,
+            value: isNaN(value) || value === null || value === undefined ? data[i].close : value,
+          }));
+
+          series.setData(seriesData);
+          indicatorSeriesRef.current.set(`custom-${indicator.id}`, series);
+        }
+      } catch (error) {
+        console.error(`Error evaluating custom indicator "${indicator.name}":`, error);
+      }
+    });
+  }, [data, customIndicators]);
+
   return (
     <div className="trading-chart-container">
       {isDrawingMode && (
@@ -806,6 +878,13 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               onClick={() => setShowIndicators(!showIndicators)}
             >
               {showIndicators ? '📊 Hide Indicators' : '📊 Show Indicators'}
+            </button>
+            
+            <button
+              className="indicator-toggle"
+              onClick={() => setShowCustomPanel(!showCustomPanel)}
+            >
+              {showCustomPanel ? '🔧 Hide Custom' : '🔧 Custom Indicators'}
             </button>
             
             {showIndicators && (indicators.ema5 || indicators.ema8 || indicators.ema9 || indicators.ema13) && (
@@ -938,6 +1017,16 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               </label>
             </div>
           </div>
+        </div>
+      )}
+      
+      {showCustomPanel && (
+        <div className="custom-panel-overlay">
+          <CustomIndicatorPanel
+            indicators={customIndicators}
+            onAddIndicator={handleAddCustomIndicator}
+            onRemoveIndicator={handleRemoveCustomIndicator}
+          />
         </div>
       )}
       
