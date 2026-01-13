@@ -221,7 +221,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         const rectMaxPrice = Math.max(startPoint.price, endPoint.price);
 
         // Get all data points within the time range for better rendering
-        const timeStep = (rectMaxTime - rectMinTime) / 10; // 10 segments for smooth lines
+        const timeStep = (rectMaxTime - rectMinTime) / RECTANGLE_SEGMENTS;
         
         // Top line
         const topSeries = chartRef.current.addSeries(LineSeries, {
@@ -232,7 +232,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           lastValueVisible: false,
         });
         const topLineData: LineData[] = [];
-        for (let i = 0; i <= 10; i++) {
+        for (let i = 0; i <= RECTANGLE_SEGMENTS; i++) {
           topLineData.push({
             time: (rectMinTime + i * timeStep) as Time,
             value: rectMaxPrice,
@@ -248,7 +248,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           lastValueVisible: false,
         });
         const bottomLineData: LineData[] = [];
-        for (let i = 0; i <= 10; i++) {
+        for (let i = 0; i <= RECTANGLE_SEGMENTS; i++) {
           bottomLineData.push({
             time: (rectMinTime + i * timeStep) as Time,
             value: rectMinPrice,
@@ -263,9 +263,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           priceLineVisible: false,
           lastValueVisible: false,
         });
-        const priceStep = (rectMaxPrice - rectMinPrice) / 10;
+        const priceStep = (rectMaxPrice - rectMinPrice) / RECTANGLE_SEGMENTS;
         const leftLineData: LineData[] = [];
-        for (let i = 0; i <= 10; i++) {
+        for (let i = 0; i <= RECTANGLE_SEGMENTS; i++) {
           leftLineData.push({
             time: rectMinTime as Time,
             value: rectMinPrice + i * priceStep,
@@ -281,7 +281,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           lastValueVisible: false,
         });
         const rightLineData: LineData[] = [];
-        for (let i = 0; i <= 10; i++) {
+        for (let i = 0; i <= RECTANGLE_SEGMENTS; i++) {
           rightLineData.push({
             time: rectMaxTime as Time,
             value: rectMinPrice + i * priceStep,
@@ -808,6 +808,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     setCustomIndicators(prev => prev.filter(ind => ind.id !== id));
   };
 
+  // Constants for drawing
+  const RECTANGLE_SEGMENTS = 10; // Number of segments for smooth rectangle rendering
+
   // Effect to render custom indicators
   useEffect(() => {
     if (!chartRef.current || !data.length || customIndicators.length === 0) return;
@@ -834,6 +837,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         const volumes = data.map(d => d.volume);
         
         // Evaluate the formula
+        // SECURITY NOTE: Using Function() for user formulas in a personal trading app
+        // Users are evaluating their own code. In production, use a proper parser/sandbox.
         // eslint-disable-next-line no-new-func
         const calculateValues = new Function(
           'prices', 'open', 'high', 'low', 'volume', 
@@ -847,11 +852,14 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           return;
         }
 
-        // Create series
+        // Create series with validated line width
         if (chartRef.current) {
+          // Ensure lineWidth is within valid range (1-4)
+          const validLineWidth = Math.max(1, Math.min(4, indicator.lineWidth)) as 1 | 2 | 3 | 4;
+          
           const series = chartRef.current.addSeries(LineSeries, {
             color: indicator.color,
-            lineWidth: indicator.lineWidth as 1 | 2 | 3 | 4,
+            lineWidth: validLineWidth,
             title: indicator.name,
           });
 

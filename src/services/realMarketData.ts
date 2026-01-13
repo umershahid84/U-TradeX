@@ -25,6 +25,7 @@ export interface OptionChain {
 export class RealMarketDataService {
   private static instance: RealMarketDataService;
   private priceCache: Map<string, number> = new Map();
+  private static readonly PRICE_POLL_INTERVAL_MS = 2000; // Polling interval for price updates
 
   private constructor() {}
 
@@ -310,7 +311,7 @@ export class RealMarketDataService {
     // Normalize symbol for Yahoo Finance API
     const yahooSymbol = this.normalizeSymbol(symbol);
     
-    // Poll every 2 seconds for real-time updates
+    // Poll at configured interval for real-time updates
     // NOTE: This may increase API calls significantly. Yahoo Finance API 
     // typically allows reasonable free tier limits, but if rate limiting occurs,
     // consider implementing exponential backoff or reducing frequency.
@@ -323,7 +324,7 @@ export class RealMarketDataService {
       } catch (error) {
         console.error('Error in price subscription:', error);
       }
-    }, 2000);
+    }, RealMarketDataService.PRICE_POLL_INTERVAL_MS);
 
     return () => clearInterval(intervalId);
   }
