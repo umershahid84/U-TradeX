@@ -150,6 +150,19 @@ export const calculateRipsterEMACloud = (prices: number[]) => {
   };
 };
 
+// MTF (Multi-Time Frame) Clouds - EMA 34, 50, 72 for cloud visualization
+export const calculateMTFClouds = (prices: number[]) => {
+  const ema34 = calculateEMA(prices, 34);
+  const ema50 = calculateEMA(prices, 50);
+  const ema72 = calculateEMA(prices, 72);
+  
+  return {
+    ema34,
+    ema50,
+    ema72,
+  };
+};
+
 // Ripster Trend Detection
 // Bullish: Price > EMA5 > EMA8 > EMA9 > EMA13
 // Bearish: Price < EMA5 < EMA8 < EMA9 < EMA13

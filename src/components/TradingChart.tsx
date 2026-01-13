@@ -10,7 +10,7 @@ import {
   LineSeries
 } from 'lightweight-charts';
 import { ChartData, TimeFrame } from '../types';
-import { calculateRipsterEMACloud, calculateRipsterTrend, calculateSMA, calculateVWAP, calculateBollingerBands } from '../utils/indicators';
+import { calculateRipsterEMACloud, calculateRipsterTrend, calculateSMA, calculateVWAP, calculateBollingerBands, calculateMTFClouds } from '../utils/indicators';
 import { DrawingTools, DrawingTool } from './DrawingTools';
 import { IndicatorPanels } from './IndicatorPanels';
 import './TradingChart.css';
@@ -27,6 +27,9 @@ interface IndicatorState {
   ema8: boolean;
   ema9: boolean;
   ema13: boolean;
+  ema34: boolean;
+  ema50: boolean;
+  ema72: boolean;
   sma20: boolean;
   sma50: boolean;
   sma100: boolean;
@@ -36,6 +39,8 @@ interface IndicatorState {
   macd: boolean;
   bb: boolean;
   volume: boolean;
+  ripsterCloud: boolean;
+  mtfClouds: boolean;
 }
 
 interface DrawingObject {
@@ -77,12 +82,15 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const [selectedTool, setSelectedTool] = useState<DrawingTool>('none');
   const [ripsterTrend, setRipsterTrend] = useState<'bullish' | 'bearish' | 'neutral'>('neutral');
   const [indicators, setIndicators] = useState<IndicatorState>({
-    ema5: true,
-    ema8: true,
-    ema9: true,
-    ema13: true,
-    sma20: true,
-    sma50: true,
+    ema5: false,
+    ema8: false,
+    ema9: false,
+    ema13: false,
+    ema34: false,
+    ema50: false,
+    ema72: false,
+    sma20: false,
+    sma50: false,
     sma100: false,
     sma200: false,
     vwap: false,
@@ -90,6 +98,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     macd: false,
     bb: false,
     volume: true,
+    ripsterCloud: false,
+    mtfClouds: false,
   });
 
   // Update dataRef whenever data changes
@@ -601,6 +611,47 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         bbLowerSeries.setData(bbLowerData);
         indicatorSeriesRef.current.set('bbLower', bbLowerSeries);
       }
+
+      // Add MTF Clouds (EMA 34, 50, 72)
+      if (indicators.mtfClouds) {
+        const mtfClouds = calculateMTFClouds(closes);
+        
+        const ema34Series = chartRef.current.addSeries(LineSeries, {
+          color: '#00BCD4',
+          lineWidth: 2,
+          title: 'EMA 34',
+        });
+        const ema34Data: LineData[] = mtfClouds.ema34.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value || data[i].close,
+        }));
+        ema34Series.setData(ema34Data);
+        indicatorSeriesRef.current.set('ema34', ema34Series);
+
+        const ema50Series = chartRef.current.addSeries(LineSeries, {
+          color: '#03A9F4',
+          lineWidth: 2,
+          title: 'EMA 50',
+        });
+        const ema50Data: LineData[] = mtfClouds.ema50.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value || data[i].close,
+        }));
+        ema50Series.setData(ema50Data);
+        indicatorSeriesRef.current.set('ema50', ema50Series);
+
+        const ema72Series = chartRef.current.addSeries(LineSeries, {
+          color: '#0288D1',
+          lineWidth: 2,
+          title: 'EMA 72',
+        });
+        const ema72Data: LineData[] = mtfClouds.ema72.map((value, i) => ({
+          time: (data[i].time / 1000) as Time,
+          value: value || data[i].close,
+        }));
+        ema72Series.setData(ema72Data);
+        indicatorSeriesRef.current.set('ema72', ema72Series);
+      }
     }
   }, [data, showIndicators, indicators]);
 
@@ -770,38 +821,36 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         <div className="indicator-panel">
           <div className="indicator-checkboxes">
             <div className="indicator-group">
-              <h4>EMAs</h4>
+              <h4>Ripster EMAs</h4>
               <label>
                 <input
                   type="checkbox"
-                  checked={indicators.ema5}
-                  onChange={() => toggleIndicator('ema5')}
+                  checked={indicators.ripsterCloud}
+                  onChange={() => {
+                    const newValue = !indicators.ripsterCloud;
+                    setIndicators(prev => ({ 
+                      ...prev, 
+                      ripsterCloud: newValue,
+                      ema5: newValue,
+                      ema8: newValue,
+                      ema9: newValue,
+                      ema13: newValue,
+                    }));
+                  }}
                 />
-                EMA 5
+                Ripster Cloud (5,8,9,13)
               </label>
+            </div>
+            
+            <div className="indicator-group">
+              <h4>MTF Clouds</h4>
               <label>
                 <input
                   type="checkbox"
-                  checked={indicators.ema8}
-                  onChange={() => toggleIndicator('ema8')}
+                  checked={indicators.mtfClouds}
+                  onChange={() => toggleIndicator('mtfClouds')}
                 />
-                EMA 8
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={indicators.ema9}
-                  onChange={() => toggleIndicator('ema9')}
-                />
-                EMA 9
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={indicators.ema13}
-                  onChange={() => toggleIndicator('ema13')}
-                />
-                EMA 13
+                MTF Clouds (34,50,72)
               </label>
             </div>
             
