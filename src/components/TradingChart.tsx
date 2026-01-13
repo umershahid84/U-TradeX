@@ -220,6 +220,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         const rectMinPrice = Math.min(startPoint.price, endPoint.price);
         const rectMaxPrice = Math.max(startPoint.price, endPoint.price);
 
+        // Get all data points within the time range for better rendering
+        const timeStep = (rectMaxTime - rectMinTime) / 10; // 10 segments for smooth lines
+        
         // Top line
         const topSeries = chartRef.current.addSeries(LineSeries, {
           color: '#9C27B0',
@@ -228,10 +231,14 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           priceLineVisible: false,
           lastValueVisible: false,
         });
-        topSeries.setData([
-          { time: rectMinTime as Time, value: rectMaxPrice },
-          { time: rectMaxTime as Time, value: rectMaxPrice },
-        ]);
+        const topLineData: LineData[] = [];
+        for (let i = 0; i <= 10; i++) {
+          topLineData.push({
+            time: (rectMinTime + i * timeStep) as Time,
+            value: rectMaxPrice,
+          });
+        }
+        topSeries.setData(topLineData);
 
         // Bottom line
         const bottomSeries = chartRef.current.addSeries(LineSeries, {
@@ -240,22 +247,31 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           priceLineVisible: false,
           lastValueVisible: false,
         });
-        bottomSeries.setData([
-          { time: rectMinTime as Time, value: rectMinPrice },
-          { time: rectMaxTime as Time, value: rectMinPrice },
-        ]);
+        const bottomLineData: LineData[] = [];
+        for (let i = 0; i <= 10; i++) {
+          bottomLineData.push({
+            time: (rectMinTime + i * timeStep) as Time,
+            value: rectMinPrice,
+          });
+        }
+        bottomSeries.setData(bottomLineData);
 
-        // Left line
+        // Left line - need multiple time points to show as vertical
         const leftSeries = chartRef.current.addSeries(LineSeries, {
           color: '#9C27B0',
           lineWidth: 2,
           priceLineVisible: false,
           lastValueVisible: false,
         });
-        leftSeries.setData([
-          { time: rectMinTime as Time, value: rectMinPrice },
-          { time: rectMinTime as Time, value: rectMaxPrice },
-        ]);
+        const priceStep = (rectMaxPrice - rectMinPrice) / 10;
+        const leftLineData: LineData[] = [];
+        for (let i = 0; i <= 10; i++) {
+          leftLineData.push({
+            time: rectMinTime as Time,
+            value: rectMinPrice + i * priceStep,
+          });
+        }
+        leftSeries.setData(leftLineData);
 
         // Right line
         const rightSeries = chartRef.current.addSeries(LineSeries, {
@@ -264,17 +280,21 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           priceLineVisible: false,
           lastValueVisible: false,
         });
-        rightSeries.setData([
-          { time: rectMaxTime as Time, value: rectMinPrice },
-          { time: rectMaxTime as Time, value: rectMaxPrice },
-        ]);
+        const rightLineData: LineData[] = [];
+        for (let i = 0; i <= 10; i++) {
+          rightLineData.push({
+            time: rectMaxTime as Time,
+            value: rectMinPrice + i * priceStep,
+          });
+        }
+        rightSeries.setData(rightLineData);
 
         // Store all rectangle parts as separate drawings
         drawingsRef.current.push(
-          { id: `${drawingId}-top`, type: 'rectangle', series: topSeries, data: [], startPoint, endPoint },
-          { id: `${drawingId}-bottom`, type: 'rectangle', series: bottomSeries, data: [], startPoint, endPoint },
-          { id: `${drawingId}-left`, type: 'rectangle', series: leftSeries, data: [], startPoint, endPoint },
-          { id: `${drawingId}-right`, type: 'rectangle', series: rightSeries, data: [], startPoint, endPoint }
+          { id: `${drawingId}-top`, type: 'rectangle', series: topSeries, data: topLineData, startPoint, endPoint },
+          { id: `${drawingId}-bottom`, type: 'rectangle', series: bottomSeries, data: bottomLineData, startPoint, endPoint },
+          { id: `${drawingId}-left`, type: 'rectangle', series: leftSeries, data: leftLineData, startPoint, endPoint },
+          { id: `${drawingId}-right`, type: 'rectangle', series: rightSeries, data: rightLineData, startPoint, endPoint }
         );
         return; // Early return since we already added to drawingsRef
 
