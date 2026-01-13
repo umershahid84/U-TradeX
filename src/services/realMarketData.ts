@@ -95,8 +95,7 @@ export class RealMarketDataService {
         response = await axios.get(`${baseUrl}?${params.toString()}`, { 
           timeout: 8000,
           headers: {
-            'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0'
+            'Accept': 'application/json'
           }
         });
       } catch (directError) {
@@ -159,8 +158,7 @@ export class RealMarketDataService {
         response = await axios.get(`${baseUrl}?${params.toString()}`, { 
           timeout: 8000,
           headers: {
-            'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0'
+            'Accept': 'application/json'
           }
         });
       } catch (directError) {
@@ -204,8 +202,7 @@ export class RealMarketDataService {
         response = await axios.get(`${baseUrl}${params}`, { 
           timeout: 8000,
           headers: {
-            'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0'
+            'Accept': 'application/json'
           }
         });
       } catch (directError) {
@@ -270,8 +267,7 @@ export class RealMarketDataService {
         response = await axios.get(baseUrl, { 
           timeout: 8000,
           headers: {
-            'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0'
+            'Accept': 'application/json'
           }
         });
       } catch (directError) {
