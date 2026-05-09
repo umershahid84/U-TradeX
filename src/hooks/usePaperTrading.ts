@@ -14,6 +14,13 @@ const createDefaultAccount = (): PaperTradingAccount => ({
   pnlPercent: 0,
 });
 
+const generateOrderId = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+};
+
 const recalculateAccountTotals = (account: PaperTradingAccount): PaperTradingAccount => {
   const positionsValue = account.positions.reduce(
     (sum, position) => sum + position.currentPrice * position.quantity,
@@ -158,7 +165,7 @@ export const usePaperTrading = () => {
 
     const newOrder: Order = {
       ...order,
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: generateOrderId(),
       status: 'pending',
       timestamp: Date.now(),
     };
