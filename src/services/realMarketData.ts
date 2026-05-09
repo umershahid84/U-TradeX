@@ -111,15 +111,19 @@ export class RealMarketDataService {
         });
       }
       
-      const result = response.data.chart.result[0];
+      const result = response?.data?.chart?.result?.[0];
 
-      if (!result || !result.timestamp) {
+      if (!result || !Array.isArray(result.timestamp)) {
         console.error('No data returned for', symbol);
         return this.generateFallbackData(symbol, interval, range);
       }
 
       const timestamps = result.timestamp;
-      const quotes = result.indicators.quote[0];
+      const quotes = result.indicators?.quote?.[0];
+      if (!quotes) {
+        console.error('Missing quote data for', symbol);
+        return this.generateFallbackData(symbol, interval, range);
+      }
 
       const chartData: ChartData[] = timestamps.map((time: number, i: number) => ({
         time: time * 1000, // Convert to milliseconds
@@ -178,9 +182,9 @@ export class RealMarketDataService {
         });
       }
       
-      const result = response.data.chart.result[0];
+      const result = response?.data?.chart?.result?.[0];
       
-      if (result && result.meta && result.meta.regularMarketPrice) {
+      if (result?.meta?.regularMarketPrice) {
         const price = result.meta.regularMarketPrice;
         this.priceCache.set(symbol, price);
         console.log(`✅ REAL-TIME price for ${symbol}: $${price.toFixed(2)}${includePrePost ? ' (with pre/post market)' : ''}`);
@@ -222,7 +226,7 @@ export class RealMarketDataService {
         });
       }
       
-      const result = response.data.optionChain.result[0];
+      const result = response?.data?.optionChain?.result?.[0];
 
       if (!result || !result.options) {
         console.error('No options data for', symbol);
@@ -287,7 +291,7 @@ export class RealMarketDataService {
         });
       }
       
-      const result = response.data.optionChain.result[0];
+      const result = response?.data?.optionChain?.result?.[0];
 
       if (!result || !result.expirationDates) {
         return [];
@@ -308,25 +312,35 @@ export class RealMarketDataService {
     callback: (price: number) => void,
     includePrePost: boolean = false
   ): () => void {
-    // Normalize symbol for Yahoo Finance API
-    const yahooSymbol = this.normalizeSymbol(symbol);
-    
-    // Poll at configured interval for real-time updates
-    // NOTE: This may increase API calls significantly. Yahoo Finance API 
-    // typically allows reasonable free tier limits, but if rate limiting occurs,
-    // consider implementing exponential backoff or reducing frequency.
-    const intervalId = setInterval(async () => {
+    let isActive = true;
+    let inFlight = false;
+
+    const pollPrice = async () => {
+      if (!isActive || inFlight) {
+        return;
+      }
+      inFlight = true;
       try {
-        const price = await this.getCurrentPrice(yahooSymbol, includePrePost);
-        if (price > 0) {
+        const price = await this.getCurrentPrice(symbol, includePrePost);
+        if (isActive && price > 0) {
           callback(price);
         }
       } catch (error) {
         console.error('Error in price subscription:', error);
+      } finally {
+        inFlight = false;
       }
+    };
+
+    void pollPrice();
+    const intervalId = setInterval(() => {
+      void pollPrice();
     }, RealMarketDataService.PRICE_POLL_INTERVAL_MS);
 
-    return () => clearInterval(intervalId);
+    return () => {
+      isActive = false;
+      clearInterval(intervalId);
+    };
   }
 
   // Fallback to simulated data if API fails
