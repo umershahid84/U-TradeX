@@ -113,7 +113,7 @@ export const usePaperTrading = () => {
         ...prev,
         balance: prev.balance - cost,
         positions: newPositions,
-        orders: [...prev.orders, { ...order, status: 'filled' }],
+        orders: [...prev.orders, { ...order, status: 'filled' as const }],
       };
       return { nextAccount: recalculateAccountTotals(next) };
     }
@@ -137,7 +137,7 @@ export const usePaperTrading = () => {
       ...prev,
       balance: prev.balance + cost,
       positions: newPositions,
-      orders: [...prev.orders, { ...order, status: 'filled' }],
+      orders: [...prev.orders, { ...order, status: 'filled' as const }],
     };
     return { nextAccount: recalculateAccountTotals(next) };
   }, []);
