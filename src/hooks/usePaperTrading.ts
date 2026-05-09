@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { PaperTradingAccount, Order, Position, OptionContract } from '../types';
 
 const DEFAULT_BALANCE = 100000;
+let fallbackOrderCounter = 0;
 
 const createDefaultAccount = (): PaperTradingAccount => ({
   balance: DEFAULT_BALANCE,
@@ -18,7 +19,8 @@ const generateOrderId = (): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  fallbackOrderCounter += 1;
+  return `${Date.now()}-${fallbackOrderCounter}`;
 };
 
 const recalculateAccountTotals = (account: PaperTradingAccount): PaperTradingAccount => {
@@ -155,11 +157,11 @@ export const usePaperTrading = () => {
 
   const placeOrder = useCallback((order: Omit<Order, 'id' | 'status' | 'timestamp'>) => {
     if (!Number.isFinite(order.quantity) || order.quantity <= 0) {
-      alert('Please enter a valid quantity');
+      alert('Quantity must be a positive number');
       return;
     }
     if (!Number.isFinite(order.price) || order.price <= 0) {
-      alert('Please enter a valid price');
+      alert('Price must be a positive number');
       return;
     }
 
@@ -219,8 +221,12 @@ export const usePaperTrading = () => {
 
   const buyOption = useCallback((option: Omit<OptionContract, 'quantity'> & { quantity: number }) => {
     const cost = option.premium * option.quantity * 100; // Options are typically 100 shares
-    if (!Number.isFinite(option.quantity) || option.quantity < 1 || !Number.isFinite(option.premium) || option.premium <= 0) {
-      alert('Please enter a valid option order');
+    if (!Number.isFinite(option.quantity) || option.quantity < 1) {
+      alert('Option quantity must be a positive number');
+      return;
+    }
+    if (!Number.isFinite(option.premium) || option.premium <= 0) {
+      alert('Option premium must be a positive number');
       return;
     }
 
