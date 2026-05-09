@@ -18,9 +18,25 @@ import './App.css';
 
 const marketData = RealMarketDataService.getInstance();
 
+const getStorageValue = (key: string, fallback: string): string => {
+  try {
+    return localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const setStorageValue = (key: string, value: string): void => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {
+    console.warn(`Unable to persist ${key}`, error);
+  }
+};
+
 function App() {
   const [symbol, setSymbol] = useState(() => {
-    return localStorage.getItem('lastViewedSymbol') || 'AAPL';
+    return getStorageValue('lastViewedSymbol', 'AAPL');
   });
   const [timeframe, setTimeframe] = useState<TimeFrame>('5m');
   const [timeRange, setTimeRange] = useState<TimeRange>('1D');
@@ -37,10 +53,10 @@ function App() {
   const [includeAfterHours, setIncludeAfterHours] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
   const [showLeftSidebar, setShowLeftSidebar] = useState(() => {
-    return localStorage.getItem('showLeftSidebar') !== 'false';
+    return getStorageValue('showLeftSidebar', 'true') !== 'false';
   });
   const [showRightSidebar, setShowRightSidebar] = useState(() => {
-    return localStorage.getItem('showRightSidebar') !== 'false';
+    return getStorageValue('showRightSidebar', 'true') !== 'false';
   });
 
   const {
@@ -90,6 +106,44 @@ function App() {
     };
     return map[tf] || '5m';
   };
+
+  const checkTPSL = useCallback((symbol: string, price: number) => {
+    const tpsl = tpslSettings.get(symbol);
+    if (!tpsl) return;
+
+    const position = account.positions.find((p) => p.symbol === symbol);
+    if (!position) return;
+
+    if (tpsl.takeProfit && price >= tpsl.takeProfit) {
+      alert(`Take Profit triggered for ${symbol} at $${price.toFixed(2)}`);
+      placeOrder({
+        symbol,
+        type: 'market',
+        side: 'sell',
+        quantity: position.quantity,
+        price,
+      });
+      setTpslSettings((prev) => {
+        const next = new Map(prev);
+        next.delete(symbol);
+        return next;
+      });
+    } else if (tpsl.stopLoss && price <= tpsl.stopLoss) {
+      alert(`Stop Loss triggered for ${symbol} at $${price.toFixed(2)}`);
+      placeOrder({
+        symbol,
+        type: 'market',
+        side: 'sell',
+        quantity: position.quantity,
+        price,
+      });
+      setTpslSettings((prev) => {
+        const next = new Map(prev);
+        next.delete(symbol);
+        return next;
+      });
+    }
+  }, [account.positions, placeOrder, tpslSettings]);
 
   // Load chart data when symbol or timeframe changes
   useEffect(() => {
@@ -149,7 +203,7 @@ function App() {
     }, includeAfterHours);
 
     return unsubscribe;
-  }, [symbol, updatePositionPrices, includeAfterHours]);
+  }, [symbol, updatePositionPrices, includeAfterHours, checkTPSL]);
 
   // Subscribe to price updates for all open positions
   useEffect(() => {
@@ -170,7 +224,7 @@ function App() {
     return () => {
       unsubscribers.forEach(unsub => unsub());
     };
-  }, [account.positions, symbol, updatePositionPrices]);
+  }, [account.positions, symbol, updatePositionPrices, checkTPSL]);
 
   // Calculate Fear & Greed indicator
   useEffect(() => {
@@ -197,47 +251,9 @@ function App() {
     setFearGreedData(fg);
   }, [chartData, currentPrice]);
 
-  const checkTPSL = (symbol: string, price: number) => {
-    const tpsl = tpslSettings.get(symbol);
-    if (!tpsl) return;
-
-    const position = account.positions.find((p) => p.symbol === symbol);
-    if (!position) return;
-
-    if (tpsl.takeProfit && price >= tpsl.takeProfit) {
-      alert(`Take Profit triggered for ${symbol} at $${price.toFixed(2)}`);
-      placeOrder({
-        symbol,
-        type: 'market',
-        side: 'sell',
-        quantity: position.quantity,
-        price,
-      });
-      setTpslSettings((prev) => {
-        const next = new Map(prev);
-        next.delete(symbol);
-        return next;
-      });
-    } else if (tpsl.stopLoss && price <= tpsl.stopLoss) {
-      alert(`Stop Loss triggered for ${symbol} at $${price.toFixed(2)}`);
-      placeOrder({
-        symbol,
-        type: 'market',
-        side: 'sell',
-        quantity: position.quantity,
-        price,
-      });
-      setTpslSettings((prev) => {
-        const next = new Map(prev);
-        next.delete(symbol);
-        return next;
-      });
-    }
-  };
-
   const handleSymbolChange = useCallback((newSymbol: string) => {
     setSymbol(newSymbol);
-    localStorage.setItem('lastViewedSymbol', newSymbol);
+    setStorageValue('lastViewedSymbol', newSymbol);
   }, []);
 
   const handleTimeframeChange = useCallback((tf: TimeFrame) => {
@@ -256,13 +272,13 @@ function App() {
   const toggleLeftSidebar = () => {
     const newValue = !showLeftSidebar;
     setShowLeftSidebar(newValue);
-    localStorage.setItem('showLeftSidebar', String(newValue));
+    setStorageValue('showLeftSidebar', String(newValue));
   };
 
   const toggleRightSidebar = () => {
     const newValue = !showRightSidebar;
     setShowRightSidebar(newValue);
-    localStorage.setItem('showRightSidebar', String(newValue));
+    setStorageValue('showRightSidebar', String(newValue));
   };
 
   return (
