@@ -55,7 +55,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="brand-logo-container">
           <Logo size={36} />
           <div className="brand-text">
-            <h1>U-TradeX</h1>
+            <h1>U-Trade<span className="brand-x">X</span></h1>
             <span className="brand-tagline">Professional Trading Platform</span>
           </div>
         </div>
