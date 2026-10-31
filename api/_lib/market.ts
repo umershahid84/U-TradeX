@@ -141,6 +141,44 @@ async function quote(q: Query): Promise<ApiResult> {
   };
 }
 
+// Several quotes in one request, for the watchlist. Unknown symbols are listed in `missing`.
+async function quotes(q: Query): Promise<ApiResult> {
+  const symbols = [...new Set((q.symbols ?? '').split(',').map((x) => x.trim()).filter(Boolean))].slice(0, 40);
+  if (!symbols.length) return fail(400, 'symbols is required');
+
+  let list: any[];
+  try {
+    list = (await yf.quote(symbols, {}, { validateResult: false })) as any[];
+  } catch (e) {
+    return fail(502, `Yahoo request failed: ${errMessage(e)}`);
+  }
+
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const bySymbol = new Map<string, any>((list ?? []).map((r) => [String(r.symbol).toUpperCase(), r]));
+  const out: any[] = [];
+  const missing: string[] = [];
+  for (const symbol of symbols) {
+    const r = bySymbol.get(symbol.toUpperCase());
+    if (!r || n(r.regularMarketPrice) === null) {
+      missing.push(symbol);
+      continue;
+    }
+    out.push({
+      symbol,
+      name: r.shortName ?? r.longName ?? '',
+      price: r.regularMarketPrice,
+      change: n(r.regularMarketChange),
+      changePercent: n(r.regularMarketChangePercent),
+      marketState: r.marketState,
+      preMarketPrice: n(r.preMarketPrice),
+      preMarketChangePercent: n(r.preMarketChangePercent),
+      postMarketPrice: n(r.postMarketPrice),
+      postMarketChangePercent: n(r.postMarketChangePercent),
+    });
+  }
+  return { status: 200, body: { quotes: out, missing }, cacheSeconds: 2 };
+}
+
 async function optionExpirations(q: Query): Promise<ApiResult> {
   const symbol = q.symbol?.trim();
   if (!symbol) return fail(400, 'symbol is required');
@@ -289,6 +327,7 @@ async function feargreed(): Promise<ApiResult> {
 
 const routes: Record<string, (q: Query) => Promise<ApiResult>> = {
   feargreed,
+  quotes,
   chart,
   quote,
   options,

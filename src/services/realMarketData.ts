@@ -31,6 +31,19 @@ export interface QuoteDetails {
   postMarketChangePercent: number | null;
 }
 
+export interface WatchQuote {
+  symbol: string;
+  name: string;
+  price: number;
+  change: number | null;
+  changePercent: number | null;
+  marketState: string;
+  preMarketPrice: number | null;
+  preMarketChangePercent: number | null;
+  postMarketPrice: number | null;
+  postMarketChangePercent: number | null;
+}
+
 export interface OptionChain {
   calls: OptionChainData[];
   puts: OptionChainData[];
@@ -140,6 +153,21 @@ export class RealMarketDataService {
     }
     this.priceCache.set(symbol, data.price);
     return data.price;
+  }
+
+  // Latest quotes for a list of symbols in one request. Symbols are returned as the user typed
+  // them (e.g. SPX) even though Yahoo is asked for its own form (^GSPC).
+  async getQuotes(symbols: string[]): Promise<{ quotes: WatchQuote[]; missing: string[] }> {
+    const toYahoo = new Map(symbols.map((s) => [this.normalizeSymbol(s).toUpperCase(), s]));
+    const data = await this.apiGet<{ quotes: WatchQuote[]; missing: string[] }>(
+      'quotes',
+      { symbols: [...toYahoo.keys()].join(',') },
+      10000
+    );
+    return {
+      quotes: data.quotes.map((q) => ({ ...q, symbol: toYahoo.get(q.symbol.toUpperCase()) ?? q.symbol })),
+      missing: data.missing.map((m) => toYahoo.get(m.toUpperCase()) ?? m),
+    };
   }
 
   // Regular-session close plus pre-market / after-hours moves for the header

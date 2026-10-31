@@ -3,6 +3,7 @@ import { Navbar } from './components/Navbar';
 import { TradingChart } from './components/TradingChart';
 import { TradingPanel } from './components/TradingPanel';
 import { Portfolio } from './components/Portfolio';
+import { Watchlist } from './components/Watchlist';
 import { FearGreedIndicator } from './components/FearGreedIndicator';
 import { TPSLPanel } from './components/TPSLPanel';
 import { OptionsPanel } from './components/OptionsPanel';
@@ -435,7 +436,10 @@ function App() {
             <button className="sidebar-toggle left" onClick={toggleLeftSidebar} title="Hide sidebar">
               ◀
             </button>
-            <Portfolio account={account} onReset={resetAccount} />
+            <div className="sidebar-panels">
+              <Watchlist activeSymbol={symbol} onSelect={handleSymbolChange} />
+              <Portfolio account={account} onReset={resetAccount} />
+            </div>
           </div>
         )}
         
