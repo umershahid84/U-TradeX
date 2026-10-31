@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Navbar } from './components/Navbar';
 import { TradingChart } from './components/TradingChart';
 import { TradingPanel } from './components/TradingPanel';
-import { Portfolio } from './components/Portfolio';
+import { PortfolioBar } from './components/PortfolioBar';
+import { Dock, DockPosition } from './components/Dock';
 import { Watchlist } from './components/Watchlist';
 import { FearGreedIndicator } from './components/FearGreedIndicator';
 import { TPSLPanel } from './components/TPSLPanel';
@@ -108,9 +109,10 @@ function App() {
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
   const [dataError, setDataError] = useState<string>('');
   const isMobile = useIsMobile();
-  const [showLeftSidebar, setShowLeftSidebar] = useState(() => {
-    return getStorageValue('showLeftSidebar', 'true') !== 'false';
-  });
+  const [dockOpen, setDockOpen] = useState(() => getStorageValue('dockOpen', 'true') !== 'false');
+  const [dockPosition, setDockPosition] = useState<DockPosition>(
+    () => (getStorageValue('dockPosition', 'bottom') === 'top' ? 'top' : 'bottom')
+  );
   const [showRightSidebar, setShowRightSidebar] = useState(() => {
     return getStorageValue('showRightSidebar', 'true') !== 'false';
   });
@@ -403,21 +405,42 @@ function App() {
     alert(`TP/SL set for ${tpsl.symbol}`);
   };
 
-  const toggleLeftSidebar = () => {
-    const newValue = !showLeftSidebar;
-    setShowLeftSidebar(newValue);
-    setStorageValue('showLeftSidebar', String(newValue));
-  };
-
   const toggleRightSidebar = () => {
     const newValue = !showRightSidebar;
     setShowRightSidebar(newValue);
     setStorageValue('showRightSidebar', String(newValue));
   };
 
-  // On mobile the panels stack below the chart, so the collapse toggles don't apply
-  const leftVisible = showLeftSidebar || isMobile;
+  // On mobile the panels stack below the chart, so the collapse toggle doesn't apply
   const rightVisible = showRightSidebar || isMobile;
+
+  const dockPanel = dockOpen && (
+    <Dock
+      position={isMobile ? 'bottom' : dockPosition}
+      onPositionChange={(p) => { setDockPosition(p); setStorageValue('dockPosition', p); }}
+      onClose={() => { setDockOpen(false); setStorageValue('dockOpen', 'false'); }}
+    >
+      <Watchlist activeSymbol={symbol} onSelect={handleSymbolChange} />
+      <OptionsPanel
+        symbol={symbol}
+        currentPrice={currentPrice}
+        balance={account.balance}
+        chartData={chartData}
+        chartLabel={`${timeframe} · ${timeRange}`}
+        onBuyOption={buyOption}
+      />
+    </Dock>
+  );
+  const dockToggle = !dockOpen && (
+    <button
+      type="button"
+      className="dock-show"
+      onClick={() => { setDockOpen(true); setStorageValue('dockOpen', 'true'); }}
+    >
+      ▸ Show Watchlist &amp; Options
+    </button>
+  );
+  const dockAbove = !isMobile && dockPosition === 'top';
 
   return (
     <div className="app">
@@ -428,27 +451,14 @@ function App() {
         onSymbolChange={handleSymbolChange}
         onTimeframeChange={handleTimeframeChange}
         onTimeRangeChange={handleTimeRangeChange}
-      />
+      >
+        <PortfolioBar account={account} onReset={resetAccount} />
+      </Navbar>
       
       <div className="main-content">
-        {leftVisible && (
-          <div className="left-sidebar">
-            <button className="sidebar-toggle left" onClick={toggleLeftSidebar} title="Hide sidebar">
-              ◀
-            </button>
-            <div className="sidebar-panels">
-              <Watchlist activeSymbol={symbol} onSelect={handleSymbolChange} />
-              <Portfolio account={account} onReset={resetAccount} />
-            </div>
-          </div>
-        )}
-        
-        {!leftVisible && (
-          <button className="sidebar-toggle-collapsed left" onClick={toggleLeftSidebar} title="Show sidebar">
-            ▶
-          </button>
-        )}
-
+        <div className="center-column">
+        {dockAbove && dockPanel}
+        {dockAbove && dockToggle}
         <div className="chart-area">
           <div className="chart-header">
             <div className="symbol-info">
@@ -499,6 +509,9 @@ function App() {
             onPriceUpdate={setCurrentPrice}
           />
         </div>
+        {!dockAbove && dockPanel}
+        {!dockAbove && dockToggle}
+        </div>
 
         {rightVisible && (
           <div className="right-sidebar">
@@ -523,15 +536,6 @@ function App() {
               <TPSLPanel
                 positions={account.positions}
                 onSet={handleTPSLSet}
-              />
-
-              <OptionsPanel
-                symbol={symbol}
-                currentPrice={currentPrice}
-                balance={account.balance}
-                chartData={chartData}
-                chartLabel={`${timeframe} · ${timeRange}`}
-                onBuyOption={buyOption}
               />
             </div>
           </div>

@@ -108,10 +108,20 @@
   background: #3a3e6f;
 }
 
-.chart-area {
-  /* takes all remaining width, so it grows to full screen when the sidebars are hidden */
+.center-column {
+  /* holds the chart and the dock; takes all width the sidebar doesn't use */
   flex: 1 1 0;
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chart-area {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 360px;
   display: flex;
   flex-direction: column;
   background: #141938;
@@ -272,7 +282,7 @@
   .main-content {
     display: grid;
     grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr auto;
+    grid-template-rows: 1fr auto;
   }
 
   .left-sidebar,
@@ -299,9 +309,9 @@
     gap: 8px;
   }
 
-  .chart-area { order: 1; flex: none; height: 80vh; height: 80dvh; min-height: 520px; }
+  .center-column { order: 1; flex: none; }
+  .chart-area { flex: none; height: 80vh; height: 80dvh; min-height: 520px; }
   .right-sidebar { order: 2; }
-  .left-sidebar { order: 3; }
 
   .left-sidebar,
   .right-sidebar {

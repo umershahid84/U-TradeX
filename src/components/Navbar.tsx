@@ -10,6 +10,8 @@ interface NavbarProps {
   onSymbolChange: (symbol: string) => void;
   onTimeframeChange: (timeframe: TimeFrame) => void;
   onTimeRangeChange: (range: TimeRange) => void;
+  /** Rendered at the end of the bar, e.g. the portfolio summary */
+  children?: React.ReactNode;
 }
 
 const TIMEFRAMES: TimeFrame[] = [
@@ -36,6 +38,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSymbolChange,
   onTimeframeChange,
   onTimeRangeChange,
+  children,
 }) => {
   const [searchValue, setSearchValue] = useState(symbol);
 
@@ -100,6 +103,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           ))}
         </div>
       </div>
+
+      {children}
     </nav>
   );
 };
