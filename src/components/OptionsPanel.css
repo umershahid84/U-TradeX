@@ -324,3 +324,38 @@
 .grade-C { background: #ffca28; }
 .grade-D { background: #ef9a9a; }
 .grade.inline { width: auto; height: auto; padding: 1px 8px; margin-left: 8px; font-size: 12px; border-radius: 10px; flex-direction: row; }
+
+/* ---- Calls vs Puts guide ---- */
+.direction-guide {
+  background: #1a1e3f; border: 1px solid #2a2e4f; border-left-width: 4px; border-radius: 6px;
+  padding: 10px 12px; margin-bottom: 14px; font-size: 12px; color: #c0c4e0;
+}
+.direction-guide.calls { border-left-color: #26a69a; }
+.direction-guide.puts { border-left-color: #ef5350; }
+.direction-guide.neutral { border-left-color: #ffca28; }
+.guide-head { display: flex; justify-content: space-between; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #8a8fb5; font-weight: 600; }
+.guide-chart { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.guide-verdict { font-size: 14px; font-weight: 700; color: #e0e0e0; margin: 6px 0 10px; }
+.direction-guide.calls .guide-verdict { color: #26a69a; }
+.direction-guide.puts .guide-verdict { color: #ef5350; }
+.direction-guide.neutral .guide-verdict { color: #ffca28; }
+.guide-note { margin-top: 6px; }
+
+.guide-gauge { position: relative; height: 8px; border-radius: 4px; margin-bottom: 20px;
+  background: linear-gradient(90deg, #ef5350, #ffca28 50%, #26a69a); }
+.gauge-marker { position: absolute; top: -3px; width: 4px; height: 14px; background: #fff; border-radius: 2px; transform: translateX(-50%); box-shadow: 0 0 4px rgba(0,0,0,0.6); }
+.gauge-labels { position: absolute; top: 12px; left: 0; right: 0; display: flex; justify-content: space-between; font-size: 10px; color: #8a8fb5; }
+
+.guide-use { width: 100%; padding: 8px; border: none; border-radius: 4px; color: #fff; font-weight: 700; cursor: pointer; margin-bottom: 8px; }
+.guide-use.calls { background: #26a69a; }
+.guide-use.puts { background: #ef5350; }
+
+.guide-cautions { list-style: none; padding: 0; margin: 4px 0 8px; display: grid; gap: 4px; color: #ffd54f; }
+.guide-toggle { background: none; border: none; color: #8a8fb5; cursor: pointer; font-size: 12px; padding: 2px 0; }
+.guide-signals { list-style: none; padding: 0; margin: 6px 0; display: grid; gap: 6px; }
+.guide-signals li { display: grid; grid-template-columns: 10px 1fr; column-gap: 8px; }
+.guide-signals .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; }
+.guide-signals .dot.bull { background: #26a69a; } .guide-signals .dot.bear { background: #ef5350; } .guide-signals .dot.flat { background: #787b9a; }
+.guide-signals .sig-name { font-weight: 600; color: #e0e0e0; }
+.guide-signals .sig-detail { grid-column: 2; color: #9a9ec0; }
+.guide-disclaimer { margin-top: 8px; font-size: 10px; color: #787b9a; line-height: 1.4; }

@@ -424,6 +424,8 @@ function App() {
                 symbol={symbol}
                 currentPrice={currentPrice}
                 balance={account.balance}
+                chartData={chartData}
+                chartLabel={`${timeframe} · ${timeRange}`}
                 onBuyOption={buyOption}
               />
             </div>

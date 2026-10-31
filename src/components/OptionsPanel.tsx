@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { OptionContract } from '../types';
+import { OptionContract, ChartData } from '../types';
+import { OptionsDirectionGuide } from './OptionsDirectionGuide';
 import { RealMarketDataService, OptionChainData } from '../services/realMarketData';
 import { OptionSide, RatedOption, daysToExpiry, rankOtmOptions } from '../utils/optionScoring';
 import './OptionsPanel.css';
@@ -8,6 +9,8 @@ interface OptionsPanelProps {
   symbol: string;
   currentPrice: number;
   balance: number;
+  chartData: ChartData[];
+  chartLabel: string;
   onBuyOption: (option: Omit<OptionContract, 'quantity'> & { quantity: number }) => void;
 }
 
@@ -38,6 +41,8 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
   symbol,
   currentPrice,
   balance,
+  chartData,
+  chartLabel,
   onBuyOption,
 }) => {
   const [optionType, setOptionType] = useState<OptionSide>('call');
@@ -177,6 +182,13 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
   return (
     <div className="options-panel">
       <h3>Options Trading</h3>
+
+      <OptionsDirectionGuide
+        symbol={symbol}
+        data={chartData}
+        chartLabel={chartLabel}
+        onUseSuggestion={(side) => { setOptionType(side); setView('best'); setSelected(null); }}
+      />
 
       <form onSubmit={handleSubmit} className="options-form">
         <div className="form-group">
