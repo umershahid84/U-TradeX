@@ -252,3 +252,34 @@
     max-height: 50vh;
   }
 }
+
+.indicator-panel { max-height: 70vh; overflow-y: auto; }
+.indicator-checkboxes { flex-wrap: wrap; max-width: 640px; }
+
+.panel-close {
+  position: absolute; top: 4px; right: 6px; background: none; border: none;
+  color: #a0a0a0; cursor: pointer; font-size: 14px; line-height: 1; padding: 4px;
+}
+.panel-close:hover { color: #fff; }
+
+.cloud-group { min-width: 230px; }
+.cloud-pair { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #e0e0e0; }
+.cloud-pair.off { opacity: 0.5; }
+.cloud-pair input[type='number'] {
+  width: 54px; padding: 3px 4px; background: #0f1330; border: 1px solid #3a3e6f;
+  border-radius: 3px; color: #e0e0e0; font-size: 12px;
+}
+.cloud-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.cloud-remove, .cloud-add {
+  background: none; border: 1px solid #3a3e6f; color: #a0a0a0; border-radius: 3px;
+  cursor: pointer; font-size: 11px; padding: 2px 6px;
+}
+.cloud-remove { margin-left: auto; border: none; padding: 2px 4px; }
+.cloud-remove:hover { color: #ef5350; }
+.cloud-add { align-self: flex-start; margin-top: 2px; }
+.cloud-add:hover { border-color: #26a69a; color: #26a69a; }
+
+@media (max-width: 900px) {
+  .indicator-panel { position: relative; }
+  .cloud-pair input[type='number'] { font-size: 16px; width: 60px; }
+}

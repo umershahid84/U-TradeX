@@ -10,7 +10,7 @@ import {
   LineSeries
 } from 'lightweight-charts';
 import { ChartData, TimeFrame, CustomIndicator, CustomIndicatorStatus } from '../types';
-import { calculateRipsterEMACloud, calculateRipsterTrend, calculateSMA, calculateVWAP, calculateBollingerBands, calculateMTFClouds } from '../utils/indicators';
+import { calculateEMAFromFirst, calculateSMA, calculateVWAP, calculateBollingerBands } from '../utils/indicators';
 import { DrawingTools, DrawingTool } from './DrawingTools';
 import { IndicatorPanels } from './IndicatorPanels';
 import { CustomIndicatorPanel } from './CustomIndicatorPanel';
@@ -25,14 +25,68 @@ interface TradingChartProps {
   onPriceUpdate?: (price: number) => void;
 }
 
+interface CloudPair {
+  enabled: boolean;
+  fast: number;
+  slow: number;
+}
+
+interface CloudGroup {
+  enabled: boolean;
+  showLines: boolean;
+  pairs: CloudPair[];
+}
+
+type CloudKey = 'ripster' | 'mtf';
+type CloudConfig = Record<CloudKey, CloudGroup>;
+
+// Ripster's standard clouds are 5/12, 8/9, 34/50, 72/89 and 180/200. The first two are
+// his short-term clouds; the longer ones are what the MTF cloud tracks.
+const DEFAULT_CLOUDS: CloudConfig = {
+  ripster: {
+    enabled: false,
+    showLines: false,
+    pairs: [
+      { enabled: true, fast: 8, slow: 9 },
+      { enabled: true, fast: 5, slow: 12 },
+    ],
+  },
+  mtf: {
+    enabled: false,
+    showLines: false,
+    pairs: [
+      { enabled: true, fast: 34, slow: 50 },
+      { enabled: true, fast: 72, slow: 89 },
+    ],
+  },
+};
+
+const CLOUD_PALETTE: Record<CloudKey, { bull: string; bear: string; line: string }[]> = {
+  ripster: [
+    { bull: 'rgba(76, 175, 80, 0.35)', bear: 'rgba(239, 83, 80, 0.35)', line: '#4CAF50' },
+    { bull: 'rgba(38, 166, 154, 0.22)', bear: 'rgba(255, 112, 67, 0.22)', line: '#26A69A' },
+    { bull: 'rgba(156, 204, 101, 0.22)', bear: 'rgba(240, 98, 146, 0.22)', line: '#9CCC65' },
+  ],
+  mtf: [
+    { bull: 'rgba(41, 182, 246, 0.30)', bear: 'rgba(171, 71, 188, 0.30)', line: '#29B6F6' },
+    { bull: 'rgba(63, 81, 181, 0.25)', bear: 'rgba(255, 152, 0, 0.25)', line: '#5C6BC0' },
+    { bull: 'rgba(0, 188, 212, 0.22)', bear: 'rgba(233, 30, 99, 0.22)', line: '#00BCD4' },
+  ],
+};
+
+const MAX_CLOUD_PAIRS = 5;
+
+const loadClouds = (): CloudConfig => {
+  try {
+    const saved = JSON.parse(localStorage.getItem('cloudConfig') ?? 'null');
+    if (saved?.ripster?.pairs && saved?.mtf?.pairs) return saved;
+  } catch {
+    /* fall through to defaults */
+  }
+  return DEFAULT_CLOUDS;
+};
+
 interface IndicatorState {
-  ema5: boolean;
-  ema8: boolean;
-  ema9: boolean;
-  ema13: boolean;
-  ema34: boolean;
-  ema50: boolean;
-  ema72: boolean;
   sma20: boolean;
   sma50: boolean;
   sma100: boolean;
@@ -42,8 +96,6 @@ interface IndicatorState {
   macd: boolean;
   bb: boolean;
   volume: boolean;
-  ripsterCloud: boolean;
-  mtfClouds: boolean;
 }
 
 interface DrawingObject {
@@ -81,7 +133,10 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   // - The state is used for React re-renders to update the UI
   const selectedToolRef = useRef<DrawingTool>('none');
   const [isDrawingMode, setIsDrawingMode] = useState(false);
-  const [showIndicators, setShowIndicators] = useState(false);
+  // Only the selector menu: indicators stay on the chart when the menu is closed
+  const [showIndicatorPanel, setShowIndicatorPanel] = useState(false);
+  const [clouds, setClouds] = useState<CloudConfig>(loadClouds);
+  const indicatorPanelRef = useRef<HTMLDivElement>(null);
   const [showFibonacci, setShowFibonacci] = useState(false);
   const [selectedTool, setSelectedTool] = useState<DrawingTool>('none');
   const [ripsterTrend, setRipsterTrend] = useState<'bullish' | 'bearish' | 'neutral'>('neutral');
@@ -96,13 +151,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   });
   const [customStatuses, setCustomStatuses] = useState<Record<string, CustomIndicatorStatus>>({});
   const [indicators, setIndicators] = useState<IndicatorState>({
-    ema5: false,
-    ema8: false,
-    ema9: false,
-    ema13: false,
-    ema34: false,
-    ema50: false,
-    ema72: false,
     sma20: false,
     sma50: false,
     sma100: false,
@@ -112,8 +160,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     macd: false,
     bb: false,
     volume: true,
-    ripsterCloud: false,
-    mtfClouds: false,
   });
 
   // Update dataRef whenever data changes
@@ -462,9 +508,14 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     indicatorSeriesRef.current.clear();
 
     // Add indicators based on selection
-    if (showIndicators) {
+    {
       const closes = data.map(d => d.close);
-      const emaCloud = calculateRipsterEMACloud(closes);
+      const emaCache = new Map<number, number[]>();
+      const emaOf = (period: number) => {
+        let v = emaCache.get(period);
+        if (!v) { v = calculateEMAFromFirst(closes, period); emaCache.set(period, v); }
+        return v;
+      };
 
       // Shades the area between two EMAs: green while the fast EMA is above the slow one, red below
       const addCloud = (key: string, fast: number[], slow: number[], bull: string, bear: string) => {
@@ -482,62 +533,32 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         indicatorSeriesRef.current.set(key, cloud);
       };
 
-      if (indicators.ripsterCloud) {
-        addCloud('cloud-8-9', emaCloud.ema8, emaCloud.ema9, 'rgba(76, 175, 80, 0.35)', 'rgba(239, 83, 80, 0.35)');
-        addCloud('cloud-5-13', emaCloud.ema5, emaCloud.ema13, 'rgba(38, 166, 154, 0.22)', 'rgba(255, 112, 67, 0.22)');
-      }
-
-      // Add EMA 5
-      if (indicators.ema5) {
-        const ema5Series = chartRef.current.addSeries(LineSeries, {
-          color: '#2196F3',
-          lineWidth: 1,
-          title: 'EMA 5',
+      (['ripster', 'mtf'] as CloudKey[]).forEach((key) => {
+        const group = clouds[key];
+        if (!group.enabled) return;
+        group.pairs.forEach((pair, idx) => {
+          if (!pair.enabled) return;
+          const colors = CLOUD_PALETTE[key][idx % CLOUD_PALETTE[key].length];
+          const fast = emaOf(pair.fast);
+          const slow = emaOf(pair.slow);
+          addCloud(`${key}-cloud-${idx}`, fast, slow, colors.bull, colors.bear);
+          if (group.showLines && chartRef.current) {
+            [[pair.fast, fast], [pair.slow, slow]].forEach(([period, values]) => {
+              const line = chartRef.current!.addSeries(LineSeries, {
+                color: colors.line,
+                lineWidth: 1,
+                title: `EMA ${period}`,
+                priceLineVisible: false,
+                lastValueVisible: false,
+              });
+              line.setData(
+                (values as number[]).map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+              );
+              indicatorSeriesRef.current.set(`${key}-line-${idx}-${period}`, line);
+            });
+          }
         });
-        const ema5Data: LineData[] = emaCloud.ema5.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
-          .filter((p) => !isNaN(p.value));
-        ema5Series.setData(ema5Data);
-        indicatorSeriesRef.current.set('ema5', ema5Series);
-      }
-
-      // Add EMA 8
-      if (indicators.ema8) {
-        const ema8Series = chartRef.current.addSeries(LineSeries, {
-          color: '#00BCD4',
-          lineWidth: 1,
-          title: 'EMA 8',
-        });
-        const ema8Data: LineData[] = emaCloud.ema8.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
-          .filter((p) => !isNaN(p.value));
-        ema8Series.setData(ema8Data);
-        indicatorSeriesRef.current.set('ema8', ema8Series);
-      }
-
-      // Add EMA 9
-      if (indicators.ema9) {
-        const ema9Series = chartRef.current.addSeries(LineSeries, {
-          color: '#009688',
-          lineWidth: 1,
-          title: 'EMA 9',
-        });
-        const ema9Data: LineData[] = emaCloud.ema9.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
-          .filter((p) => !isNaN(p.value));
-        ema9Series.setData(ema9Data);
-        indicatorSeriesRef.current.set('ema9', ema9Series);
-      }
-
-      // Add EMA 13
-      if (indicators.ema13) {
-        const ema13Series = chartRef.current.addSeries(LineSeries, {
-          color: '#4CAF50',
-          lineWidth: 1,
-          title: 'EMA 13',
-        });
-        const ema13Data: LineData[] = emaCloud.ema13.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
-          .filter((p) => !isNaN(p.value));
-        ema13Series.setData(ema13Data);
-        indicatorSeriesRef.current.set('ema13', ema13Series);
-      }
+      });
 
       // Add SMA 20
       if (indicators.sma20) {
@@ -645,67 +666,114 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         bbLowerSeries.setData(bbLowerData);
         indicatorSeriesRef.current.set('bbLower', bbLowerSeries);
       }
-
-      // Add MTF Clouds (EMA 34, 50, 72)
-      if (indicators.mtfClouds) {
-        const mtfClouds = calculateMTFClouds(closes);
-        addCloud('cloud-34-50', mtfClouds.ema34, mtfClouds.ema50, 'rgba(41, 182, 246, 0.30)', 'rgba(171, 71, 188, 0.30)');
-        addCloud('cloud-50-72', mtfClouds.ema50, mtfClouds.ema72, 'rgba(41, 98, 255, 0.20)', 'rgba(255, 152, 0, 0.20)');
-        
-        const ema34Series = chartRef.current.addSeries(LineSeries, {
-          color: '#00BCD4',
-          lineWidth: 2,
-          title: 'EMA 34',
-        });
-        const ema34Data: LineData[] = mtfClouds.ema34.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
-          .filter((p) => !isNaN(p.value));
-        ema34Series.setData(ema34Data);
-        indicatorSeriesRef.current.set('ema34', ema34Series);
-
-        const ema50Series = chartRef.current.addSeries(LineSeries, {
-          color: '#03A9F4',
-          lineWidth: 2,
-          title: 'EMA 50',
-        });
-        const ema50Data: LineData[] = mtfClouds.ema50.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
-          .filter((p) => !isNaN(p.value));
-        ema50Series.setData(ema50Data);
-        indicatorSeriesRef.current.set('ema50', ema50Series);
-
-        const ema72Series = chartRef.current.addSeries(LineSeries, {
-          color: '#0288D1',
-          lineWidth: 2,
-          title: 'EMA 72',
-        });
-        const ema72Data: LineData[] = mtfClouds.ema72.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
-          .filter((p) => !isNaN(p.value));
-        ema72Series.setData(ema72Data);
-        indicatorSeriesRef.current.set('ema72', ema72Series);
-      }
     }
-  }, [data, showIndicators, indicators]);
+  }, [data, indicators, clouds]);
 
-  // Calculate Ripster Trend
+  // Ripster trend from the enabled Ripster clouds: bullish when price is above every cloud EMA
+  // and each fast EMA is above its slow EMA, bearish for the mirror image
   useEffect(() => {
-    if (!data.length || !showIndicators) return;
-    
+    const group = clouds.ripster;
+    const pairs = group.pairs.filter((p) => p.enabled);
+    if (!data.length || !group.enabled || pairs.length === 0) return;
+
     const closes = data.map(d => d.close);
-    const emaCloud = calculateRipsterEMACloud(closes);
-    
-    if (data.length > 0 && emaCloud.ema5.length > 0) {
-      const lastIndex = data.length - 1;
-      const currentPrice = data[lastIndex].close;
-      const ema5 = emaCloud.ema5[lastIndex];
-      const ema8 = emaCloud.ema8[lastIndex];
-      const ema9 = emaCloud.ema9[lastIndex];
-      const ema13 = emaCloud.ema13[lastIndex];
-      
-      if (!isNaN(ema5) && !isNaN(ema8) && !isNaN(ema9) && !isNaN(ema13)) {
-        const trend = calculateRipsterTrend(currentPrice, ema5, ema8, ema9, ema13);
-        setRipsterTrend(trend);
-      }
+    const price = closes[closes.length - 1];
+    const last = (period: number) => {
+      const v = calculateEMAFromFirst(closes, period);
+      return v[v.length - 1];
+    };
+    const emas = pairs.map((p) => ({ fast: last(p.fast), slow: last(p.slow) }));
+    const allEmas = emas.flatMap((e) => [e.fast, e.slow]);
+
+    if (price > Math.max(...allEmas) && emas.every((e) => e.fast > e.slow)) setRipsterTrend('bullish');
+    else if (price < Math.min(...allEmas) && emas.every((e) => e.fast < e.slow)) setRipsterTrend('bearish');
+    else setRipsterTrend('neutral');
+  }, [data, clouds]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('cloudConfig', JSON.stringify(clouds));
+    } catch {
+      /* storage unavailable */
     }
-  }, [data, showIndicators]);
+  }, [clouds]);
+
+  // Close the indicator menu when clicking elsewhere (indicators stay on the chart)
+  useEffect(() => {
+    if (!showIndicatorPanel) return;
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Element | null;
+      if (target && !target.closest('.indicator-panel, .indicator-toggle')) setShowIndicatorPanel(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('touchstart', onDown);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('touchstart', onDown);
+    };
+  }, [showIndicatorPanel]);
+
+  const updateGroup = (key: CloudKey, patch: Partial<CloudGroup>) =>
+    setClouds((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+
+  const updatePair = (key: CloudKey, idx: number, patch: Partial<CloudPair>) =>
+    setClouds((prev) => ({
+      ...prev,
+      [key]: { ...prev[key], pairs: prev[key].pairs.map((p, i) => (i === idx ? { ...p, ...patch } : p)) },
+    }));
+
+  const addPair = (key: CloudKey) =>
+    setClouds((prev) => {
+      const pairs = prev[key].pairs;
+      if (pairs.length >= MAX_CLOUD_PAIRS) return prev;
+      const lastSlow = pairs.length ? pairs[pairs.length - 1].slow : 20;
+      return { ...prev, [key]: { ...prev[key], pairs: [...pairs, { enabled: true, fast: lastSlow + 1, slow: lastSlow + 20 }] } };
+    });
+
+  const removePair = (key: CloudKey, idx: number) =>
+    setClouds((prev) => ({ ...prev, [key]: { ...prev[key], pairs: prev[key].pairs.filter((_, i) => i !== idx) } }));
+
+  const renderCloudGroup = (key: CloudKey, title: string) => {
+    const group = clouds[key];
+    return (
+      <div className="indicator-group cloud-group">
+        <h4>{title}</h4>
+        <label>
+          <input type="checkbox" checked={group.enabled} onChange={() => updateGroup(key, { enabled: !group.enabled })} />
+          Show cloud
+        </label>
+        <label>
+          <input type="checkbox" checked={group.showLines} onChange={() => updateGroup(key, { showLines: !group.showLines })} />
+          Show EMA lines
+        </label>
+        {group.pairs.map((pair, idx) => (
+          <div key={idx} className={`cloud-pair ${group.enabled && pair.enabled ? '' : 'off'}`}>
+            <input
+              type="checkbox"
+              checked={pair.enabled}
+              onChange={() => updatePair(key, idx, { enabled: !pair.enabled })}
+              title="Toggle this cloud"
+            />
+            <span className="cloud-swatch" style={{ background: CLOUD_PALETTE[key][idx % CLOUD_PALETTE[key].length].line }} />
+            <span>EMA</span>
+            <input
+              type="number" min={1} max={500} value={pair.fast}
+              onChange={(e) => { const v = parseInt(e.target.value, 10); if (v >= 1 && v <= 500) updatePair(key, idx, { fast: v }); }}
+            />
+            <span>/</span>
+            <input
+              type="number" min={1} max={500} value={pair.slow}
+              onChange={(e) => { const v = parseInt(e.target.value, 10); if (v >= 1 && v <= 500) updatePair(key, idx, { slow: v }); }}
+            />
+            <button className="cloud-remove" onClick={() => removePair(key, idx)} title="Remove this cloud">✖</button>
+          </div>
+        ))}
+        {group.pairs.length < MAX_CLOUD_PAIRS && (
+          <button className="cloud-add" onClick={() => addPair(key)}>+ Add cloud</button>
+        )}
+      </div>
+    );
+  };
 
   const handleToolSelect = (tool: DrawingTool) => {
     setSelectedTool(tool);
@@ -865,9 +933,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             
             <button
               className="indicator-toggle"
-              onClick={() => setShowIndicators(!showIndicators)}
+              onClick={() => setShowIndicatorPanel(!showIndicatorPanel)}
             >
-              {showIndicators ? '📊 Hide Indicators' : '📊 Show Indicators'}
+              {showIndicatorPanel ? '📊 Close Menu' : '📊 Indicators'}
             </button>
             
             <button
@@ -877,7 +945,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               {showCustomPanel ? '🔧 Hide Custom' : '🔧 Custom Indicators'}
             </button>
             
-            {showIndicators && (indicators.ema5 || indicators.ema8 || indicators.ema9 || indicators.ema13) && (
+            {clouds.ripster.enabled && clouds.ripster.pairs.some((p) => p.enabled) && (
               <div className={`trend-indicator trend-${ripsterTrend}`}>
                 Ripster Trend: {ripsterTrend.toUpperCase()}
               </div>
@@ -886,43 +954,13 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         </div>
       </div>
       
-      {showIndicators && (
-        <div className="indicator-panel">
+      {showIndicatorPanel && (
+        <div className="indicator-panel" ref={indicatorPanelRef}>
+          <button className="panel-close" onClick={() => setShowIndicatorPanel(false)} title="Close menu (indicators stay on the chart)">✕</button>
           <div className="indicator-checkboxes">
-            <div className="indicator-group">
-              <h4>Ripster EMAs</h4>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={indicators.ripsterCloud}
-                  onChange={() => {
-                    const newValue = !indicators.ripsterCloud;
-                    setIndicators(prev => ({ 
-                      ...prev, 
-                      ripsterCloud: newValue,
-                      ema5: newValue,
-                      ema8: newValue,
-                      ema9: newValue,
-                      ema13: newValue,
-                    }));
-                  }}
-                />
-                Ripster Cloud (5,8,9,13)
-              </label>
-            </div>
-            
-            <div className="indicator-group">
-              <h4>MTF Clouds</h4>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={indicators.mtfClouds}
-                  onChange={() => toggleIndicator('mtfClouds')}
-                />
-                MTF Clouds (34,50,72)
-              </label>
-            </div>
-            
+            {renderCloudGroup('ripster', 'Ripster EMA Clouds')}
+            {renderCloudGroup('mtf', 'MTF Clouds')}
+
             <div className="indicator-group">
               <h4>SMAs</h4>
               <label>

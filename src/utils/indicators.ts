@@ -104,6 +104,19 @@ export const calculateEMA = (data: number[], period: number): number[] => {
 
 // RSI series using Wilder's smoothing (the standard definition).
 // Entries before index `period` are NaN (not enough data).
+// EMA seeded with the first value, as TradingView's ta.ema does. Unlike calculateEMA it has a
+// value on every bar, so long EMAs (e.g. 89, 200) still plot on short datasets.
+export const calculateEMAFromFirst = (data: number[], period: number): number[] => {
+  const alpha = 2 / (period + 1);
+  const result: number[] = [];
+  let ema = NaN;
+  for (const x of data) {
+    ema = Number.isNaN(ema) ? x : alpha * x + (1 - alpha) * ema;
+    result.push(ema);
+  }
+  return result;
+};
+
 export const calculateRSISeries = (prices: number[], period: number = 14): number[] => {
   const result: number[] = prices.map(() => NaN);
   if (prices.length < period + 1) return result;
