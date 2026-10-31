@@ -27,7 +27,7 @@ import './App.css';
 const marketData = RealMarketDataService.getInstance();
 
 const fmtMove = (change: number | null, pct: number | null) =>
-  change === null || pct === null ? '' : `${change >= 0 ? '+' : '-'}${Math.abs(change).toFixed(2)} (${pct >= 0 ? '+' : '-'}${Math.abs(pct).toFixed(2)}%)`;
+  change == null || pct == null ? '' : `${change >= 0 ? '+' : '-'}${Math.abs(change).toFixed(2)} (${pct >= 0 ? '+' : '-'}${Math.abs(pct).toFixed(2)}%)`;
 
 // Regular-session close and extended-hours moves, e.g. "At close $344.63 -4.28" then "After hours $345.10 +0.47"
 const SessionMoves = ({ quote }: { quote: QuoteDetails | null }) => {
@@ -39,7 +39,7 @@ const SessionMoves = ({ quote }: { quote: QuoteDetails | null }) => {
   ];
   // Pre-market belongs to the day ahead, after-hours to the day just finished: show only the live one
   const visible = rows.filter((r) => {
-    if (r.price === null) return false;
+    if (r.price == null) return false;
     if (r.key === 'pre') return quote.marketState === 'PRE' || quote.marketState === 'PREPRE';
     if (r.key === 'post') return quote.marketState !== 'REGULAR' && quote.marketState !== 'PRE' && quote.marketState !== 'PREPRE';
     return true;

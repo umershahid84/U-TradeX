@@ -1,0 +1,28 @@
+.auto-badge {
+  position: relative; flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  padding: 6px 12px; background: #101431; border-top: 1px solid #2a2e4f; border-left: 4px solid #ffca28;
+  font-size: 12px; color: #c0c4e0;
+}
+.auto-badge.bullish { border-left-color: #26a69a; }
+.auto-badge.bearish { border-left-color: #ef5350; }
+.ab-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: #8a8fb5; font-weight: 700; }
+.ab-tf { margin-left: auto; font-size: 10px; color: #6a6e90; }
+.ab-pill { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; }
+.ab-pill.bias.bullish { background: rgba(38, 166, 154, 0.2); color: #26a69a; }
+.ab-pill.bias.bearish { background: rgba(239, 83, 80, 0.2); color: #ef5350; }
+.ab-pill.bias.neutral { background: rgba(255, 202, 40, 0.18); color: #ffca28; }
+.ab-pill.pattern { background: rgba(255, 179, 0, 0.18); color: #FFB300; text-transform: capitalize; }
+.ab-pill.pattern.confirmed { background: #FFB300; color: #1a1a1a; }
+.ab-pill.none { background: #1a1e3f; color: #787b9a; font-weight: 500; }
+.ab-headline { font-weight: 600; color: #e0e0e0; }
+.ab-note { font-size: 11px; color: #9a9ec0; }
+.ab-toggle { background: none; border: none; color: #8a8fb5; cursor: pointer; font-size: 11px; padding: 0; }
+.ab-toggle:hover { color: #fff; }
+.ab-popover {
+  position: absolute; left: 8px; bottom: calc(100% + 6px); width: 340px; max-width: calc(100% - 16px); z-index: 12;
+  background: #141938; border: 1px solid #3a3e6f; border-radius: 8px; padding: 10px 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.ab-details { margin: 0; padding-left: 14px; display: grid; gap: 4px; font-size: 11px; line-height: 1.4; }
+.ab-details b { color: #e0e0e0; }
+.ab-fine { color: #6a6e90; list-style: none; margin-left: -14px; margin-top: 4px; }
+@media (max-width: 900px) { .ab-tf { margin-left: 0; } }

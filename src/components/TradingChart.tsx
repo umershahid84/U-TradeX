@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { 
   createChart, 
   IChartApi, 
@@ -12,6 +12,9 @@ import {
 } from 'lightweight-charts';
 import { ChartData, TimeFrame, CustomIndicator, CustomIndicatorStatus, PriceAlert } from '../types';
 import { AlertsPanel } from './AlertsPanel';
+import { AutoChartManager, AutoChartOptions } from './autoChartManager';
+import { AutoChartBadge } from './AutoChartBadge';
+import { analyzeChart } from '../utils/autoChart';
 import { calculateEMAFromFirst, calculateSMA, calculateVWAP, calculateBollingerBands } from '../utils/indicators';
 import { DrawingTools, DrawingTool } from './DrawingTools';
 import { IndicatorPanels } from './IndicatorPanels';
@@ -118,6 +121,7 @@ interface DrawingObject {
 
 export const TradingChart: React.FC<TradingChartProps> = ({
   symbol,
+  timeframe,
   data,
   onPriceUpdate,
   alerts,
@@ -157,6 +161,16 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const [ripsterTrend, setRipsterTrend] = useState<'bullish' | 'bearish' | 'neutral'>('neutral');
   const [showCustomPanel, setShowCustomPanel] = useState(false);
   const [showAlertsPanel, setShowAlertsPanel] = useState(false);
+  const autoChartRef = useRef<AutoChartManager | null>(null);
+  const [autoChart, setAutoChart] = useState<AutoChartOptions>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('autoChart') ?? 'null');
+      if (saved && typeof saved.enabled === 'boolean') return saved;
+    } catch {
+      /* defaults */
+    }
+    return { enabled: false, levels: true, trendlines: true, patterns: true };
+  });
   // While armed, the next click on the chart places a price alert at that price
   const [alertArmed, setAlertArmed] = useState(false);
   const alertArmedRef = useRef(false);
@@ -448,6 +462,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     candleSeriesRef.current = candleSeries;
     customManagerRef.current = new CustomIndicatorManager(chart, candleSeries);
     sessionBandsRef.current = attachSessionBands(candleSeries);
+    autoChartRef.current = new AutoChartManager(chart, candleSeries);
 
     // Add click handler for drawing tools
     chart.subscribeClick((param) => {
@@ -846,6 +861,21 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       );
   }, [alerts, symbol]);
 
+  // Auto charting: analyse the bars on screen and draw levels, trendlines and patterns
+  const autoResult = useMemo(() => (autoChart.enabled ? analyzeChart(data) : null), [data, autoChart.enabled]);
+
+  useEffect(() => {
+    autoChartRef.current?.update(autoResult, data, autoChart);
+  }, [autoResult, data, autoChart]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('autoChart', JSON.stringify(autoChart));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [autoChart]);
+
   const armAlert = () => {
     const next = !alertArmed;
     alertArmedRef.current = next;
@@ -1061,6 +1091,30 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             {renderCloudGroup('ripster', 'Ripster EMA Clouds')}
             {renderCloudGroup('mtf', 'MTF Clouds')}
 
+            <div className="indicator-group auto-group">
+              <h4>Auto Charting</h4>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={autoChart.enabled}
+                  onChange={() => setAutoChart((a) => ({ ...a, enabled: !a.enabled }))}
+                />
+                Auto chart
+              </label>
+              {(['levels', 'trendlines', 'patterns'] as const).map((key) => (
+                <label key={key} className={autoChart.enabled ? '' : 'sub-off'}>
+                  <input
+                    type="checkbox"
+                    checked={autoChart[key]}
+                    disabled={!autoChart.enabled}
+                    onChange={() => setAutoChart((a) => ({ ...a, [key]: !a[key] }))}
+                  />
+                  {key === 'levels' ? 'Support / resistance' : key === 'trendlines' ? 'Trendlines' : 'Double top / bottom'}
+                </label>
+              ))}
+              <small className="auto-hint">Bullish / bearish read, drawn from the bars on this timeframe</small>
+            </div>
+
             <div className="indicator-group">
               <h4>SMAs</h4>
               <label>
@@ -1181,6 +1235,10 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       )}
       
       <div ref={chartContainerRef} className={`chart ${alertArmed ? 'alert-cursor' : ''}`} />
+
+      {autoChart.enabled && (
+        <AutoChartBadge result={autoResult} barCount={data.length} timeframe={timeframe} />
+      )}
 
       <div className="session-legend">
         <span><i style={{ background: SESSION_COLOR.pre }} />Pre-market</span>
