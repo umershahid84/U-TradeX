@@ -1,0 +1,37 @@
+.positions-strip { flex: 0 0 auto; background: #141938; border: 1px solid #2a2e4f; border-radius: 8px; overflow: hidden; }
+.ps-bar { display: flex; }
+.ps-toggle {
+  flex: 1; display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: transparent; border: none;
+  color: #c0c4e0; font-size: 12px; cursor: pointer; text-align: left;
+}
+.ps-toggle:hover { background: #1a1e3f; }
+.ps-caret { color: #8a8fb5; width: 10px; }
+.ps-summary b { color: #e0e0e0; margin: 0 2px; }
+.ps-summary i { margin: 0 8px; color: #4a4e70; font-style: normal; }
+.ps-summary em { font-style: normal; font-weight: 600; }
+.ps-summary em.pending { color: #ffca28; }
+.up { color: #26a69a; } .down { color: #ef5350; }
+
+.ps-tabs { display: flex; gap: 16px; }
+.ps-tabs span { cursor: pointer; color: #8a8fb5; font-weight: 600; padding-bottom: 2px; border-bottom: 2px solid transparent; }
+.ps-tabs span.active { color: #e0e0e0; border-bottom-color: #2962ff; }
+.ps-tabs span b { color: #c0c4e0; margin-left: 2px; }
+
+.ps-body { max-height: 190px; overflow: auto; border-top: 1px solid #2a2e4f; }
+.ps-empty { padding: 16px; font-size: 12px; color: #8a8fb5; }
+.ps-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ps-table th { position: sticky; top: 0; background: #141938; text-align: right; font-weight: 600; color: #8a8fb5; padding: 6px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+.ps-table td { text-align: right; padding: 6px 12px; color: #c0c4e0; border-top: 1px solid #1a1e3f; white-space: nowrap; }
+.ps-table th:first-child, .ps-table td:first-child { text-align: left; }
+.ps-table small { color: #9a9ec0; }
+.ps-link { background: none; border: none; color: #e0e0e0; font-weight: 700; cursor: pointer; padding: 0; font-size: 12px; }
+.ps-link:hover { color: #26a69a; text-decoration: underline; }
+.ps-action { background: #1a1e3f; border: 1px solid #3a3e6f; color: #e0e0e0; border-radius: 4px; padding: 2px 10px; font-size: 11px; cursor: pointer; }
+.ps-action:hover { border-color: #ef5350; color: #ef5350; }
+.ps-type { font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 3px; }
+.ps-type.call { background: rgba(38, 166, 154, 0.2); color: #26a69a; }
+.ps-type.put { background: rgba(239, 83, 80, 0.2); color: #ef5350; }
+.ps-status { text-transform: capitalize; font-size: 11px; }
+.ps-status.pending { color: #ffca28; } .ps-status.filled { color: #26a69a; } .ps-status.cancelled { color: #787b9a; }
+
+@media (max-width: 900px) { .ps-body { overflow-x: auto; } }

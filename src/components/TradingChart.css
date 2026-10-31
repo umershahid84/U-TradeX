@@ -3,8 +3,17 @@
   width: 100%;
   height: 100%;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   min-height: 400px;
+}
+
+/* everything except the drawing rail */
+.chart-main {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .drawing-mode-indicator {
@@ -209,7 +218,10 @@
 
 
 @media (max-width: 900px) {
-  .trading-chart-container { min-height: 0; }
+  .trading-chart-container { min-height: 0; flex-direction: column; }
+  .trading-chart-container > .drawing-rail { flex: 0 0 auto; flex-direction: row; padding: 4px 8px; border-right: none; border-bottom: 1px solid #2a2e4f; justify-content: flex-start; }
+  .trading-chart-container > .drawing-rail .rail-sep { width: 1px; height: 20px; margin: 0 4px; }
+  .chart-main { flex: 1 1 0; min-height: 0; }
 
   .chart { min-height: 260px; }
 

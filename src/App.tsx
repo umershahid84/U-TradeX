@@ -3,7 +3,10 @@ import { Navbar } from './components/Navbar';
 import { TradingChart } from './components/TradingChart';
 import { TradingPanel } from './components/TradingPanel';
 import { PortfolioBar } from './components/PortfolioBar';
-import { PanelFrame, PanelId, Placement } from './components/PanelFrame';
+import { SidebarTabs, SidebarTab, TAB_META } from './components/SidebarTabs';
+import { QuickTrade } from './components/QuickTrade';
+import { PositionsStrip } from './components/PositionsStrip';
+import { FearGreedChip } from './components/FearGreedChip';
 import { Watchlist } from './components/Watchlist';
 import { FearGreedIndicator } from './components/FearGreedIndicator';
 import { TPSLPanel } from './components/TPSLPanel';
@@ -89,19 +92,11 @@ const setStorageValue = (key: string, value: string): void => {
   }
 };
 
-const PANEL_IDS: PanelId[] = ['watchlist', 'options'];
+const TAB_IDS: SidebarTab[] = ['watchlist', 'trade', 'options', 'sentiment'];
 
-const loadPlacement = (): Record<PanelId, Placement> => {
-  const fallback: Record<PanelId, Placement> = { watchlist: 'left', options: 'left' };
-  try {
-    const saved = JSON.parse(getStorageValue('panelPlacement', 'null'));
-    PANEL_IDS.forEach((id) => {
-      if (['left', 'top', 'bottom'].includes(saved?.[id])) fallback[id] = saved[id];
-    });
-  } catch {
-    /* use defaults */
-  }
-  return fallback;
+const loadTab = (): SidebarTab => {
+  const saved = getStorageValue('sidebarTab', 'watchlist');
+  return (TAB_IDS as string[]).includes(saved) ? (saved as SidebarTab) : 'watchlist';
 };
 
 function App() {
@@ -124,11 +119,10 @@ function App() {
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
   const [dataError, setDataError] = useState<string>('');
   const isMobile = useIsMobile();
-  const [showLeftSidebar, setShowLeftSidebar] = useState(() => {
-    return getStorageValue('showLeftSidebar', 'true') !== 'false';
-  });
-  // Where the watchlist and options panels are shown: left sidebar, above or below the chart
-  const [placement, setPlacement] = useState<Record<PanelId, Placement>>(loadPlacement);
+  const [tab, setTab] = useState<SidebarTab>(loadTab);
+  // Phones show either the chart or one tab at a time, switched from the bottom bar
+  const [mobileView, setMobileView] = useState<'chart' | SidebarTab>('chart');
+  const [stripOpen, setStripOpen] = useState(() => getStorageValue('positionsStripOpen', 'false') === 'true');
   const [showRightSidebar, setShowRightSidebar] = useState(() => {
     return getStorageValue('showRightSidebar', 'true') !== 'false';
   });
@@ -136,6 +130,7 @@ function App() {
   const {
     account,
     placeOrder,
+    cancelOrder,
     resetAccount,
     updatePositionPrices,
     buyOption,
@@ -421,37 +416,43 @@ function App() {
     alert(`TP/SL set for ${tpsl.symbol}`);
   };
 
-  const toggleLeftSidebar = () => {
-    const newValue = !showLeftSidebar;
-    setShowLeftSidebar(newValue);
-    setStorageValue('showLeftSidebar', String(newValue));
-  };
-
   const toggleRightSidebar = () => {
     const newValue = !showRightSidebar;
     setShowRightSidebar(newValue);
     setStorageValue('showRightSidebar', String(newValue));
   };
 
-  // On mobile the panels stack below the chart, so the collapse toggle doesn't apply
-  const rightVisible = showRightSidebar || isMobile;
+  const rightVisible = showRightSidebar && !isMobile;
 
-  const movePanel = (id: PanelId, to: Placement) => {
-    setPlacement((prev) => {
-      const next = { ...prev, [id]: to };
-      setStorageValue('panelPlacement', JSON.stringify(next));
-      return next;
-    });
+  const selectTab = (t: SidebarTab) => {
+    setTab(t);
+    setStorageValue('sidebarTab', t);
   };
 
-  // On phones everything stacks below the chart, whatever was chosen
-  const placeOf = (id: PanelId): Placement => (isMobile ? 'bottom' : placement[id]);
+  const toggleStrip = () => {
+    const next = !stripOpen;
+    setStripOpen(next);
+    setStorageValue('positionsStripOpen', String(next));
+  };
 
-  const panelNode = (id: PanelId) => (
-    <PanelFrame key={id} id={id} placement={placeOf(id)} movable={!isMobile} onMove={(to) => movePanel(id, to)}>
-      {id === 'watchlist' ? (
-        <Watchlist activeSymbol={symbol} onSelect={handleSymbolChange} />
-      ) : (
+  // On phones the bottom bar picks the view; on desktop the sidebar tabs do
+  const activeTab: SidebarTab = isMobile && mobileView !== 'chart' ? mobileView : tab;
+  const openSentiment = () => (isMobile ? setMobileView('sentiment') : selectTab('sentiment'));
+  const showChartOnMobile = !isMobile || mobileView === 'chart';
+
+  const closePosition = (sym: string, quantity: number, price: number) =>
+    placeOrder({ symbol: sym, type: 'market', side: 'sell', quantity, price });
+
+  const tabContent = (
+    <>
+      {activeTab === 'watchlist' && <Watchlist activeSymbol={symbol} onSelect={(s) => { handleSymbolChange(s); if (isMobile) setMobileView('chart'); }} />}
+      {activeTab === 'trade' && (
+        <>
+          <TradingPanel symbol={symbol} currentPrice={currentPrice} balance={account.balance} onPlaceOrder={placeOrder} />
+          <TPSLPanel positions={account.positions} onSet={handleTPSLSet} />
+        </>
+      )}
+      {activeTab === 'options' && (
         <OptionsPanel
           symbol={symbol}
           currentPrice={currentPrice}
@@ -461,14 +462,11 @@ function App() {
           onBuyOption={buyOption}
         />
       )}
-    </PanelFrame>
+      {activeTab === 'sentiment' && (
+        <FearGreedIndicator symbol={symbol} market={marketFearGreed} marketError={marketFearGreedError} ticker={fearGreedData} />
+      )}
+    </>
   );
-
-  const panelsAt = (where: Placement) => PANEL_IDS.filter((id) => placeOf(id) === where);
-  const leftPanels = panelsAt('left');
-  const topPanels = panelsAt('top');
-  const bottomPanels = panelsAt('bottom');
-  const leftVisible = leftPanels.length > 0 && (showLeftSidebar || isMobile);
 
   return (
     <div className="app">
@@ -480,114 +478,102 @@ function App() {
         onTimeframeChange={handleTimeframeChange}
         onTimeRangeChange={handleTimeRangeChange}
       >
-        <PortfolioBar account={account} onReset={resetAccount} />
+        <div className="navbar-widgets">
+          <FearGreedChip market={marketFearGreed} onClick={openSentiment} />
+          <PortfolioBar account={account} onReset={resetAccount} />
+        </div>
       </Navbar>
-      
+
       <div className="main-content">
-        {leftVisible && (
-          <div className="left-sidebar">
-            <button className="sidebar-toggle left" onClick={toggleLeftSidebar} title="Hide sidebar">
-              ◀
-            </button>
-            <div className="sidebar-panels">{leftPanels.map(panelNode)}</div>
-          </div>
-        )}
-
-        {leftPanels.length > 0 && !leftVisible && (
-          <button className="sidebar-toggle-collapsed left" onClick={toggleLeftSidebar} title="Show sidebar">
-            ▶
-          </button>
-        )}
-
-        <div className="center-column">
-        {topPanels.length > 0 && <div className="panel-strip">{topPanels.map(panelNode)}</div>}
-        <div className="chart-area">
-          <div className="chart-header">
-            <div className="symbol-info">
-              <h2>{symbol}</h2>
-              <div className="price-display">
-                <span className="current-price">${currentPrice.toFixed(2)}</span>
-              </div>
-              <span className="session-badge" style={{ color: SESSION_COLOR[session], borderColor: SESSION_COLOR[session] }}>
-                <i style={{ background: SESSION_COLOR[session] }} />
-                {SESSION_LABEL[session]}
-              </span>
-            </div>
-            <SessionMoves quote={quoteDetails} />
-            <div className="bid-ask-display">
-              <div className="bid-price">
-                <span className="label">BID:</span>
-                <span className="value">${(currentPrice * 0.9995).toFixed(2)}</span>
-              </div>
-              <div className="ask-price">
-                <span className="label">ASK:</span>
-                <span className="value">${(currentPrice * 1.0005).toFixed(2)}</span>
-              </div>
-              <div className="after-hours-toggle">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={includeAfterHours}
-                    onChange={(e) => setIncludeAfterHours(e.target.checked)}
-                  />
-                  <span>After Hours</span>
-                </label>
-              </div>
-              <div className={`connection-status ${connectionStatus}`}>
-                <span className="status-dot"></span>
-                <span className="status-text">
-                  {connectionStatus === 'connected' ? 'Live' : 
-                   connectionStatus === 'connecting' ? 'Connecting...' : 
-                   `Disconnected${dataError ? ` - ${dataError}` : ''}`}
+        <div className="center-column" style={showChartOnMobile ? undefined : { display: 'none' }}>
+          <div className="chart-area">
+            <div className="chart-header">
+              <div className="symbol-info">
+                <h2>{symbol}</h2>
+                <div className="price-display">
+                  <span className="current-price">${currentPrice.toFixed(2)}</span>
+                </div>
+                <span className="session-badge" style={{ color: SESSION_COLOR[session], borderColor: SESSION_COLOR[session] }}>
+                  <i style={{ background: SESSION_COLOR[session] }} />
+                  {SESSION_LABEL[session]}
                 </span>
               </div>
+              <SessionMoves quote={quoteDetails} />
+              <div className="bid-ask-display">
+                <div className="bid-price">
+                  <span className="label">BID:</span>
+                  <span className="value">${(currentPrice * 0.9995).toFixed(2)}</span>
+                </div>
+                <div className="ask-price">
+                  <span className="label">ASK:</span>
+                  <span className="value">${(currentPrice * 1.0005).toFixed(2)}</span>
+                </div>
+                <div className="after-hours-toggle">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={includeAfterHours}
+                      onChange={(e) => setIncludeAfterHours(e.target.checked)}
+                    />
+                    <span>After Hours</span>
+                  </label>
+                </div>
+                <div className={`connection-status ${connectionStatus}`}>
+                  <span className="status-dot"></span>
+                  <span className="status-text">
+                    {connectionStatus === 'connected' ? 'Live' :
+                     connectionStatus === 'connecting' ? 'Connecting...' :
+                     `Disconnected${dataError ? ` - ${dataError}` : ''}`}
+                  </span>
+                </div>
+              </div>
             </div>
+
+            <TradingChart
+              symbol={symbol}
+              timeframe={timeframe}
+              data={chartData}
+              onPriceUpdate={setCurrentPrice}
+            />
           </div>
-          
-          <TradingChart
-            symbol={symbol}
-            timeframe={timeframe}
-            data={chartData}
-            onPriceUpdate={setCurrentPrice}
+
+          <PositionsStrip
+            account={account}
+            open={stripOpen}
+            onToggle={toggleStrip}
+            onSelectSymbol={handleSymbolChange}
+            onClosePosition={closePosition}
+            onCancelOrder={cancelOrder}
           />
         </div>
-        {bottomPanels.length > 0 && <div className="panel-strip">{bottomPanels.map(panelNode)}</div>}
-        </div>
 
-        {rightVisible && (
+        {(rightVisible || (isMobile && mobileView !== 'chart')) && (
           <div className="right-sidebar">
-            <button className="sidebar-toggle right" onClick={toggleRightSidebar} title="Hide sidebar">
-              ▶
-            </button>
-            <div className="sidebar-panels">
-              <FearGreedIndicator
-                symbol={symbol}
-                market={marketFearGreed}
-                marketError={marketFearGreedError}
-                ticker={fearGreedData}
-              />
-              
-              <TradingPanel
-                symbol={symbol}
-                currentPrice={currentPrice}
-                balance={account.balance}
-                onPlaceOrder={placeOrder}
-              />
-
-              <TPSLPanel
-                positions={account.positions}
-                onSet={handleTPSLSet}
-              />
-            </div>
+            {!isMobile && <SidebarTabs active={tab} onChange={selectTab} onCollapse={toggleRightSidebar} />}
+            <div className="sidebar-content">{tabContent}</div>
+            {!isMobile && <QuickTrade symbol={symbol} currentPrice={currentPrice} onPlaceOrder={placeOrder} />}
           </div>
         )}
-        
-        {!rightVisible && (
+
+        {!rightVisible && !isMobile && (
           <button className="sidebar-toggle-collapsed right" onClick={toggleRightSidebar} title="Show sidebar">
             ◀
           </button>
         )}
       </div>
+
+      {isMobile && (
+        <nav className="mobile-nav" aria-label="Sections">
+          <button type="button" className={mobileView === 'chart' ? 'active' : ''} onClick={() => setMobileView('chart')}>
+            <span className="tab-icon">📈</span>Chart
+          </button>
+          {TAB_META.map((t) => (
+            <button key={t.id} type="button" className={mobileView === t.id ? 'active' : ''} onClick={() => setMobileView(t.id)}>
+              <span className="tab-icon">{t.icon}</span>{t.label}
+            </button>
+          ))}
+        </nav>
+      )}
     </div>
   );
 }

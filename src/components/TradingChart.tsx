@@ -934,6 +934,13 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
   return (
     <div className="trading-chart-container">
+      <DrawingTools
+        selectedTool={selectedTool}
+        onToolSelect={handleToolSelect}
+        onClearAll={handleClearAllDrawings}
+      />
+
+      <div className="chart-main">
       {isDrawingMode && (
         <div className="drawing-mode-indicator">
           Click on chart to complete {selectedTool}
@@ -941,12 +948,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       )}
       
       <div className="chart-top-controls">
-        <DrawingTools
-          selectedTool={selectedTool}
-          onToolSelect={handleToolSelect}
-          onClearAll={handleClearAllDrawings}
-        />
-        
         <div className="chart-control-buttons">
           <div className="button-row">
             <button
@@ -1100,6 +1101,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         showRSI={indicators.rsi}
         showMACD={indicators.macd}
       />
+      </div>
     </div>
   );
 };

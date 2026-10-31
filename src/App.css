@@ -15,49 +15,34 @@
   position: relative;
 }
 
-.left-sidebar,
 .right-sidebar {
   position: relative;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-.left-sidebar {
-  width: 340px;
-  flex: 0 0 340px;
-}
-
-.right-sidebar {
   width: 350px;
   flex: 0 0 350px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.sidebar-toggle {
-  position: absolute;
-  top: 10px;
-  z-index: 100;
-  background: rgba(42, 46, 79, 0.9);
-  border: 1px solid #3a3e6f;
-  color: #e0e0e0;
-  padding: 8px 6px;
-  cursor: pointer;
-  border-radius: 4px;
-  font-size: 12px;
-  transition: all 0.2s;
+/* the active tab scrolls; the tab bar and quick-trade bar stay put */
+.sidebar-content {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.sidebar-toggle:hover {
-  background: rgba(52, 56, 99, 0.9);
-  border-color: #4a4e8f;
-}
+.sidebar-content > * { flex: none; }
+.sidebar-content .trading-panel { height: auto; overflow: visible; }
 
-.sidebar-toggle.left {
-  right: 10px;
-}
-
-.sidebar-toggle.right {
-  left: 10px;
-}
+.sidebar-content::-webkit-scrollbar { width: 6px; }
+.sidebar-content::-webkit-scrollbar-track { background: #1a1e3f; }
+.sidebar-content::-webkit-scrollbar-thumb { background: #2a2e4f; border-radius: 3px; }
+.sidebar-content::-webkit-scrollbar-thumb:hover { background: #3a3e6f; }
 
 .sidebar-toggle-collapsed {
   position: absolute;
@@ -79,37 +64,12 @@
   border-color: #4a4e8f;
 }
 
-.sidebar-toggle-collapsed.left {
-  left: 12px;
-}
-
 .sidebar-toggle-collapsed.right {
   right: 12px;
 }
 
-.left-sidebar::-webkit-scrollbar,
-.right-sidebar::-webkit-scrollbar {
-  width: 6px;
-}
-
-.left-sidebar::-webkit-scrollbar-track,
-.right-sidebar::-webkit-scrollbar-track {
-  background: #1a1e3f;
-}
-
-.left-sidebar::-webkit-scrollbar-thumb,
-.right-sidebar::-webkit-scrollbar-thumb {
-  background: #2a2e4f;
-  border-radius: 3px;
-}
-
-.left-sidebar::-webkit-scrollbar-thumb:hover,
-.right-sidebar::-webkit-scrollbar-thumb:hover {
-  background: #3a3e6f;
-}
-
 .center-column {
-  /* holds the chart and the dock; takes all width the sidebar doesn't use */
+  /* holds the chart and the positions strip; takes all width the sidebar doesn't use */
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
@@ -267,38 +227,20 @@
 }
 
 @media (max-width: 1400px) {
-  .left-sidebar {
-    width: 300px;
-    flex-basis: 300px;
-  }
-
   .right-sidebar {
-    width: 300px;
-    flex-basis: 300px;
+    width: 310px;
+    flex-basis: 310px;
   }
 }
 
-@media (max-width: 1200px) and (min-width: 901px) {
-  .main-content {
-    display: grid;
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr auto;
-  }
-
-  .left-sidebar,
-  .right-sidebar {
-    width: auto;
-    max-height: 300px;
-  }
-}
-
-/* Phones and small tablets: one scrolling column, chart first */
+/* Phones and small tablets: chart or one tab at a time, switched from a bottom bar */
 @media (max-width: 900px) {
   .app {
     width: 100%;
     height: auto;
     min-height: 100vh;
     min-height: 100dvh;
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
   }
 
   .main-content {
@@ -309,19 +251,16 @@
     gap: 8px;
   }
 
-  .center-column { order: 1; flex: none; }
-  .chart-area { flex: none; height: 80vh; height: 80dvh; min-height: 520px; }
-  .right-sidebar { order: 2; }
+  .center-column { flex: none; }
+  .chart-area { flex: none; height: 78vh; height: 78dvh; min-height: 480px; }
 
-  .left-sidebar,
   .right-sidebar {
     flex: none;
     width: 100%;
-    max-height: none;
-    overflow: visible;
   }
 
-  .sidebar-toggle,
+  .sidebar-content { overflow: visible; }
+
   .sidebar-toggle-collapsed {
     display: none;
   }
@@ -381,3 +320,6 @@
 .session-moves { margin: 0 auto 0 0; }
 .bid-ask-display { flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
 @media (max-width: 900px) { .bid-ask-display { margin-left: 0; justify-content: flex-start; } }
+
+.navbar-widgets { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+@media (max-width: 900px) { .navbar-widgets { align-items: stretch; width: 100%; margin-left: 0; gap: 6px; } .navbar-widgets > * { flex: 1 1 0; min-width: 0; } }

@@ -1,0 +1,28 @@
+.sidebar-tabs { display: flex; align-items: stretch; gap: 2px; flex: 0 0 auto; background: #141938; border-radius: 8px; padding: 4px; }
+.sidebar-tabs button {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 8px 4px;
+  background: transparent; border: none; border-radius: 5px; color: #8a8fb5; font-size: 12px; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+}
+.sidebar-tabs button:hover { color: #e0e0e0; background: #1a1e3f; }
+.sidebar-tabs button.active { background: #2962ff; color: #fff; }
+.tab-icon { font-size: 13px; }
+.sidebar-tabs .tabs-collapse { flex: 0 0 28px; padding: 8px 0; color: #6a6e90; font-size: 11px; }
+
+/* Phones: a fixed bar along the bottom of the screen */
+.mobile-nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 150; display: flex; background: #141938;
+  border-top: 1px solid #2a2e4f; padding-bottom: env(safe-area-inset-bottom);
+}
+.mobile-nav button {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 2px;
+  background: transparent; border: none; color: #8a8fb5; font-size: 10px; font-weight: 600; cursor: pointer;
+}
+.mobile-nav button .tab-icon { font-size: 18px; }
+.mobile-nav button.active { color: #26a69a; }
+
+/* narrower sidebar: text only, so all four tabs fit */
+@media (max-width: 1400px) and (min-width: 901px) {
+  .sidebar-tabs .tab-icon { display: none; }
+  .sidebar-tabs button { font-size: 11.5px; padding: 8px 2px; }
+}

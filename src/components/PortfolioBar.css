@@ -21,7 +21,9 @@
 }
 
 @media (max-width: 900px) {
-  .portfolio-bar { width: 100%; margin-left: 0; }
-  .portfolio-summary { width: 100%; justify-content: space-between; }
+  .portfolio-bar { margin-left: 0; }
+  .portfolio-summary { width: 100%; justify-content: space-between; gap: 6px; }
+  .pb-label, .pb-caret, .pb-count { display: none; }
+  .portfolio-summary { font-size: 11px; justify-content: center; }
   .portfolio-dropdown { width: 100%; max-width: none; }
 }

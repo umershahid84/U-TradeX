@@ -1,0 +1,16 @@
+.quick-trade { flex: 0 0 auto; background: #141938; border: 1px solid #2a2e4f; border-radius: 8px; padding: 10px 12px; }
+.qt-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.qt-symbol { font-weight: 700; color: #e0e0e0; font-size: 13px; }
+.qt-price { color: #a0a4c8; font-size: 12px; flex: 1; }
+.qt-qty { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8a8fb5; text-transform: uppercase; }
+.qt-qty input {
+  width: 64px; padding: 5px 6px; background: #1a1e3f; border: 1px solid #2a2e4f; border-radius: 4px;
+  color: #e0e0e0; font-size: 13px;
+}
+.qt-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.qt-buttons button { padding: 9px; border-radius: 4px; font-weight: 700; font-size: 13px; cursor: pointer; }
+.qt-buy { background: #26a69a; border: 1px solid #26a69a; color: #fff; }
+.qt-sell { background: transparent; border: 1px solid #ef5350; color: #ef5350; }
+.qt-sell:hover:not(:disabled) { background: #ef5350; color: #fff; }
+.qt-buttons button:disabled { opacity: 0.45; cursor: default; }
+@media (max-width: 900px) { .qt-qty input { font-size: 16px; } }

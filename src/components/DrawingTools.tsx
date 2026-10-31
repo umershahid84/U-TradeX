@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import './DrawingTools.css';
 
-export type DrawingTool = 
+export type DrawingTool =
   | 'none'
   | 'trendline'
   | 'horizontal'
@@ -14,51 +14,31 @@ interface DrawingToolsProps {
   onClearAll: () => void;
 }
 
-export const DrawingTools: React.FC<DrawingToolsProps> = ({
-  onToolSelect,
-  selectedTool,
-  onClearAll,
-}) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+const TOOLS: { id: DrawingTool; label: string; icon: string }[] = [
+  { id: 'none', label: 'Cursor', icon: '🖱️' },
+  { id: 'trendline', label: 'Trend Line', icon: '📈' },
+  { id: 'horizontal', label: 'Horizontal Line', icon: '➖' },
+  { id: 'rectangle', label: 'Rectangle', icon: '▭' },
+  { id: 'fibonacci', label: 'Fibonacci', icon: '🔢' },
+];
 
-  const tools = [
-    { id: 'none' as DrawingTool, label: 'Cursor', icon: '🖱️' },
-    { id: 'trendline' as DrawingTool, label: 'Trend Line', icon: '📈' },
-    { id: 'horizontal' as DrawingTool, label: 'H-Line', icon: '➖' },
-    { id: 'rectangle' as DrawingTool, label: 'Rectangle', icon: '▭' },
-    { id: 'fibonacci' as DrawingTool, label: 'Fibonacci', icon: '🔢' },
-  ];
-
-  return (
-    <div className="drawing-tools">
+/** Slim vertical tool rail along the left edge of the chart */
+export const DrawingTools: React.FC<DrawingToolsProps> = ({ onToolSelect, selectedTool, onClearAll }) => (
+  <div className="drawing-rail" role="toolbar" aria-label="Drawing tools">
+    {TOOLS.map((tool) => (
       <button
-        className="tools-toggle"
-        onClick={() => setIsExpanded(!isExpanded)}
+        key={tool.id}
+        className={`rail-btn ${selectedTool === tool.id ? 'active' : ''}`}
+        onClick={() => onToolSelect(tool.id)}
+        title={tool.label}
+        aria-label={tool.label}
       >
-        🎨 Drawing Tools {isExpanded ? '▲' : '▼'}
+        {tool.icon}
       </button>
-      
-      {isExpanded && (
-        <div className="tools-panel">
-          <div className="tools-grid">
-            {tools.map((tool) => (
-              <button
-                key={tool.id}
-                className={`tool-btn ${selectedTool === tool.id ? 'active' : ''}`}
-                onClick={() => onToolSelect(tool.id)}
-                title={tool.label}
-              >
-                <span className="tool-icon">{tool.icon}</span>
-                <span className="tool-label">{tool.label}</span>
-              </button>
-            ))}
-          </div>
-          
-          <button className="clear-btn" onClick={onClearAll}>
-            🗑️ Clear All
-          </button>
-        </div>
-      )}
-    </div>
-  );
-};
+    ))}
+    <span className="rail-sep" />
+    <button className="rail-btn danger" onClick={onClearAll} title="Clear all drawings" aria-label="Clear all drawings">
+      🗑️
+    </button>
+  </div>
+);
