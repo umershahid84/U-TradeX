@@ -4,11 +4,11 @@
   "description": "Personalized Trading Platform",
   "main": "index.js",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently -k -n api,web \"npm run server\" \"npm run dev:web\"",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "server": "python server/app.py",
-    "dev:all": "concurrently -k -n api,web \"npm run server\" \"npm run dev\""
+    "server": "node server/start.mjs",
+    "dev:web": "vite"
   },
   "keywords": [],
   "author": "",

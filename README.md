@@ -817,13 +817,12 @@ Made with ❤️ for traders who want to practice without risk.
 
 Browsers cannot call Yahoo Finance directly, so prices come from a small local
 Python server (`server/app.py`) built on [yfinance](https://github.com/ranaroussi/yfinance).
-Vite proxies `/api` to it.
+Vite proxies `/api` to it. Python 3.9+ is required.
 
 ```bash
-pip install -r server/requirements.txt   # once (a virtualenv is recommended)
-npm install                              # once
-npm run dev:all                          # starts the API (port 8000) and the web app (port 3000)
+npm install
+npm run dev     # starts the API (port 8000, installs Python deps on first run) and the web app (port 3000)
 ```
 
-Or run them separately with `npm run server` and `npm run dev`. If the header
-shows "Disconnected", the API server is not running.
+If the header shows "Disconnected", the reason is printed next to it. Check the
+`[api]` lines in the terminal for server errors.

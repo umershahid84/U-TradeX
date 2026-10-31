@@ -59,6 +59,7 @@ function App() {
   const [tpslSettings, setTpslSettings] = useState<Map<string, TakeProfitStopLoss>>(new Map());
   const [includeAfterHours, setIncludeAfterHours] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
+  const [dataError, setDataError] = useState<string>('');
   const [showLeftSidebar, setShowLeftSidebar] = useState(() => {
     return getStorageValue('showLeftSidebar', 'true') !== 'false';
   });
@@ -156,6 +157,7 @@ function App() {
   useEffect(() => {
     const loadData = async () => {
       setConnectionStatus('connecting');
+      setDataError('');
       const yahooRange = getYahooRange(timeRange);
       const yahooInterval = getYahooInterval(timeframe);
       
@@ -173,6 +175,7 @@ function App() {
         }
       } catch (error) {
         console.error('Error loading data:', error);
+        setDataError(error instanceof Error ? error.message : String(error));
         setConnectionStatus('disconnected');
       }
     };
@@ -364,7 +367,7 @@ function App() {
                 <span className="status-text">
                   {connectionStatus === 'connected' ? 'Live' : 
                    connectionStatus === 'connecting' ? 'Connecting...' : 
-                   'Disconnected'}
+                   `Disconnected${dataError ? ` - ${dataError}` : ''}`}
                 </span>
               </div>
             </div>
