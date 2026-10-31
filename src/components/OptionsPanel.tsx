@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { OptionContract } from '../types';
 import { RealMarketDataService, OptionChainData } from '../services/realMarketData';
+import { OptionSide, RatedOption, daysToExpiry, rankOtmOptions } from '../utils/optionScoring';
 import './OptionsPanel.css';
 
 interface OptionsPanelProps {
@@ -10,200 +11,168 @@ interface OptionsPanelProps {
   onBuyOption: (option: Omit<OptionContract, 'quantity'> & { quantity: number }) => void;
 }
 
+interface ExpiryChain {
+  expiry: string;
+  calls: OptionChainData[];
+  puts: OptionChainData[];
+}
+
+interface Selection {
+  expiry: string;
+  option: OptionChainData;
+}
+
+// Expiries scanned for the best contracts: far enough out to have time, not so far they are illiquid
+const SCAN_MIN_DTE = 5;
+const SCAN_MAX_DTE = 75;
+const SCAN_MAX_EXPIRIES = 5;
+const REFRESH_MS = 60_000;
+
+const fmtExpiry = (date: string) =>
+  new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+
+// Estimated fill: the bid/ask midpoint, falling back to the last trade when there is no quote
+const fillPrice = (o: OptionChainData): number => (o.bid > 0 && o.ask > 0 ? (o.bid + o.ask) / 2 : o.lastPrice);
+
 export const OptionsPanel: React.FC<OptionsPanelProps> = ({
   symbol,
   currentPrice,
   balance,
   onBuyOption,
 }) => {
-  const [optionType, setOptionType] = useState<'call' | 'put'>('call');
+  const [optionType, setOptionType] = useState<OptionSide>('call');
+  const [view, setView] = useState<'best' | 'chain'>('best');
   const [expiryDates, setExpiryDates] = useState<string[]>([]);
-  const [selectedExpiry, setSelectedExpiry] = useState<string>('');
-  const [optionsChain, setOptionsChain] = useState<{ calls: OptionChainData[], puts: OptionChainData[] }>({ calls: [], puts: [] });
-  const [selectedOption, setSelectedOption] = useState<OptionChainData | null>(null);
-  const [quantity, setQuantity] = useState<string>('1');
+  const [chains, setChains] = useState<Record<string, ExpiryChain>>({});
+  const [chainExpiry, setChainExpiry] = useState('');
+  const [selected, setSelected] = useState<Selection | null>(null);
+  const [quantity, setQuantity] = useState('1');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const marketData = RealMarketDataService.getInstance();
 
-  // Load expiration dates
+  const loadChain = useCallback(
+    async (expiry: string): Promise<ExpiryChain | null> => {
+      const result = await marketData.fetchOptionsChain(symbol, expiry);
+      if (!result.length) return null;
+      return { expiry, calls: result[0].calls || [], puts: result[0].puts || [] };
+    },
+    [symbol]
+  );
+
+  // Load expirations, then the chains for the expiries worth scanning
   useEffect(() => {
-    const loadExpirations = async () => {
-      setLoading(true);
+    let cancelled = false;
+    setSelected(null);
+    setChains({});
+    setExpiryDates([]);
+    setError('');
+
+    const run = async (initial: boolean) => {
+      if (initial) setLoading(true);
       try {
         const dates = await marketData.getOptionExpirations(symbol);
-        if (dates.length > 0) {
-          setExpiryDates(dates);
-          setSelectedExpiry(dates[0]);
-        } else {
-          // Fallback to generated dates if API returns empty
-          console.log('No expiration dates from API, using fallback');
-          const fallbackDates = generateExpiryDates();
-          setExpiryDates(fallbackDates);
-          if (fallbackDates.length > 0) {
-            setSelectedExpiry(fallbackDates[0]);
-          }
+        if (cancelled) return;
+        if (!dates.length) {
+          setError(`No options are listed for ${symbol}`);
+          return;
         }
-      } catch (error) {
-        console.error('Error loading expirations:', error);
-        // Fallback to generated dates
-        const fallbackDates = generateExpiryDates();
-        setExpiryDates(fallbackDates);
-        if (fallbackDates.length > 0) {
-          setSelectedExpiry(fallbackDates[0]);
-        }
+        setExpiryDates(dates);
+        setChainExpiry((prev) => (prev && dates.includes(prev) ? prev : dates[0]));
+
+        let scan = dates.filter((d) => {
+          const dte = daysToExpiry(d);
+          return dte >= SCAN_MIN_DTE && dte <= SCAN_MAX_DTE;
+        });
+        if (!scan.length) scan = dates.slice(0, 3);
+        scan = scan.slice(0, SCAN_MAX_EXPIRIES);
+
+        const loaded = await Promise.all(scan.map(loadChain));
+        if (cancelled) return;
+        const next: Record<string, ExpiryChain> = {};
+        loaded.forEach((c) => { if (c) next[c.expiry] = c; });
+        if (!Object.keys(next).length) setError('Could not load the options chain. Try again shortly.');
+        else setError('');
+        setChains((prev) => ({ ...prev, ...next }));
+      } finally {
+        if (!cancelled && initial) setLoading(false);
       }
-      setLoading(false);
     };
 
-    loadExpirations();
-  }, [symbol]);
+    void run(true);
+    const id = setInterval(() => void run(false), REFRESH_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [symbol, loadChain]);
 
-  // Load options chain when expiry changes
+  // Full-chain view can show any expiry, so fetch ones that were not scanned
   useEffect(() => {
-    if (!selectedExpiry) return;
+    if (view !== 'chain' || !chainExpiry || chains[chainExpiry]) return;
+    let cancelled = false;
+    setLoading(true);
+    loadChain(chainExpiry)
+      .then((c) => { if (!cancelled && c) setChains((prev) => ({ ...prev, [c.expiry]: c })); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [view, chainExpiry, chains, loadChain]);
 
-    const loadOptionsChain = async () => {
-      setLoading(true);
-      try {
-        const chains = await marketData.fetchOptionsChain(symbol, selectedExpiry);
-        if (chains.length > 0 && (chains[0].calls.length > 0 || chains[0].puts.length > 0)) {
-          setOptionsChain({
-            calls: chains[0].calls || [],
-            puts: chains[0].puts || [],
-          });
-        } else {
-          // Generate fallback options data
-          console.log('No options data from API, generating fallback');
-          const fallbackChain = generateFallbackOptionsChain(symbol, currentPrice, selectedExpiry);
-          setOptionsChain(fallbackChain);
-        }
-      } catch (error) {
-        console.error('Error loading options chain:', error);
-        // Generate fallback options data
-        const fallbackChain = generateFallbackOptionsChain(symbol, currentPrice, selectedExpiry);
-        setOptionsChain(fallbackChain);
-      }
-      setLoading(false);
-    };
+  const ranked = useMemo(
+    () => (currentPrice > 0 ? rankOtmOptions(optionType, Object.values(chains), currentPrice) : []),
+    [chains, optionType, currentPrice]
+  );
 
-    loadOptionsChain();
-  }, [symbol, selectedExpiry, currentPrice]);
+  const chainRows = useMemo(() => {
+    const chain = chains[chainExpiry];
+    if (!chain || currentPrice <= 0) return [];
+    const list = optionType === 'call' ? chain.calls : chain.puts;
+    return [...list]
+      .sort((a, b) => Math.abs(a.strike - currentPrice) - Math.abs(b.strike - currentPrice))
+      .slice(0, 12)
+      .sort((a, b) => a.strike - b.strike);
+  }, [chains, chainExpiry, optionType, currentPrice]);
 
-  // Generate expiry dates (fallback)
-  const generateExpiryDates = () => {
-    const dates = [];
-    const today = new Date();
-    
-    for (let i = 0; i < 4; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + (i * 7) + (5 - today.getDay() + 7) % 7);
-      dates.push(date.toISOString().split('T')[0]);
-    }
-    
-    return dates;
-  };
-
-  // Generate fallback options chain when API fails
-  const generateFallbackOptionsChain = (_symbol: string, currentPrice: number, _expiry: string) => {
-    const strikes: number[] = [];
-    
-    // Generate strikes with better logic
-    // Round current price to nearest strike interval
-    const strikeInterval = currentPrice < 25 ? 1 : currentPrice < 100 ? 2.5 : currentPrice < 200 ? 5 : 10;
-    const atmStrike = Math.round(currentPrice / strikeInterval) * strikeInterval;
-    
-    // Generate 10 strikes above and below ATM
-    for (let i = -10; i <= 10; i++) {
-      const strike = atmStrike + (i * strikeInterval);
-      if (strike > 0) {
-        strikes.push(Math.round(strike * 100) / 100);
-      }
-    }
-    
-    const calls: OptionChainData[] = strikes.map(strike => {
-      const inTheMoney = currentPrice > strike;
-      const intrinsicValue = Math.max(0, currentPrice - strike);
-      // More realistic time value calculation based on distance from ATM
-      const distanceFromATM = Math.abs(strike - currentPrice) / currentPrice;
-      const timeValue = currentPrice * 0.03 * Math.exp(-distanceFromATM * 3);
-      const premium = intrinsicValue + timeValue;
-      
-      return {
-        strike,
-        lastPrice: Math.max(0.01, Math.round(premium * 100) / 100),
-        bid: Math.max(0.01, Math.round((premium * 0.95) * 100) / 100),
-        ask: Math.max(0.01, Math.round((premium * 1.05) * 100) / 100),
-        volume: Math.floor(100 + Math.random() * 1000),
-        openInterest: Math.floor(500 + Math.random() * 5000),
-        impliedVolatility: 0.2 + Math.random() * 0.3,
-        inTheMoney,
-      };
-    });
-    
-    const puts: OptionChainData[] = strikes.map(strike => {
-      const inTheMoney = currentPrice < strike;
-      const intrinsicValue = Math.max(0, strike - currentPrice);
-      // More realistic time value calculation
-      const distanceFromATM = Math.abs(strike - currentPrice) / currentPrice;
-      const timeValue = currentPrice * 0.03 * Math.exp(-distanceFromATM * 3);
-      const premium = intrinsicValue + timeValue;
-      
-      return {
-        strike,
-        lastPrice: Math.max(0.01, Math.round(premium * 100) / 100),
-        bid: Math.max(0.01, Math.round((premium * 0.95) * 100) / 100),
-        ask: Math.max(0.01, Math.round((premium * 1.05) * 100) / 100),
-        volume: Math.floor(100 + Math.random() * 1000),
-        openInterest: Math.floor(500 + Math.random() * 5000),
-        impliedVolatility: 0.2 + Math.random() * 0.3,
-        inTheMoney,
-      };
-    });
-    
-    return { calls, puts };
-  };
-
-  const handleOptionSelect = (option: OptionChainData) => {
-    setSelectedOption(option);
-  };
+  const select = (expiry: string, option: OptionChainData) => setSelected({ expiry, option });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!selectedOption) {
-      alert('Please select an option from the chain');
+    if (!selected) {
+      alert('Please select a contract');
       return;
     }
-
     const qty = parseInt(quantity);
     if (isNaN(qty) || qty < 1) {
       alert('Please enter a valid quantity');
       return;
     }
-
-    const cost = selectedOption.lastPrice * qty * 100;
-    if (cost > balance) {
+    const premium = fillPrice(selected.option);
+    if (premium * qty * 100 > balance) {
       alert('Insufficient balance');
       return;
     }
-
     onBuyOption({
       symbol,
       type: optionType,
-      strike: selectedOption.strike,
-      expiry: selectedExpiry,
-      premium: selectedOption.lastPrice,
+      strike: selected.option.strike,
+      expiry: selected.expiry,
+      premium,
       quantity: qty,
     });
-
     setQuantity('1');
-    setSelectedOption(null);
+    setSelected(null);
   };
 
-  const estimatedCost = selectedOption ? selectedOption.lastPrice * parseInt(quantity || '1') * 100 : 0;
+  const premium = selected ? fillPrice(selected.option) : 0;
+  const estimatedCost = premium * (parseInt(quantity || '1') || 0) * 100;
 
-  const currentOptions = optionType === 'call' ? optionsChain.calls : optionsChain.puts;
+  const selectedRating: RatedOption | undefined = selected
+    ? ranked.find((r) => r.expiry === selected.expiry && r.contract.strike === selected.option.strike)
+    : undefined;
+
+  const isSelected = (expiry: string, strike: number) =>
+    selected?.expiry === expiry && selected.option.strike === strike;
 
   return (
     <div className="options-panel">
@@ -216,44 +185,84 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
             <button
               type="button"
               className={optionType === 'call' ? 'active call' : 'call'}
-              onClick={() => setOptionType('call')}
+              onClick={() => { setOptionType('call'); setSelected(null); }}
             >
               CALL
             </button>
             <button
               type="button"
               className={optionType === 'put' ? 'active put' : 'put'}
-              onClick={() => setOptionType('put')}
+              onClick={() => { setOptionType('put'); setSelected(null); }}
             >
               PUT
             </button>
           </div>
         </div>
 
-        <div className="form-group">
-          <label>Expiry Date</label>
-          <select
-            value={selectedExpiry}
-            onChange={(e) => setSelectedExpiry(e.target.value)}
-            required
-            disabled={loading}
-          >
-            <option value="">Select expiry date</option>
-            {expiryDates.map((date) => (
-              <option key={date} value={date}>
-                {new Date(date).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}
-              </option>
-            ))}
-          </select>
+        <div className="view-tabs">
+          <button type="button" className={view === 'best' ? 'active' : ''} onClick={() => setView('best')}>
+            ⭐ Best OTM
+          </button>
+          <button type="button" className={view === 'chain' ? 'active' : ''} onClick={() => setView('chain')}>
+            Full chain
+          </button>
         </div>
 
-        {loading ? (
+        {view === 'chain' && (
+          <div className="form-group">
+            <label>Expiry Date</label>
+            <select value={chainExpiry} onChange={(e) => setChainExpiry(e.target.value)} disabled={loading}>
+              {expiryDates.map((date) => (
+                <option key={date} value={date}>
+                  {fmtExpiry(date)} ({Math.round(daysToExpiry(date))}d)
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {loading && Object.keys(chains).length === 0 ? (
           <div className="loading">Loading options chain...</div>
-        ) : currentOptions.length > 0 ? (
+        ) : error && Object.keys(chains).length === 0 ? (
+          <div className="no-data">{error}</div>
+        ) : view === 'best' ? (
+          ranked.length > 0 ? (
+            <div className="best-list">
+              <div className="best-note">
+                Top out-of-the-money {optionType}s across the next few expiries, rated 0-100 on liquidity,
+                delta, breakeven and time.
+              </div>
+              {ranked.map((r) => (
+                <div
+                  key={`${r.expiry}-${r.contract.strike}`}
+                  className={`best-row ${isSelected(r.expiry, r.contract.strike) ? 'selected' : ''}`}
+                  onClick={() => select(r.expiry, r.contract)}
+                >
+                  <span className={`grade grade-${r.grade}`} title={`Score ${r.score.toFixed(0)}/100`}>
+                    {r.grade}
+                    <small>{r.score.toFixed(0)}</small>
+                  </span>
+                  <div className="best-main">
+                    <div className="best-title">
+                      ${r.contract.strike.toFixed(2)} {optionType.toUpperCase()}
+                      <span className="best-expiry">{fmtExpiry(r.expiry)} · {Math.round(r.dte)}d</span>
+                    </div>
+                    <div className="best-stats">
+                      <span>Δ {r.delta.toFixed(2)}</span>
+                      <span>Spread {(r.spreadPct * 100).toFixed(0)}%</span>
+                      <span>B/E {(r.breakevenMove * 100).toFixed(1)}%</span>
+                      <span>Vol {r.contract.volume.toLocaleString()}</span>
+                      <span>OI {r.contract.openInterest.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <span className="best-price">${r.mid.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="no-data">No liquid out-of-the-money {optionType}s found right now</div>
+          )
+        ) : chainRows.length > 0 ? (
           <div className="options-chain">
             <div className="chain-header">
               <span>Strike</span>
@@ -262,50 +271,64 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
               <span>Vol</span>
             </div>
             <div className="chain-list">
-              {currentOptions
-                .filter(opt => Math.abs(opt.strike - currentPrice) / currentPrice < 0.2) // Show strikes within 20% of current price
-                .slice(0, 10) // Limit to 10 options
-                .map((option) => (
-                  <div
-                    key={option.strike}
-                    className={`chain-row ${selectedOption?.strike === option.strike ? 'selected' : ''} ${option.inTheMoney ? 'itm' : 'otm'}`}
-                    onClick={() => handleOptionSelect(option)}
-                  >
-                    <span className="strike">${option.strike.toFixed(2)}</span>
-                    <span className="last">${option.lastPrice.toFixed(2)}</span>
-                    <span className="bid-ask">
-                      ${option.bid.toFixed(2)}/${option.ask.toFixed(2)}
-                    </span>
-                    <span className="volume">{option.volume.toLocaleString()}</span>
-                  </div>
-                ))}
+              {chainRows.map((option) => (
+                <div
+                  key={option.strike}
+                  className={`chain-row ${isSelected(chainExpiry, option.strike) ? 'selected' : ''} ${option.inTheMoney ? 'itm' : 'otm'}`}
+                  onClick={() => select(chainExpiry, option)}
+                >
+                  <span className="strike">${option.strike.toFixed(2)}</span>
+                  <span className="last">${option.lastPrice.toFixed(2)}</span>
+                  <span className="bid-ask">
+                    ${option.bid.toFixed(2)}/${option.ask.toFixed(2)}
+                  </span>
+                  <span className="volume">{option.volume.toLocaleString()}</span>
+                </div>
+              ))}
             </div>
           </div>
         ) : (
           <div className="no-data">No options data available</div>
         )}
 
-        {selectedOption && (
+        {selected && (
           <>
             <div className="selected-option-info">
-              <h4>Selected Option</h4>
+              <h4>
+                Selected Option
+                {selectedRating && (
+                  <span className={`grade grade-${selectedRating.grade} inline`}>{selectedRating.grade}</span>
+                )}
+              </h4>
               <div className="info-grid">
                 <div>
                   <label>Strike:</label>
-                  <span>${selectedOption.strike.toFixed(2)}</span>
+                  <span>${selected.option.strike.toFixed(2)}</span>
                 </div>
                 <div>
-                  <label>Premium:</label>
-                  <span>${selectedOption.lastPrice.toFixed(2)}</span>
+                  <label>Expiry:</label>
+                  <span>{fmtExpiry(selected.expiry)}</span>
+                </div>
+                <div>
+                  <label>Premium (mid):</label>
+                  <span>${premium.toFixed(2)}</span>
                 </div>
                 <div>
                   <label>IV:</label>
-                  <span>{(selectedOption.impliedVolatility * 100).toFixed(1)}%</span>
+                  <span>{(selected.option.impliedVolatility * 100).toFixed(1)}%</span>
                 </div>
                 <div>
                   <label>OI:</label>
-                  <span>{selectedOption.openInterest.toLocaleString()}</span>
+                  <span>{selected.option.openInterest.toLocaleString()}</span>
                 </div>
+                {selectedRating && (
+                  <div>
+                    <label>Breakeven:</label>
+                    <span>
+                      ${(optionType === 'call' ? selected.option.strike + premium : selected.option.strike - premium).toFixed(2)}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -335,7 +358,7 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
                 <span className="value">${balance.toFixed(2)}</span>
               </div>
               <div className="summary-info">
-                Each contract represents 100 shares
+                Each contract represents 100 shares. Filled at the bid/ask midpoint.
               </div>
             </div>
 
