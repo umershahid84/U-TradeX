@@ -72,19 +72,19 @@ export class RealMarketDataService {
   }
 
 
-  // Market data comes from the local yfinance server (server/app.py), proxied by
-  // Vite at /api. Browsers cannot call Yahoo directly.
+  // Market data comes from the /api serverless functions (api/_lib/market.ts), served by
+  // Vercel in production and by Vite in dev. Browsers cannot call Yahoo directly.
   private async apiGet<T>(path: string, params: Record<string, string>, timeout = 15000): Promise<T> {
     try {
       const response = await axios.get<T>(`/api/${path}`, { params, timeout });
       if (!response.data || typeof response.data !== 'object') {
-        throw new Error('Market data server is not running (run `npm run server`)');
+        throw new Error('Market data server is not running (try again shortly)');
       }
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const detail = error.response?.data?.error;
-        throw new Error(detail || 'Market data server unreachable (run `npm run server`)');
+        throw new Error(detail || 'Market data server unreachable (try again shortly)');
       }
       throw error;
     }

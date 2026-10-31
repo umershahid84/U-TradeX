@@ -813,16 +813,17 @@ Made with ❤️ for traders who want to practice without risk.
 **Happy Paper Trading! 📈💰**
 
 
-## Live market data (yfinance server)
+## Live market data
 
-Browsers cannot call Yahoo Finance directly, so prices come from a small local
-Python server (`server/app.py`) built on [yfinance](https://github.com/ranaroussi/yfinance).
-Vite proxies `/api` to it. Python 3.9+ is required.
+Browsers cannot call Yahoo Finance directly, so prices are served by serverless
+functions in `api/` (`/api/chart`, `/api/quote`, `/api/options`) built on
+[yahoo-finance2](https://github.com/gadicc/yahoo-finance2). The same code
+(`api/_lib/market.ts`) runs on Vercel in production and inside `npm run dev`
+locally, so there is nothing extra to start.
 
 ```bash
 npm install
-npm run dev     # starts the API (port 8000, installs Python deps on first run) and the web app (port 3000)
+npm run dev
 ```
 
-If the header shows "Disconnected", the reason is printed next to it. Check the
-`[api]` lines in the terminal for server errors.
+Deploy by importing the repo into Vercel (Vite preset); no environment variables are needed.
