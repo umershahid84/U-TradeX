@@ -247,26 +247,26 @@ function App() {
     return unsubscribe;
   }, [symbol, timeframe, updatePositionPrices, includeAfterHours, checkTPSL]);
 
-  // Subscribe to price updates for all open positions
+  // Subscribe to price updates for every other symbol we hold stock or options in.
+  // Keyed by the symbol list (not the account objects, which change on every tick).
+  const heldSymbols = [...new Set([
+    ...account.positions.map((p) => p.symbol),
+    ...account.options.map((o) => o.symbol),
+  ])].filter((s) => s !== symbol).sort().join(',');
+
   useEffect(() => {
-    const unsubscribers: (() => void)[] = [];
-
-    account.positions.forEach((position) => {
-      // Skip if it's the current symbol (already subscribed above)
-      if (position.symbol === symbol) return;
-
-      const unsubscribe = marketData.subscribeToPrice(position.symbol, (price) => {
-        updatePositionPrices(position.symbol, price);
-        checkTPSL(position.symbol, price);
-      });
-
-      unsubscribers.push(unsubscribe);
-    });
+    if (!heldSymbols) return;
+    const unsubscribers = heldSymbols.split(',').map((held) =>
+      marketData.subscribeToPrice(held, (price) => {
+        updatePositionPrices(held, price);
+        checkTPSL(held, price);
+      })
+    );
 
     return () => {
       unsubscribers.forEach(unsub => unsub());
     };
-  }, [account.positions, symbol, updatePositionPrices, checkTPSL]);
+  }, [heldSymbols, updatePositionPrices, checkTPSL]);
 
   // Calculate Fear & Greed indicator
   useEffect(() => {

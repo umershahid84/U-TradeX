@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { OptionContract, ChartData } from '../types';
 import { OptionsDirectionGuide } from './OptionsDirectionGuide';
+import { OptionPnlEstimate } from './OptionPnlEstimate';
+import { solveIv, yearsToExpiry } from '../utils/optionPricing';
 import { RealMarketDataService, OptionChainData } from '../services/realMarketData';
 import { OptionSide, RatedOption, daysToExpiry, rankOtmOptions } from '../utils/optionScoring';
 import './OptionsPanel.css';
@@ -164,6 +166,10 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
       expiry: selected.expiry,
       premium,
       quantity: qty,
+      // Volatility implied by the price paid, so the position starts at ~$0 P/L
+      impliedVolatility:
+        solveIv(optionType, currentPrice, selected.option.strike, premium, yearsToExpiry(selected.expiry)) ??
+        selected.option.impliedVolatility,
     });
     setQuantity('1');
     setSelected(null);
@@ -343,6 +349,16 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
                 )}
               </div>
             </div>
+
+            <OptionPnlEstimate
+              side={optionType}
+              spot={currentPrice}
+              strike={selected.option.strike}
+              premium={premium}
+              contracts={parseInt(quantity) || 1}
+              iv={selected.option.impliedVolatility}
+              years={yearsToExpiry(selected.expiry)}
+            />
 
             <div className="form-group">
               <label>Number of Contracts</label>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { PaperTradingAccount, Order, Position, OptionContract } from '../types';
+import { bsPrice, yearsToExpiry } from '../utils/optionPricing';
 
 const DEFAULT_BALANCE = 100000;
 let fallbackOrderCounter = 0;
@@ -29,7 +30,7 @@ const recalculateAccountTotals = (account: PaperTradingAccount): PaperTradingAcc
     0
   );
   const optionsValue = account.options.reduce(
-    (sum, option) => sum + option.premium * option.quantity * 100,
+    (sum, option) => sum + (option.currentPremium ?? option.premium) * option.quantity * 100,
     0
   );
   const totalValue = account.balance + positionsValue + optionsValue;
@@ -215,6 +216,15 @@ export const usePaperTrading = () => {
           }
           return p;
         }),
+        // Re-estimate open option contracts on this underlying with Black-Scholes
+        options: prev.options.map((o) =>
+          o.symbol === symbol && (o.impliedVolatility ?? 0) >= 0.05
+            ? {
+                ...o,
+                currentPremium: bsPrice(o.type, currentPrice, o.strike, o.impliedVolatility ?? 0, yearsToExpiry(o.expiry)),
+              }
+            : o
+        ),
       })
     );
   }, []);

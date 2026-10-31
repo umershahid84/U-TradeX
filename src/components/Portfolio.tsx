@@ -81,21 +81,34 @@ export const Portfolio: React.FC<PortfolioProps> = ({ account, onReset }) => {
         <div className="options-section">
           <h4>Options ({account.options.length})</h4>
           <div className="options-list">
-            {account.options.map((option, index) => (
-              <div key={index} className="option-item">
-                <div className="option-info">
-                  <span className={`option-type ${option.type}`}>
-                    {option.type.toUpperCase()}
-                  </span>
-                  <span>{option.symbol}</span>
-                  <span>${option.strike}</span>
-                  <span>{option.expiry}</span>
+            {account.options.map((option, index) => {
+              const cost = option.premium * option.quantity * 100;
+              const value = (option.currentPremium ?? option.premium) * option.quantity * 100;
+              const pnl = value - cost;
+              const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0;
+              const expired = Date.parse(`${option.expiry}T20:00:00Z`) < Date.now();
+              return (
+                <div key={index} className="option-item">
+                  <div className="option-info">
+                    <span className={`option-type ${option.type}`}>
+                      {option.type.toUpperCase()}
+                    </span>
+                    <span>{option.symbol}</span>
+                    <span>${option.strike}</span>
+                    <span>{option.expiry}{expired ? ' (expired)' : ''}</span>
+                  </div>
+                  <div className="option-value">
+                    <div>{option.quantity} contracts @ ${option.premium.toFixed(2)}</div>
+                    <div className="option-pnl">
+                      Est. value ${value.toFixed(0)}{' '}
+                      <span className={pnl >= 0 ? 'gain' : 'loss'}>
+                        {pnl >= 0 ? '+' : '-'}${Math.abs(pnl).toFixed(0)} ({pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(0)}%)
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="option-value">
-                  {option.quantity} contracts @ ${option.premium}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

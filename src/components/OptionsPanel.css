@@ -359,3 +359,31 @@
 .guide-signals .sig-name { font-weight: 600; color: #e0e0e0; }
 .guide-signals .sig-detail { grid-column: 2; color: #9a9ec0; }
 .guide-disclaimer { margin-top: 8px; font-size: 10px; color: #787b9a; line-height: 1.4; }
+
+/* ---- P/L estimate ---- */
+.pnl-estimate { background: #1a1e3f; border-radius: 6px; padding: 12px; margin: 12px 0; }
+.pnl-estimate h4 { margin: 0 0 8px; font-size: 13px; color: #e0e0e0; }
+.pnl-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px; }
+.pnl-summary label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: #8a8fb5; }
+.pnl-summary span { font-size: 13px; font-weight: 700; color: #e0e0e0; }
+.pnl-summary small { font-weight: 500; color: #9a9ec0; font-size: 10px; }
+.pnl-estimate .gain { color: #26a69a; }
+.pnl-estimate .loss { color: #ef5350; }
+
+.pnl-chart { width: 100%; height: auto; background: #0f1330; border-radius: 4px; display: block; }
+.pnl-chart .axis { stroke: #3a3e6f; stroke-width: 1; }
+.pnl-chart .spot { stroke: #8a8fb5; stroke-width: 1; stroke-dasharray: 3 3; }
+.pnl-chart .be { stroke: #ffca28; stroke-width: 1; stroke-dasharray: 2 3; }
+.pnl-chart .line-expiry { fill: none; stroke: #26a69a; stroke-width: 2; }
+.pnl-chart .line-now { fill: none; stroke: #5c8dff; stroke-width: 1.5; }
+.pnl-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 10px; color: #9a9ec0; margin: 4px 0 8px; }
+.pnl-legend .sw { display: inline-block; width: 10px; height: 3px; margin-right: 4px; vertical-align: middle; }
+.pnl-legend .sw.expiry { background: #26a69a; } .pnl-legend .sw.now { background: #5c8dff; } .pnl-legend .sw.spot { background: #8a8fb5; }
+
+.pnl-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.pnl-table th { text-align: right; font-weight: 600; color: #8a8fb5; padding: 3px 4px; }
+.pnl-table td { text-align: right; padding: 3px 4px; color: #c0c4e0; }
+.pnl-table th:first-child, .pnl-table td:first-child { text-align: left; }
+.pnl-table tr.current td { background: rgba(255,255,255,0.05); font-weight: 600; }
+.pnl-table small { color: #9a9ec0; }
+.pnl-note { margin-top: 8px; font-size: 10px; line-height: 1.4; color: #787b9a; }

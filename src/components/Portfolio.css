@@ -259,3 +259,9 @@
   font-size: 12px;
   font-weight: 500;
 }
+
+.option-item { gap: 8px; flex-wrap: wrap; }
+.option-value { text-align: right; }
+.option-pnl { font-size: 11px; color: #9a9ec0; margin-top: 2px; }
+.option-pnl .gain { color: #26a69a; font-weight: 600; }
+.option-pnl .loss { color: #ef5350; font-weight: 600; }

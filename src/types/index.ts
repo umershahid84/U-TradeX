@@ -32,6 +32,10 @@ export interface OptionContract {
   expiry: string;
   premium: number;
   quantity: number;
+  /** Implied volatility when bought, used to estimate the current value */
+  impliedVolatility?: number;
+  /** Latest estimated value per share; falls back to the purchase premium */
+  currentPremium?: number;
 }
 
 export interface PaperTradingAccount {
