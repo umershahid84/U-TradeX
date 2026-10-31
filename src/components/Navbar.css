@@ -137,3 +137,43 @@
     flex-wrap: wrap;
   }
 }
+
+@media (max-width: 900px) {
+  .navbar {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .navbar-brand h1 { font-size: 20px; }
+  .brand-tagline { display: none; }
+
+  .symbol-search { width: 100%; }
+  .search-input { flex: 1; width: auto; min-width: 0; font-size: 16px; }
+
+  .timeframe-selector,
+  .range-selector {
+    flex-wrap: nowrap;
+    width: 100%;
+  }
+
+  .selector-label { flex-shrink: 0; }
+
+  /* one swipeable row instead of wrapping into many lines */
+  .timeframe-buttons,
+  .range-buttons {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    min-width: 0;
+  }
+
+  .timeframe-buttons::-webkit-scrollbar,
+  .range-buttons::-webkit-scrollbar { display: none; }
+
+  .timeframe-buttons button,
+  .range-buttons button {
+    flex-shrink: 0;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+}

@@ -207,3 +207,48 @@
   background: #3a3e6f;
 }
 
+
+@media (max-width: 900px) {
+  .trading-chart-container { min-height: 0; }
+
+  .chart { min-height: 260px; }
+
+  /* controls sit above the chart in normal flow instead of covering the candles */
+  .chart-top-controls,
+  .indicator-panel,
+  .custom-panel-overlay {
+    position: relative;
+    top: auto;
+    left: auto;
+    right: auto;
+    flex-shrink: 0;
+  }
+
+  .chart-top-controls {
+    flex-wrap: wrap;
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .button-row { flex-wrap: wrap; }
+
+  .indicator-toggle,
+  .fibonacci-btn { padding: 8px 10px; }
+
+  .indicator-panel {
+    margin: 0 8px 8px;
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+
+  .indicator-checkboxes {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  .custom-panel-overlay {
+    margin: 0 8px 8px;
+    max-width: none;
+    max-height: 50vh;
+  }
+}

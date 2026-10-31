@@ -18,6 +18,20 @@ import './App.css';
 
 const marketData = RealMarketDataService.getInstance();
 
+const MOBILE_QUERY = '(max-width: 900px)';
+
+// True on phone-sized screens, where the layout stacks into a single scrolling column
+const useIsMobile = (): boolean => {
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia(MOBILE_QUERY).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(MOBILE_QUERY);
+    const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return isMobile;
+};
+
 // Length in ms of an intraday Yahoo interval; 0 for daily and above
 const intradayIntervalMs = (interval: string): number => {
   const m = /^(\d+)(m|h)$/.exec(interval);
@@ -60,6 +74,7 @@ function App() {
   const [includeAfterHours, setIncludeAfterHours] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
   const [dataError, setDataError] = useState<string>('');
+  const isMobile = useIsMobile();
   const [showLeftSidebar, setShowLeftSidebar] = useState(() => {
     return getStorageValue('showLeftSidebar', 'true') !== 'false';
   });
@@ -308,6 +323,10 @@ function App() {
     setStorageValue('showRightSidebar', String(newValue));
   };
 
+  // On mobile the panels stack below the chart, so the collapse toggles don't apply
+  const leftVisible = showLeftSidebar || isMobile;
+  const rightVisible = showRightSidebar || isMobile;
+
   return (
     <div className="app">
       <Navbar
@@ -320,7 +339,7 @@ function App() {
       />
       
       <div className="main-content">
-        {showLeftSidebar && (
+        {leftVisible && (
           <div className="left-sidebar">
             <button className="sidebar-toggle left" onClick={toggleLeftSidebar} title="Hide sidebar">
               ◀
@@ -329,7 +348,7 @@ function App() {
           </div>
         )}
         
-        {!showLeftSidebar && (
+        {!leftVisible && (
           <button className="sidebar-toggle-collapsed left" onClick={toggleLeftSidebar} title="Show sidebar">
             ▶
           </button>
@@ -381,7 +400,7 @@ function App() {
           />
         </div>
 
-        {showRightSidebar && (
+        {rightVisible && (
           <div className="right-sidebar">
             <button className="sidebar-toggle right" onClick={toggleRightSidebar} title="Hide sidebar">
               ▶
@@ -411,7 +430,7 @@ function App() {
           </div>
         )}
         
-        {!showRightSidebar && (
+        {!rightVisible && (
           <button className="sidebar-toggle-collapsed right" onClick={toggleRightSidebar} title="Show sidebar">
             ◀
           </button>

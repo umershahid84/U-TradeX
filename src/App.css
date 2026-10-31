@@ -258,7 +258,7 @@
   }
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 1200px) and (min-width: 901px) {
   .main-content {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr auto;
@@ -270,9 +270,66 @@
   }
 }
 
-@media (max-width: 768px) {
+/* Phones and small tablets: one scrolling column, chart first */
+@media (max-width: 900px) {
+  .app {
+    width: 100%;
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
   .main-content {
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
     padding: 8px;
     gap: 8px;
+  }
+
+  .chart-area { order: 1; height: 80vh; height: 80dvh; min-height: 520px; }
+  .right-sidebar { order: 2; }
+  .left-sidebar { order: 3; }
+
+  .left-sidebar,
+  .right-sidebar {
+    width: 100%;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .sidebar-toggle,
+  .sidebar-toggle-collapsed {
+    display: none;
+  }
+
+  .chart-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .symbol-info h2 { font-size: 20px; }
+  .current-price { font-size: 22px; }
+
+  .bid-ask-display {
+    flex-wrap: wrap;
+    gap: 12px 16px;
+  }
+
+  .bid-price .value,
+  .ask-price .value { font-size: 15px; }
+
+  .after-hours-toggle,
+  .connection-status {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: none;
+  }
+
+  .connection-status .status-text {
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
 }

@@ -220,6 +220,11 @@
 /* ---- Pine Script editor ---- */
 .custom-indicator-panel { width: 440px; max-width: 100%; box-sizing: border-box; }
 
+@media (max-width: 900px) {
+  .custom-indicator-panel { width: 100%; }
+  .form-group input, .form-group textarea, .form-group select { font-size: 16px; }
+}
+
 .custom-indicator-panel .add-btn.cancel { background: #5a5f8a; }
 
 .lang-tabs { display: flex; gap: 6px; margin-bottom: 12px; }

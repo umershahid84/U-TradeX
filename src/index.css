@@ -15,6 +15,19 @@ body {
   overflow: hidden;
 }
 
+@media (max-width: 900px) {
+  body {
+    overflow: auto;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  #root {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+}
+
 #root {
   width: 100vw;
   height: 100vh;
