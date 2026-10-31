@@ -83,7 +83,9 @@ export const calculateSMA = (data: number[], period: number): number[] => {
 export const calculateEMA = (data: number[], period: number): number[] => {
   const result: number[] = [];
   const multiplier = 2 / (period + 1);
-  
+
+  if (data.length < period) return data.map(() => NaN);
+
   // First EMA is SMA
   let ema = data.slice(0, period).reduce((a, b) => a + b, 0) / period;
   
@@ -100,39 +102,75 @@ export const calculateEMA = (data: number[], period: number): number[] => {
   return result;
 };
 
-export const calculateRSI = (prices: number[], period: number = 14): number => {
-  if (prices.length < period + 1) return 50;
+// RSI series using Wilder's smoothing (the standard definition).
+// Entries before index `period` are NaN (not enough data).
+export const calculateRSISeries = (prices: number[], period: number = 14): number[] => {
+  const result: number[] = prices.map(() => NaN);
+  if (prices.length < period + 1) return result;
 
-  const changes = [];
-  for (let i = 1; i < prices.length; i++) {
-    changes.push(prices[i] - prices[i - 1]);
+  let avgGain = 0;
+  let avgLoss = 0;
+  for (let i = 1; i <= period; i++) {
+    const change = prices[i] - prices[i - 1];
+    if (change > 0) avgGain += change;
+    else avgLoss -= change;
   }
+  avgGain /= period;
+  avgLoss /= period;
 
-  const gains = changes.map(c => (c > 0 ? c : 0));
-  const losses = changes.map(c => (c < 0 ? Math.abs(c) : 0));
+  const toRSI = () => (avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss));
+  result[period] = toRSI();
 
-  const avgGain = gains.slice(-period).reduce((a, b) => a + b, 0) / period;
-  const avgLoss = losses.slice(-period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period + 1; i < prices.length; i++) {
+    const change = prices[i] - prices[i - 1];
+    const gain = change > 0 ? change : 0;
+    const loss = change < 0 ? -change : 0;
+    avgGain = (avgGain * (period - 1) + gain) / period;
+    avgLoss = (avgLoss * (period - 1) + loss) / period;
+    result[i] = toRSI();
+  }
+  return result;
+};
 
-  if (avgLoss === 0) return 100;
-  const rs = avgGain / avgLoss;
-  return 100 - 100 / (1 + rs);
+export const calculateRSI = (prices: number[], period: number = 14): number => {
+  const series = calculateRSISeries(prices, period);
+  const last = series[series.length - 1];
+  return isNaN(last) ? 50 : last;
+};
+
+// MACD series (12/26/9). Each array is aligned with `prices`; warm-up entries are NaN.
+export const calculateMACDSeries = (
+  prices: number[],
+  fast: number = 12,
+  slow: number = 26,
+  signalPeriod: number = 9
+): { macd: number[]; signal: number[]; histogram: number[] } => {
+  const emaFast = calculateEMA(prices, fast);
+  const emaSlow = calculateEMA(prices, slow);
+  const macd = prices.map((_, i) => emaFast[i] - emaSlow[i]);
+
+  const firstValid = macd.findIndex((v) => !isNaN(v));
+  const signal: number[] = prices.map(() => NaN);
+  if (firstValid >= 0) {
+    const signalValues = calculateEMA(macd.slice(firstValid), signalPeriod);
+    signalValues.forEach((v, j) => {
+      signal[firstValid + j] = v;
+    });
+  }
+  const histogram = macd.map((v, i) => v - signal[i]);
+  return { macd, signal, histogram };
 };
 
 export const calculateMACD = (
   prices: number[]
 ): { macd: number; signal: number; histogram: number } => {
-  const ema12 = calculateEMA(prices, 12);
-  const ema26 = calculateEMA(prices, 26);
-  
-  const macdLine = ema12.map((val, i) => val - ema26[i]);
-  const signalLine = calculateEMA(macdLine.filter(v => !isNaN(v)), 9);
-  
-  const macd = macdLine[macdLine.length - 1] || 0;
-  const signal = signalLine[signalLine.length - 1] || 0;
-  const histogram = macd - signal;
-  
-  return { macd, signal, histogram };
+  const { macd, signal, histogram } = calculateMACDSeries(prices);
+  const last = prices.length - 1;
+  return {
+    macd: macd[last] || 0,
+    signal: signal[last] || 0,
+    histogram: histogram[last] || 0,
+  };
 };
 
 // Ripster EMA Cloud (8, 9, 5, 13 EMAs) with Trend Detection
@@ -181,26 +219,39 @@ export const calculateRipsterTrend = (
   return 'neutral';
 };
 
-// VWAP calculation (daily reset for intraday data)
-// Note: This is a session-based VWAP that accumulates from the start of the data
-// For true daily VWAP, implement session boundary detection
-export const calculateVWAP = (data: { close: number; volume: number; high: number; low: number }[]): number[] => {
+// VWAP calculation. For intraday data it resets at the start of each trading day
+// (New York date); for daily and higher bars it accumulates over the whole series.
+export const calculateVWAP = (
+  data: { time?: number; close: number; volume: number; high: number; low: number }[]
+): number[] => {
   const result: number[] = [];
+  const dayKey = (t: number) =>
+    new Date(t).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+
+  const hasTime = data.length > 1 && typeof data[0].time === 'number';
+  const intraday =
+    hasTime && (data[1].time as number) - (data[0].time as number) < 20 * 60 * 60 * 1000;
+
   let cumulativeTPV = 0; // Typical Price * Volume
   let cumulativeVolume = 0;
+  let currentDay = '';
 
   for (let i = 0; i < data.length; i++) {
+    if (intraday) {
+      const key = dayKey(data[i].time as number);
+      if (key !== currentDay) {
+        currentDay = key;
+        cumulativeTPV = 0;
+        cumulativeVolume = 0;
+      }
+    }
     const typicalPrice = (data[i].high + data[i].low + data[i].close) / 3;
     cumulativeTPV += typicalPrice * data[i].volume;
     cumulativeVolume += data[i].volume;
-    
-    if (cumulativeVolume > 0) {
-      result.push(cumulativeTPV / cumulativeVolume);
-    } else {
-      result.push(data[i].close);
-    }
+
+    result.push(cumulativeVolume > 0 ? cumulativeTPV / cumulativeVolume : typicalPrice);
   }
-  
+
   return result;
 };
 

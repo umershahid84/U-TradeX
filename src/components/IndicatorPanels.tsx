@@ -9,7 +9,7 @@ import {
   LineSeries
 } from 'lightweight-charts';
 import { ChartData } from '../types';
-import { calculateRSI, calculateEMA } from '../utils/indicators';
+import { calculateRSISeries, calculateMACDSeries } from '../utils/indicators';
 import './IndicatorPanels.css';
 
 interface IndicatorPanelsProps {
@@ -152,16 +152,7 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
 
       // Calculate RSI values for each point
       const closes = data.map(d => d.close);
-      const rsiValues: number[] = [];
-      
-      for (let i = 0; i < closes.length; i++) {
-        if (i < 14) {
-          rsiValues.push(50); // Default value for insufficient data
-        } else {
-          const slice = closes.slice(0, i + 1);
-          rsiValues.push(calculateRSI(slice, 14));
-        }
-      }
+      const rsiValues = calculateRSISeries(closes, 14);
 
       const rsiSeries = chart.addSeries(LineSeries, {
         color: '#2196F3',
@@ -169,10 +160,9 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
         title: 'RSI',
       });
 
-      const rsiData: LineData[] = rsiValues.map((value, i) => ({
-        time: (data[i].time / 1000) as Time,
-        value,
-      }));
+      const rsiData: LineData[] = rsiValues
+        .map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+        .filter((p) => !isNaN(p.value));
 
       rsiSeries.setData(rsiData);
 
@@ -268,47 +258,23 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
 
       // Calculate MACD
       const closes = data.map(d => d.close);
-      const ema12 = calculateEMA(closes, 12);
-      const ema26 = calculateEMA(closes, 26);
-      
-      const macdLine: number[] = [];
-      for (let i = 0; i < closes.length; i++) {
-        if (!isNaN(ema12[i]) && !isNaN(ema26[i])) {
-          macdLine.push(ema12[i] - ema26[i]);
-        } else {
-          macdLine.push(NaN);
-        }
-      }
-      
-      // Calculate signal line (9-period EMA of MACD)
-      // Filter out NaN values (but keep zeros which are valid)
-      const validMacd = macdLine.filter(v => !isNaN(v));
-      const signalLineValues = calculateEMA(validMacd, 9);
-      const signalLine: number[] = [];
-      let signalIndex = 0;
-      
-      for (let i = 0; i < macdLine.length; i++) {
-        if (isNaN(macdLine[i])) {
-          signalLine.push(NaN);
-        } else {
-          signalLine.push(signalLineValues[signalIndex] || 0);
-          signalIndex++;
-        }
-      }
+      const { macd: macdLine, signal: signalLine } = calculateMACDSeries(closes);
 
       // Histogram data (MACD - Signal)
       const histogramSeries = chart.addSeries(HistogramSeries, {
         color: '#26a69a',
       });
 
-      const histogramData: HistogramData[] = macdLine.map((macd, i) => {
-        const hist = macd - signalLine[i];
-        return {
-          time: (data[i].time / 1000) as Time,
-          value: hist,
-          color: hist >= 0 ? '#26a69a' : '#ef5350',
-        };
-      });
+      const histogramData: HistogramData[] = macdLine
+        .map((macd, i) => {
+          const hist = macd - signalLine[i];
+          return {
+            time: (data[i].time / 1000) as Time,
+            value: hist,
+            color: hist >= 0 ? '#26a69a' : '#ef5350',
+          };
+        })
+        .filter((p) => !isNaN(p.value));
 
       histogramSeries.setData(histogramData);
 
@@ -319,10 +285,9 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
         title: 'MACD',
       });
 
-      const macdLineData: LineData[] = macdLine.map((value, i) => ({
-        time: (data[i].time / 1000) as Time,
-        value,
-      }));
+      const macdLineData: LineData[] = macdLine
+        .map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+        .filter((p) => !isNaN(p.value));
 
       macdSeries.setData(macdLineData);
 
@@ -333,10 +298,9 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
         title: 'Signal',
       });
 
-      const signalLineData: LineData[] = signalLine.map((value, i) => ({
-        time: (data[i].time / 1000) as Time,
-        value,
-      }));
+      const signalLineData: LineData[] = signalLine
+        .map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+        .filter((p) => !isNaN(p.value));
 
       signalSeries.setData(signalLineData);
 

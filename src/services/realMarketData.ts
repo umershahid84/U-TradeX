@@ -25,7 +25,7 @@ export interface OptionChain {
 export class RealMarketDataService {
   private static instance: RealMarketDataService;
   private priceCache: Map<string, number> = new Map();
-  private static readonly PRICE_POLL_INTERVAL_MS = 2000; // Polling interval for price updates
+  private static readonly PRICE_POLL_INTERVAL_MS = 1000; // Polling interval for price updates
 
   private constructor() {}
 
@@ -71,162 +71,129 @@ export class RealMarketDataService {
     return symbolMap[upperSymbol] || symbol;
   }
 
-  // Fetch real historical data from Yahoo Finance with CORS proxy
+
+  // Yahoo does not send CORS headers, so a browser cannot call it directly.
+  // Try the Vite dev/preview proxy first (same-origin, most reliable), then the
+  // public hosts, then CORS proxies.
+  private async yahooGet(path: string, timeout = 8000): Promise<any> {
+    const candidates = [
+      `/api/yahoo/${path}`,
+      `https://query1.finance.yahoo.com/${path}`,
+      `https://query2.finance.yahoo.com/${path}`,
+      `https://corsproxy.io/?${encodeURIComponent(`https://query1.finance.yahoo.com/${path}`)}`,
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query1.finance.yahoo.com/${path}`)}`,
+    ];
+    let lastError: unknown;
+    for (const url of candidates) {
+      try {
+        const response = await axios.get(url, { timeout, headers: { Accept: 'application/json' } });
+        // Dev server returns index.html for unknown routes - skip non-JSON bodies
+        if (response.data && typeof response.data === 'object') {
+          return response.data;
+        }
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError ?? new Error('All market data endpoints failed');
+  }
+
+  // Fetch real historical data from Yahoo Finance
   async fetchChartData(
     symbol: string,
     interval: string = '5m',
     range: string = '1d',
     includePrePost: boolean = false
   ): Promise<ChartData[]> {
-    try {
-      // Handle special symbols (SPX, futures, etc.)
-      const yahooSymbol = this.normalizeSymbol(symbol);
-      
-      // Try direct API call first (works in some environments)
-      const baseUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}`;
-      const params = new URLSearchParams({
-        interval,
-        range,
-        includePrePost: includePrePost ? 'true' : 'false',
-      });
-      
-      let response;
-      try {
-        // Try direct call first
-        response = await axios.get(`${baseUrl}?${params.toString()}`, { 
-          timeout: 8000,
-          headers: {
-            'Accept': 'application/json'
-          }
-        });
-      } catch (directError) {
-        // If direct fails, try with CORS proxy
-        const corsProxy = 'https://corsproxy.io/?';
-        const proxiedUrl = `${corsProxy}${encodeURIComponent(`${baseUrl}?${params.toString()}`)}`;
-        response = await axios.get(proxiedUrl, { 
-          timeout: 10000,
-          headers: {
-            'Accept': 'application/json'
-          }
-        });
-      }
-      
-      const result = response?.data?.chart?.result?.[0];
+    const yahooSymbol = encodeURIComponent(this.normalizeSymbol(symbol));
+    const params = new URLSearchParams({
+      interval,
+      range,
+      includePrePost: includePrePost ? 'true' : 'false',
+    });
 
-      if (!result || !Array.isArray(result.timestamp)) {
-        console.error('No data returned for', symbol);
-        return this.generateFallbackData(symbol, interval, range);
-      }
+    const data = await this.yahooGet(`v8/finance/chart/${yahooSymbol}?${params.toString()}`, 10000);
+    const result = data?.chart?.result?.[0];
+    const quotes = result?.indicators?.quote?.[0];
 
-      const timestamps = result.timestamp;
-      const quotes = result.indicators?.quote?.[0];
-      if (!quotes) {
-        console.error('Missing quote data for', symbol);
-        return this.generateFallbackData(symbol, interval, range);
-      }
-
-      const chartData: ChartData[] = timestamps.map((time: number, i: number) => ({
-        time: time * 1000, // Convert to milliseconds
-        open: quotes.open[i] || quotes.close[i] || 0,
-        high: quotes.high[i] || quotes.close[i] || 0,
-        low: quotes.low[i] || quotes.close[i] || 0,
-        close: quotes.close[i] || 0,
-        volume: quotes.volume[i] || 0,
-      })).filter((d: ChartData) => d.close > 0); // Filter out invalid data
-
-      // Cache latest price
-      if (chartData.length > 0) {
-        const latestPrice = chartData[chartData.length - 1].close;
-        this.priceCache.set(symbol, latestPrice);
-        console.log(`✅ Fetched REAL-TIME data for ${symbol}: $${latestPrice.toFixed(2)}${includePrePost ? ' (with pre/post market)' : ''}`);
-      }
-
-      return chartData;
-    } catch (error) {
-      console.error('Error fetching chart data:', error);
-      return this.generateFallbackData(symbol, interval, range);
+    if (!result || !Array.isArray(result.timestamp) || !quotes) {
+      throw new Error(`No market data returned for ${symbol}`);
     }
+
+    // Skip bars with null OHLC (Yahoo returns nulls for empty intervals) rather than
+    // inventing values. Also drop duplicate timestamps, which the chart rejects.
+    const chartData: ChartData[] = [];
+    result.timestamp.forEach((time: number, i: number) => {
+      const { open, high, low, close, volume } = {
+        open: quotes.open[i],
+        high: quotes.high[i],
+        low: quotes.low[i],
+        close: quotes.close[i],
+        volume: quotes.volume[i],
+      };
+      if (close == null || open == null || high == null || low == null) return;
+      const ms = time * 1000;
+      if (chartData.length && chartData[chartData.length - 1].time >= ms) return;
+      chartData.push({ time: ms, open, high, low, close, volume: volume || 0 });
+    });
+
+    if (chartData.length === 0) {
+      throw new Error(`Empty market data for ${symbol}`);
+    }
+
+    // Use the exchange's current price for the newest bar when available
+    const meta = result.meta;
+    const last = chartData[chartData.length - 1];
+    if (meta?.regularMarketPrice && !includePrePost) {
+      last.close = meta.regularMarketPrice;
+      last.high = Math.max(last.high, last.close);
+      last.low = Math.min(last.low, last.close);
+    }
+
+    this.priceCache.set(symbol, last.close);
+    return chartData;
   }
 
-  // Get current quote for a symbol
+  // Get current quote for a symbol. Throws if no live price could be fetched
+  // (callers keep showing the last known real price instead of a made-up one).
   async getCurrentPrice(symbol: string, includePrePost: boolean = true): Promise<number> {
-    try {
-      // Normalize symbol for Yahoo Finance API
-      const yahooSymbol = this.normalizeSymbol(symbol);
-      
-      const baseUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}`;
-      const params = new URLSearchParams({
-        interval: '1m',
-        range: '1d',
-        includePrePost: includePrePost ? 'true' : 'false',
-      });
-      
-      let response;
-      try {
-        // Try direct call first
-        response = await axios.get(`${baseUrl}?${params.toString()}`, { 
-          timeout: 8000,
-          headers: {
-            'Accept': 'application/json'
-          }
-        });
-      } catch (directError) {
-        // If direct fails, try with CORS proxy
-        const corsProxy = 'https://corsproxy.io/?';
-        const proxiedUrl = `${corsProxy}${encodeURIComponent(`${baseUrl}?${params.toString()}`)}`;
-        response = await axios.get(proxiedUrl, { 
-          timeout: 10000,
-          headers: {
-            'Accept': 'application/json'
-          }
-        });
-      }
-      
-      const result = response?.data?.chart?.result?.[0];
-      
-      if (result?.meta?.regularMarketPrice) {
-        const price = result.meta.regularMarketPrice;
-        this.priceCache.set(symbol, price);
-        console.log(`✅ REAL-TIME price for ${symbol}: $${price.toFixed(2)}${includePrePost ? ' (with pre/post market)' : ''}`);
-        return price;
-      }
+    const yahooSymbol = encodeURIComponent(this.normalizeSymbol(symbol));
+    const params = new URLSearchParams({
+      interval: '1m',
+      range: '1d',
+      includePrePost: includePrePost ? 'true' : 'false',
+    });
+    const data = await this.yahooGet(`v8/finance/chart/${yahooSymbol}?${params.toString()}`);
+    const result = data?.chart?.result?.[0];
 
-      // Fallback to cached price
-      return this.priceCache.get(symbol) || 0;
-    } catch (error) {
-      console.error('Error fetching current price:', error);
-      return this.priceCache.get(symbol) || 0;
+    // Prefer the latest 1m close when extended hours are on, since regularMarketPrice
+    // only reflects the regular session.
+    let price: number | undefined;
+    if (includePrePost) {
+      const closes: (number | null)[] = result?.indicators?.quote?.[0]?.close ?? [];
+      for (let i = closes.length - 1; i >= 0; i--) {
+        if (closes[i] != null) {
+          price = closes[i] as number;
+          break;
+        }
+      }
     }
+    price = price ?? result?.meta?.regularMarketPrice;
+
+    if (!price || price <= 0) {
+      throw new Error(`No live price for ${symbol}`);
+    }
+    this.priceCache.set(symbol, price);
+    return price;
   }
 
   // Fetch real options chain data
   async fetchOptionsChain(symbol: string, expirationDate?: string): Promise<OptionChain[]> {
     try {
-      const baseUrl = `https://query1.finance.yahoo.com/v7/finance/options/${symbol}`;
       const params = expirationDate ? `?date=${expirationDate}` : '';
       
-      let response;
-      try {
-        // Try direct call first
-        response = await axios.get(`${baseUrl}${params}`, { 
-          timeout: 8000,
-          headers: {
-            'Accept': 'application/json'
-          }
-        });
-      } catch (directError) {
-        // If direct fails, try with CORS proxy
-        const corsProxy = 'https://corsproxy.io/?';
-        const proxiedUrl = `${corsProxy}${encodeURIComponent(`${baseUrl}${params}`)}`;
-        response = await axios.get(proxiedUrl, { 
-          timeout: 10000,
-          headers: {
-            'Accept': 'application/json'
-          }
-        });
-      }
-      
-      const result = response?.data?.optionChain?.result?.[0];
+      const data = await this.yahooGet(`v7/finance/options/${symbol}${params}`);
+      const result = data?.optionChain?.result?.[0];
 
       if (!result || !result.options) {
         console.error('No options data for', symbol);
@@ -268,30 +235,8 @@ export class RealMarketDataService {
   // Get available expiration dates for options
   async getOptionExpirations(symbol: string): Promise<string[]> {
     try {
-      const baseUrl = `https://query1.finance.yahoo.com/v7/finance/options/${symbol}`;
-      
-      let response;
-      try {
-        // Try direct call first
-        response = await axios.get(baseUrl, { 
-          timeout: 8000,
-          headers: {
-            'Accept': 'application/json'
-          }
-        });
-      } catch (directError) {
-        // If direct fails, try with CORS proxy
-        const corsProxy = 'https://corsproxy.io/?';
-        const proxiedUrl = `${corsProxy}${encodeURIComponent(baseUrl)}`;
-        response = await axios.get(proxiedUrl, { 
-          timeout: 10000,
-          headers: {
-            'Accept': 'application/json'
-          }
-        });
-      }
-      
-      const result = response?.data?.optionChain?.result?.[0];
+      const data = await this.yahooGet(`v7/finance/options/${symbol}`);
+      const result = data?.optionChain?.result?.[0];
 
       if (!result || !result.expirationDates) {
         return [];
@@ -326,7 +271,8 @@ export class RealMarketDataService {
           callback(price);
         }
       } catch (error) {
-        console.error('Error in price subscription:', error);
+        // Keep the last real price on screen; just retry on the next tick
+        console.warn(`Live price fetch failed for ${symbol}`, error);
       } finally {
         inFlight = false;
       }
@@ -341,225 +287,5 @@ export class RealMarketDataService {
       isActive = false;
       clearInterval(intervalId);
     };
-  }
-
-  // Fallback to simulated data if API fails
-  private generateFallbackData(
-    symbol: string,
-    interval: string,
-    range: string
-  ): ChartData[] {
-    console.warn(`Using fallback data for ${symbol}`);
-    const data: ChartData[] = [];
-    let basePrice = this.priceCache.get(symbol) || this.getRealisticPrice(symbol);
-    
-    const bars = this.getBarsForRange(range);
-    const now = Date.now();
-    const timeframeMs = this.getTimeframeMs(interval);
-
-    for (let i = bars; i >= 0; i--) {
-      const volatility = 0.02;
-      const change = (Math.random() - 0.5) * 2 * volatility;
-      const open = basePrice;
-      const close = basePrice * (1 + change);
-      const high = Math.max(open, close) * (1 + Math.random() * 0.01);
-      const low = Math.min(open, close) * (1 - Math.random() * 0.01);
-      const volume = Math.floor(1000000 + Math.random() * 5000000);
-
-      data.push({
-        time: now - i * timeframeMs,
-        open,
-        high,
-        low,
-        close,
-        volume,
-      });
-
-      basePrice = close;
-    }
-
-    this.priceCache.set(symbol, basePrice);
-    return data;
-  }
-
-  private getBarsForRange(range: string): number {
-    const map: Record<string, number> = {
-      '1d': 78,
-      '5d': 390,
-      '1mo': 500,
-      '3mo': 1500,
-      '6mo': 3000,
-      '1y': 252,
-      '2y': 504,
-      '5y': 1260,
-      'max': 2520,
-    };
-    return map[range] || 100;
-  }
-
-  private getTimeframeMs(timeframe: string): number {
-    const map: Record<string, number> = {
-      '1m': 60 * 1000,
-      '2m': 2 * 60 * 1000,
-      '5m': 5 * 60 * 1000,
-      '15m': 15 * 60 * 1000,
-      '30m': 30 * 60 * 1000,
-      '60m': 60 * 60 * 1000,
-      '90m': 90 * 60 * 1000,
-      '1h': 60 * 60 * 1000,
-      '1d': 24 * 60 * 60 * 1000,
-      '5d': 5 * 24 * 60 * 60 * 1000,
-      '1wk': 7 * 24 * 60 * 60 * 1000,
-      '1mo': 30 * 24 * 60 * 60 * 1000,
-      '3mo': 90 * 24 * 60 * 60 * 1000,
-    };
-    return map[timeframe] || 60 * 1000;
-  }
-
-  // Get realistic starting price based on symbol
-  private getRealisticPrice(symbol: string): number {
-    // Common stock/crypto prices (approximate realistic values)
-    const priceMap: Record<string, number> = {
-      // Major stocks
-      'AAPL': 175,
-      'MSFT': 380,
-      'GOOGL': 140,
-      'GOOG': 142,
-      'AMZN': 155,
-      'TSLA': 250,
-      'META': 485,
-      'NVDA': 495,
-      'AMD': 155,
-      'INTC': 45,
-      'NFLX': 480,
-      'DIS': 95,
-      'BA': 180,
-      'JPM': 200,
-      'V': 280,
-      'MA': 460,
-      'WMT': 75,
-      'JNJ': 150,
-      'PG': 165,
-      'KO': 62,
-      'PEP': 170,
-      'COST': 880,
-      'HD': 390,
-      'NKE': 80,
-      'MCD': 295,
-      'SBUX': 98,
-      'IBM': 190,
-      'ORCL': 145,
-      'CRM': 310,
-      'ADBE': 480,
-      'PYPL': 78,
-      'SQ': 75,
-      'SHOP': 82,
-      'UBER': 68,
-      'LYFT': 12,
-      'SNAP': 11,
-      'PINS': 32,
-      'TWTR': 53,
-      'SPOT': 350,
-      'ROKU': 68,
-      'ZM': 71,
-      'DOCU': 58,
-      'CRWD': 340,
-      'ZS': 195,
-      'OKTA': 100,
-      'DDOG': 125,
-      'SNOW': 155,
-      'MDB': 410,
-      'TEAM': 210,
-      'PANW': 350,
-      'FTNT': 73,
-      'NET': 88,
-      'DKNG': 42,
-      'PENN': 20,
-      'MGM': 43,
-      'WYNN': 95,
-      'LVS': 42,
-      
-      // Indices and ETFs
-      'SPX': 4700,
-      '^GSPC': 4700,
-      'SPY': 470,
-      'QQQ': 395,
-      'DIA': 380,
-      'IWM': 195,
-      '^VIX': 15,
-      '^DJI': 37500,
-      '^IXIC': 14700,
-      '^RUT': 2050,
-      '^NDX': 16500,
-      
-      // Futures
-      'ES': 4700,
-      'ES=F': 4700,
-      'NQ': 16500,
-      'NQ=F': 16500,
-      'YM': 37500,
-      'YM=F': 37500,
-      'RTY': 2050,
-      'RTY=F': 2050,
-      'GC': 2050,
-      'GC=F': 2050,
-      'SI': 24,
-      'SI=F': 24,
-      'CL': 75,
-      'CL=F': 75,
-      'NG': 3.5,
-      'NG=F': 3.5,
-      'ZB': 120,
-      'ZB=F': 120,
-      'ZN': 110,
-      'ZN=F': 110,
-      
-      // Crypto (in USD)
-      'BTC': 42000,
-      'BTC-USD': 42000,
-      'ETH': 2200,
-      'ETH-USD': 2200,
-      'DOGE': 0.08,
-      'DOGE-USD': 0.08,
-      'ADA': 0.50,
-      'ADA-USD': 0.50,
-      'SOL': 100,
-      'SOL-USD': 100,
-      'MATIC': 0.85,
-      'MATIC-USD': 0.85,
-      'DOT': 7.5,
-      'DOT-USD': 7.5,
-      'LINK': 14,
-      'LINK-USD': 14,
-      'UNI': 6,
-      'UNI-USD': 6,
-      'AVAX': 36,
-      'AVAX-USD': 36,
-    };
-    
-    // Check if symbol is in the map
-    const upperSymbol = symbol.toUpperCase();
-    if (priceMap[upperSymbol]) {
-      return priceMap[upperSymbol];
-    }
-    
-    // If not found, return a reasonable default based on symbol characteristics
-    // Crypto symbols typically end with -USD
-    if (upperSymbol.endsWith('-USD')) {
-      return 1000 + Math.random() * 9000; // Random crypto-like price (1k-10k)
-    }
-    
-    // Futures typically end with =F
-    if (upperSymbol.endsWith('=F')) {
-      return 2000 + Math.random() * 8000; // Random futures-like price (2k-10k)
-    }
-    
-    // Indices typically start with ^
-    if (upperSymbol.startsWith('^')) {
-      return 5000 + Math.random() * 15000; // Random index-like price (5k-20k)
-    }
-    
-    // Default to typical stock price range
-    return 50 + Math.random() * 150; // Random stock price (50-200)
   }
 }

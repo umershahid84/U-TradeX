@@ -461,10 +461,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           lineWidth: 1,
           title: 'EMA 5',
         });
-        const ema5Data: LineData[] = emaCloud.ema5.map((value, i) => ({
-          time: (data[i].time / 1000) as Time,
-          value: value || data[i].close,
-        }));
+        const ema5Data: LineData[] = emaCloud.ema5.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+          .filter((p) => !isNaN(p.value));
         ema5Series.setData(ema5Data);
         indicatorSeriesRef.current.set('ema5', ema5Series);
       }
@@ -476,10 +474,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           lineWidth: 1,
           title: 'EMA 8',
         });
-        const ema8Data: LineData[] = emaCloud.ema8.map((value, i) => ({
-          time: (data[i].time / 1000) as Time,
-          value: value || data[i].close,
-        }));
+        const ema8Data: LineData[] = emaCloud.ema8.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+          .filter((p) => !isNaN(p.value));
         ema8Series.setData(ema8Data);
         indicatorSeriesRef.current.set('ema8', ema8Series);
       }
@@ -491,10 +487,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           lineWidth: 1,
           title: 'EMA 9',
         });
-        const ema9Data: LineData[] = emaCloud.ema9.map((value, i) => ({
-          time: (data[i].time / 1000) as Time,
-          value: value || data[i].close,
-        }));
+        const ema9Data: LineData[] = emaCloud.ema9.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+          .filter((p) => !isNaN(p.value));
         ema9Series.setData(ema9Data);
         indicatorSeriesRef.current.set('ema9', ema9Series);
       }
@@ -506,10 +500,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           lineWidth: 1,
           title: 'EMA 13',
         });
-        const ema13Data: LineData[] = emaCloud.ema13.map((value, i) => ({
-          time: (data[i].time / 1000) as Time,
-          value: value || data[i].close,
-        }));
+        const ema13Data: LineData[] = emaCloud.ema13.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+          .filter((p) => !isNaN(p.value));
         ema13Series.setData(ema13Data);
         indicatorSeriesRef.current.set('ema13', ema13Series);
       }
@@ -522,10 +514,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           lineWidth: 2,
           title: 'SMA 20',
         });
-        const sma20Data: LineData[] = sma20.map((value, i) => ({
-          time: (data[i].time / 1000) as Time,
-          value: value || data[i].close,
-        }));
+        const sma20Data: LineData[] = sma20.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+          .filter((p) => !isNaN(p.value));
         sma20Series.setData(sma20Data);
         indicatorSeriesRef.current.set('sma20', sma20Series);
       }
@@ -538,10 +528,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           lineWidth: 2,
           title: 'SMA 50',
         });
-        const sma50Data: LineData[] = sma50.map((value, i) => ({
-          time: (data[i].time / 1000) as Time,
-          value: value || data[i].close,
-        }));
+        const sma50Data: LineData[] = sma50.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+          .filter((p) => !isNaN(p.value));
         sma50Series.setData(sma50Data);
         indicatorSeriesRef.current.set('sma50', sma50Series);
       }
@@ -554,10 +542,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           lineWidth: 2,
           title: 'SMA 100',
         });
-        const sma100Data: LineData[] = sma100.map((value, i) => ({
-          time: (data[i].time / 1000) as Time,
-          value: value || data[i].close,
-        }));
+        const sma100Data: LineData[] = sma100.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+          .filter((p) => !isNaN(p.value));
         sma100Series.setData(sma100Data);
         indicatorSeriesRef.current.set('sma100', sma100Series);
       }
@@ -570,10 +556,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           lineWidth: 3,
           title: 'SMA 200',
         });
-        const sma200Data: LineData[] = sma200.map((value, i) => ({
-          time: (data[i].time / 1000) as Time,
-          value: value || data[i].close,
-        }));
+        const sma200Data: LineData[] = sma200.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+          .filter((p) => !isNaN(p.value));
         sma200Series.setData(sma200Data);
         indicatorSeriesRef.current.set('sma200', sma200Series);
       }
@@ -603,10 +587,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           lineWidth: 1,
           title: 'BB Upper',
         });
-        const bbUpperData: LineData[] = bb.upper.map((value, i) => ({
-          time: (data[i].time / 1000) as Time,
-          value: value || data[i].close,
-        }));
+        const bbUpperData: LineData[] = bb.upper.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+          .filter((p) => !isNaN(p.value));
         bbUpperSeries.setData(bbUpperData);
         indicatorSeriesRef.current.set('bbUpper', bbUpperSeries);
 
@@ -615,10 +597,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           lineWidth: 1,
           title: 'BB Middle',
         });
-        const bbMiddleData: LineData[] = bb.middle.map((value, i) => ({
-          time: (data[i].time / 1000) as Time,
-          value: value || data[i].close,
-        }));
+        const bbMiddleData: LineData[] = bb.middle.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+          .filter((p) => !isNaN(p.value));
         bbMiddleSeries.setData(bbMiddleData);
         indicatorSeriesRef.current.set('bbMiddle', bbMiddleSeries);
 
@@ -627,10 +607,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           lineWidth: 1,
           title: 'BB Lower',
         });
-        const bbLowerData: LineData[] = bb.lower.map((value, i) => ({
-          time: (data[i].time / 1000) as Time,
-          value: value || data[i].close,
-        }));
+        const bbLowerData: LineData[] = bb.lower.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+          .filter((p) => !isNaN(p.value));
         bbLowerSeries.setData(bbLowerData);
         indicatorSeriesRef.current.set('bbLower', bbLowerSeries);
       }
@@ -644,10 +622,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           lineWidth: 2,
           title: 'EMA 34',
         });
-        const ema34Data: LineData[] = mtfClouds.ema34.map((value, i) => ({
-          time: (data[i].time / 1000) as Time,
-          value: value || data[i].close,
-        }));
+        const ema34Data: LineData[] = mtfClouds.ema34.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+          .filter((p) => !isNaN(p.value));
         ema34Series.setData(ema34Data);
         indicatorSeriesRef.current.set('ema34', ema34Series);
 
@@ -656,10 +632,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           lineWidth: 2,
           title: 'EMA 50',
         });
-        const ema50Data: LineData[] = mtfClouds.ema50.map((value, i) => ({
-          time: (data[i].time / 1000) as Time,
-          value: value || data[i].close,
-        }));
+        const ema50Data: LineData[] = mtfClouds.ema50.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+          .filter((p) => !isNaN(p.value));
         ema50Series.setData(ema50Data);
         indicatorSeriesRef.current.set('ema50', ema50Series);
 
@@ -668,10 +642,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           lineWidth: 2,
           title: 'EMA 72',
         });
-        const ema72Data: LineData[] = mtfClouds.ema72.map((value, i) => ({
-          time: (data[i].time / 1000) as Time,
-          value: value || data[i].close,
-        }));
+        const ema72Data: LineData[] = mtfClouds.ema72.map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+          .filter((p) => !isNaN(p.value));
         ema72Series.setData(ema72Data);
         indicatorSeriesRef.current.set('ema72', ema72Series);
       }
@@ -863,10 +835,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             title: indicator.name,
           });
 
-          const seriesData: LineData[] = values.map((value, i) => ({
-            time: (data[i].time / 1000) as Time,
-            value: isNaN(value) || value === null || value === undefined ? data[i].close : value,
-          }));
+          const seriesData: LineData[] = values
+            .map((value, i) => ({ time: (data[i].time / 1000) as Time, value: Number(value) }))
+            .filter((p) => Number.isFinite(p.value));
 
           series.setData(seriesData);
           indicatorSeriesRef.current.set(`custom-${indicator.id}`, series);

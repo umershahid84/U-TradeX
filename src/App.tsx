@@ -18,6 +18,13 @@ import './App.css';
 
 const marketData = RealMarketDataService.getInstance();
 
+// Length in ms of an intraday Yahoo interval; 0 for daily and above
+const intradayIntervalMs = (interval: string): number => {
+  const m = /^(\d+)(m|h)$/.exec(interval);
+  if (!m) return 0;
+  return Number(m[1]) * (m[2] === 'h' ? 3600000 : 60000);
+};
+
 const getStorageValue = (key: string, fallback: string): string => {
   try {
     return localStorage.getItem(key) ?? fallback;
@@ -182,7 +189,24 @@ function App() {
       setChartData((prevData) => {
         const newData = [...prevData];
         const lastBar = newData[newData.length - 1];
-        
+
+        // Start a new candle once the current bar's interval has elapsed
+        const barMs = intradayIntervalMs(getYahooInterval(timeframe));
+        if (lastBar && barMs && Date.now() >= lastBar.time + barMs && price !== lastBar.close) {
+          const barTime = Math.floor(Date.now() / barMs) * barMs;
+          if (barTime > lastBar.time) {
+            newData.push({
+              time: barTime,
+              open: lastBar.close,
+              high: Math.max(lastBar.close, price),
+              low: Math.min(lastBar.close, price),
+              close: price,
+              volume: 0,
+            });
+            return newData;
+          }
+        }
+
         if (lastBar) {
           newData[newData.length - 1] = {
             ...lastBar,
@@ -203,7 +227,7 @@ function App() {
     }, includeAfterHours);
 
     return unsubscribe;
-  }, [symbol, updatePositionPrices, includeAfterHours, checkTPSL]);
+  }, [symbol, timeframe, updatePositionPrices, includeAfterHours, checkTPSL]);
 
   // Subscribe to price updates for all open positions
   useEffect(() => {
