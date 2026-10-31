@@ -78,3 +78,26 @@ export interface Indicator {
   visible: boolean;
   settings: Record<string, any>;
 }
+
+export type CustomIndicatorLanguage = 'pine' | 'js';
+
+export interface CustomIndicator {
+  id: string;
+  name: string;
+  language: CustomIndicatorLanguage;
+  /** Pine Script source, or a JavaScript expression returning an array (language 'js') */
+  source: string;
+  /** Line colour / width, used by JavaScript indicators (Pine scripts set their own) */
+  color: string;
+  lineWidth: number;
+  enabled: boolean;
+  /** Overrides for Pine input() values, keyed by input id */
+  inputValues?: Record<string, number | boolean | string>;
+}
+
+export interface CustomIndicatorStatus {
+  error?: string;
+  errorLine?: number;
+  warnings: string[];
+  inputs: import('../pine').PineInput[];
+}

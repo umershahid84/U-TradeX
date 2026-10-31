@@ -216,3 +216,61 @@
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+/* ---- Pine Script editor ---- */
+.custom-indicator-panel { width: 440px; max-width: 100%; box-sizing: border-box; }
+
+.custom-indicator-panel .add-btn.cancel { background: #5a5f8a; }
+
+.lang-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.lang-tabs button {
+  flex: 1; padding: 6px 10px; background: #0f1330; border: 1px solid #2a2e4f;
+  border-radius: 4px; color: #a0a0a0; cursor: pointer; font-size: 12px; font-weight: 600;
+}
+.lang-tabs button.active { background: #2962ff; border-color: #2962ff; color: #fff; }
+
+.form-group select {
+  width: 100%; padding: 8px; background: #0f1330; border: 1px solid #2a2e4f;
+  border-radius: 4px; color: #e0e0e0; font-size: 13px;
+}
+
+.code-editor {
+  font-family: Consolas, 'Courier New', monospace; font-size: 12px; line-height: 1.5;
+  white-space: pre; overflow: auto; tab-size: 4; resize: vertical;
+}
+
+.empty-note { font-size: 12px; color: #8a8fb5; margin: 4px 0 12px; }
+
+.indicator-card { background: #1a1e3f; border-radius: 4px; margin-bottom: 8px; padding: 8px 10px; }
+.indicator-card .indicator-item { display: flex; justify-content: space-between; align-items: center; background: none; padding: 0; margin: 0; }
+.indicator-card .indicator-info { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.lang-badge { font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #2a2e4f; color: #a0a8ff; }
+.indicator-actions { display: flex; gap: 6px; }
+.indicator-actions button {
+  background: #0f1330; border: 1px solid #2a2e4f; color: #e0e0e0; border-radius: 4px;
+  cursor: pointer; width: 26px; height: 26px; font-size: 12px;
+}
+.indicator-actions .remove-btn:hover { background: #ef5350; border-color: #ef5350; }
+.indicator-actions .edit-btn:hover { background: #2962ff; border-color: #2962ff; }
+
+.indicator-error {
+  margin-top: 8px; padding: 6px 8px; background: rgba(239, 83, 80, 0.15);
+  border-left: 3px solid #ef5350; color: #ff8a80; font-size: 12px;
+  font-family: Consolas, 'Courier New', monospace; white-space: pre-wrap;
+}
+.indicator-warning {
+  margin-top: 6px; padding: 4px 8px; background: rgba(255, 193, 7, 0.1);
+  border-left: 3px solid #ffc107; color: #ffd54f; font-size: 11px;
+}
+
+.indicator-inputs { margin-top: 8px; display: grid; gap: 6px; }
+.input-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 12px; color: #c0c4e0; }
+.input-row input[type='number'], .input-row input[type='text'], .input-row select {
+  width: 110px; padding: 4px 6px; background: #0f1330; border: 1px solid #2a2e4f;
+  border-radius: 4px; color: #e0e0e0; font-size: 12px;
+}
+
+.help-toggle { background: none; border: none; color: #8a8fb5; cursor: pointer; font-size: 12px; padding: 4px 0; }
+.help-section p { font-size: 11px; line-height: 1.5; margin: 6px 0; color: #b0b4d0; }
+.help-section .muted { color: #787b9a; }
+.help-section code { background: #0f1330; padding: 1px 4px; border-radius: 3px; }

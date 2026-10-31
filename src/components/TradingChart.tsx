@@ -9,11 +9,13 @@ import {
   CandlestickSeries,
   LineSeries
 } from 'lightweight-charts';
-import { ChartData, TimeFrame } from '../types';
+import { ChartData, TimeFrame, CustomIndicator, CustomIndicatorStatus } from '../types';
 import { calculateRipsterEMACloud, calculateRipsterTrend, calculateSMA, calculateVWAP, calculateBollingerBands, calculateMTFClouds } from '../utils/indicators';
 import { DrawingTools, DrawingTool } from './DrawingTools';
 import { IndicatorPanels } from './IndicatorPanels';
-import { CustomIndicatorPanel, CustomIndicator } from './CustomIndicatorPanel';
+import { CustomIndicatorPanel } from './CustomIndicatorPanel';
+import { CustomIndicatorManager } from './customIndicatorManager';
+import { CloudSeries } from '../plugins/cloudSeries';
 import './TradingChart.css';
 
 interface TradingChartProps {
@@ -61,7 +63,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null) as any;
-  const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  const indicatorSeriesRef = useRef<Map<string, ISeriesApi<any>>>(new Map());
+  const customManagerRef = useRef<CustomIndicatorManager | null>(null);
   const drawingsRef = useRef<DrawingObject[]>([]);
   const drawingStateRef = useRef<{
     isDrawing: boolean;
@@ -83,7 +86,15 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const [selectedTool, setSelectedTool] = useState<DrawingTool>('none');
   const [ripsterTrend, setRipsterTrend] = useState<'bullish' | 'bearish' | 'neutral'>('neutral');
   const [showCustomPanel, setShowCustomPanel] = useState(false);
-  const [customIndicators, setCustomIndicators] = useState<CustomIndicator[]>([]);
+  const [customIndicators, setCustomIndicators] = useState<CustomIndicator[]>(() => {
+    try {
+      const saved = localStorage.getItem('customIndicators');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [customStatuses, setCustomStatuses] = useState<Record<string, CustomIndicatorStatus>>({});
   const [indicators, setIndicators] = useState<IndicatorState>({
     ema5: false,
     ema8: false,
@@ -367,6 +378,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     });
 
     candleSeriesRef.current = candleSeries;
+    customManagerRef.current = new CustomIndicatorManager(chart, candleSeries);
 
     // Add click handler for drawing tools
     chart.subscribeClick((param) => {
@@ -453,6 +465,27 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     if (showIndicators) {
       const closes = data.map(d => d.close);
       const emaCloud = calculateRipsterEMACloud(closes);
+
+      // Shades the area between two EMAs: green while the fast EMA is above the slow one, red below
+      const addCloud = (key: string, fast: number[], slow: number[], bull: string, bear: string) => {
+        const chart = chartRef.current;
+        if (!chart) return;
+        const cloud = chart.addCustomSeries(new CloudSeries(), { bullColor: bull, bearColor: bear });
+        cloud.setData(
+          data.map((d, i) =>
+            Number.isFinite(fast[i]) && Number.isFinite(slow[i])
+              ? { time: (d.time / 1000) as Time, upper: fast[i], lower: slow[i] }
+              : { time: (d.time / 1000) as Time }
+          ) as any
+        );
+        cloud.setSeriesOrder(0); // draw behind candles and lines
+        indicatorSeriesRef.current.set(key, cloud);
+      };
+
+      if (indicators.ripsterCloud) {
+        addCloud('cloud-8-9', emaCloud.ema8, emaCloud.ema9, 'rgba(76, 175, 80, 0.35)', 'rgba(239, 83, 80, 0.35)');
+        addCloud('cloud-5-13', emaCloud.ema5, emaCloud.ema13, 'rgba(38, 166, 154, 0.22)', 'rgba(255, 112, 67, 0.22)');
+      }
 
       // Add EMA 5
       if (indicators.ema5) {
@@ -616,6 +649,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       // Add MTF Clouds (EMA 34, 50, 72)
       if (indicators.mtfClouds) {
         const mtfClouds = calculateMTFClouds(closes);
+        addCloud('cloud-34-50', mtfClouds.ema34, mtfClouds.ema50, 'rgba(41, 182, 246, 0.30)', 'rgba(171, 71, 188, 0.30)');
+        addCloud('cloud-50-72', mtfClouds.ema50, mtfClouds.ema72, 'rgba(41, 98, 255, 0.20)', 'rgba(255, 152, 0, 0.20)');
         
         const ema34Series = chartRef.current.addSeries(LineSeries, {
           color: '#00BCD4',
@@ -776,6 +811,10 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     setCustomIndicators(prev => [...prev, indicator]);
   };
 
+  const handleUpdateCustomIndicator = (id: string, patch: Partial<CustomIndicator>) => {
+    setCustomIndicators(prev => prev.map(ind => (ind.id === id ? { ...ind, ...patch } : ind)));
+  };
+
   const handleRemoveCustomIndicator = (id: string) => {
     setCustomIndicators(prev => prev.filter(ind => ind.id !== id));
   };
@@ -783,70 +822,22 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   // Constants for drawing
   const RECTANGLE_SEGMENTS = 10; // Number of segments for smooth rectangle rendering
 
-  // Effect to render custom indicators
+  // Render custom (Pine Script / JavaScript) indicators. They live in their own manager,
+  // so toggling built-in indicators never removes them and removed ones are cleaned up.
   useEffect(() => {
-    if (!chartRef.current || !data.length || customIndicators.length === 0) return;
-
-    // Remove existing custom indicator series
-    customIndicators.forEach(indicator => {
-      const existingSeries = indicatorSeriesRef.current.get(`custom-${indicator.id}`);
-      if (existingSeries && chartRef.current) {
-        chartRef.current.removeSeries(existingSeries);
-        indicatorSeriesRef.current.delete(`custom-${indicator.id}`);
-      }
-    });
-
-    // Add custom indicators
-    customIndicators.forEach(indicator => {
-      if (!indicator.enabled) return;
-
-      try {
-        // Prepare data for formula evaluation
-        const prices = data.map(d => d.close);
-        const opens = data.map(d => d.open);
-        const highs = data.map(d => d.high);
-        const lows = data.map(d => d.low);
-        const volumes = data.map(d => d.volume);
-        
-        // Evaluate the formula
-        // SECURITY NOTE: Using Function() for user formulas in a personal trading app
-        // Users are evaluating their own code. In production, use a proper parser/sandbox.
-        // eslint-disable-next-line no-new-func
-        const calculateValues = new Function(
-          'prices', 'open', 'high', 'low', 'volume', 
-          `return ${indicator.formula}`
-        );
-        
-        const values = calculateValues(prices, opens, highs, lows, volumes);
-        
-        if (!Array.isArray(values) || values.length !== data.length) {
-          console.error('Custom indicator formula must return an array with same length as data');
-          return;
-        }
-
-        // Create series with validated line width
-        if (chartRef.current) {
-          // Ensure lineWidth is within valid range (1-4)
-          const validLineWidth = Math.max(1, Math.min(4, indicator.lineWidth)) as 1 | 2 | 3 | 4;
-          
-          const series = chartRef.current.addSeries(LineSeries, {
-            color: indicator.color,
-            lineWidth: validLineWidth,
-            title: indicator.name,
-          });
-
-          const seriesData: LineData[] = values
-            .map((value, i) => ({ time: (data[i].time / 1000) as Time, value: Number(value) }))
-            .filter((p) => Number.isFinite(p.value));
-
-          series.setData(seriesData);
-          indicatorSeriesRef.current.set(`custom-${indicator.id}`, series);
-        }
-      } catch (error) {
-        console.error(`Error evaluating custom indicator "${indicator.name}":`, error);
-      }
-    });
+    const manager = customManagerRef.current;
+    if (!manager || !data.length) return;
+    const statuses = manager.sync(customIndicators, data);
+    setCustomStatuses((prev) => (JSON.stringify(prev) === JSON.stringify(statuses) ? prev : statuses));
   }, [data, customIndicators]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('customIndicators', JSON.stringify(customIndicators));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [customIndicators]);
 
   return (
     <div className="trading-chart-container">
@@ -1023,7 +1014,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         <div className="custom-panel-overlay">
           <CustomIndicatorPanel
             indicators={customIndicators}
+            statuses={customStatuses}
             onAddIndicator={handleAddCustomIndicator}
+            onUpdateIndicator={handleUpdateCustomIndicator}
             onRemoveIndicator={handleRemoveCustomIndicator}
           />
         </div>
