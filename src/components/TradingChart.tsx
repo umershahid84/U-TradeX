@@ -3,13 +3,15 @@ import {
   createChart, 
   IChartApi, 
   ISeriesApi, 
+  IPriceLine,
   CandlestickData, 
   Time, 
   LineData,
   CandlestickSeries,
   LineSeries
 } from 'lightweight-charts';
-import { ChartData, TimeFrame, CustomIndicator, CustomIndicatorStatus } from '../types';
+import { ChartData, TimeFrame, CustomIndicator, CustomIndicatorStatus, PriceAlert } from '../types';
+import { AlertsPanel } from './AlertsPanel';
 import { calculateEMAFromFirst, calculateSMA, calculateVWAP, calculateBollingerBands } from '../utils/indicators';
 import { DrawingTools, DrawingTool } from './DrawingTools';
 import { IndicatorPanels } from './IndicatorPanels';
@@ -25,6 +27,11 @@ interface TradingChartProps {
   timeframe: TimeFrame;
   data: ChartData[];
   onPriceUpdate?: (price: number) => void;
+  alerts: PriceAlert[];
+  onAddAlert: (price: number) => void;
+  onRemoveAlert: (id: string) => void;
+  onClearTriggeredAlerts: () => void;
+  onSelectSymbol: (symbol: string) => void;
 }
 
 interface CloudPair {
@@ -113,6 +120,11 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   symbol,
   data,
   onPriceUpdate,
+  alerts,
+  onAddAlert,
+  onRemoveAlert,
+  onClearTriggeredAlerts,
+  onSelectSymbol,
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -144,6 +156,13 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const [selectedTool, setSelectedTool] = useState<DrawingTool>('none');
   const [ripsterTrend, setRipsterTrend] = useState<'bullish' | 'bearish' | 'neutral'>('neutral');
   const [showCustomPanel, setShowCustomPanel] = useState(false);
+  const [showAlertsPanel, setShowAlertsPanel] = useState(false);
+  // While armed, the next click on the chart places a price alert at that price
+  const [alertArmed, setAlertArmed] = useState(false);
+  const alertArmedRef = useRef(false);
+  const onAddAlertRef = useRef(onAddAlert);
+  onAddAlertRef.current = onAddAlert;
+  const alertLinesRef = useRef<IPriceLine[]>([]);
   const [customIndicators, setCustomIndicators] = useState<CustomIndicator[]>(() => {
     try {
       const saved = localStorage.getItem('customIndicators');
@@ -432,6 +451,14 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
     // Add click handler for drawing tools
     chart.subscribeClick((param) => {
+      // Armed from the alerts panel: place an alert at the clicked price
+      if (alertArmedRef.current && param.point) {
+        const alertPrice = candleSeries.coordinateToPrice(param.point.y);
+        if (alertPrice) onAddAlertRef.current(alertPrice as number);
+        alertArmedRef.current = false;
+        setAlertArmed(false);
+        return;
+      }
       if (!param.time || !param.point) return;
       
       const price = candleSeries.coordinateToPrice(param.point.y);
@@ -800,6 +827,46 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     );
   };
 
+  // Draw the active alerts of this symbol as dashed lines on the price scale
+  useEffect(() => {
+    const series = candleSeriesRef.current;
+    if (!series) return;
+    alertLinesRef.current.forEach((line: IPriceLine) => series.removePriceLine(line));
+    alertLinesRef.current = alerts
+      .filter((a) => !a.triggeredAt && a.symbol.toUpperCase() === symbol.toUpperCase())
+      .map((a) =>
+        series.createPriceLine({
+          price: a.price,
+          color: '#FFB300',
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: `🔔 ${a.direction === 'above' ? '▲' : '▼'}`,
+        })
+      );
+  }, [alerts, symbol]);
+
+  const armAlert = () => {
+    const next = !alertArmed;
+    alertArmedRef.current = next;
+    setAlertArmed(next);
+  };
+
+  // Esc cancels a pending click-to-place
+  useEffect(() => {
+    if (!alertArmed) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        alertArmedRef.current = false;
+        setAlertArmed(false);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [alertArmed]);
+
+  const activeAlertCount = alerts.filter((a) => !a.triggeredAt).length;
+
   const handleToolSelect = (tool: DrawingTool) => {
     setSelectedTool(tool);
     selectedToolRef.current = tool;
@@ -970,6 +1037,13 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             >
               {showCustomPanel ? '🔧 Hide Custom' : '🔧 Custom Indicators'}
             </button>
+
+            <button
+              className={`indicator-toggle alert-toggle ${activeAlertCount ? 'has-alerts' : ''}`}
+              onClick={() => setShowAlertsPanel(!showAlertsPanel)}
+            >
+              🔔 Alerts{activeAlertCount ? ` (${activeAlertCount})` : ''}
+            </button>
             
             {clouds.ripster.enabled && clouds.ripster.pairs.some((p) => p.enabled) && (
               <div className={`trend-indicator trend-${ripsterTrend}`}>
@@ -1074,6 +1148,26 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         </div>
       )}
       
+      {alertArmed && (
+        <div className="drawing-mode-indicator alert-armed-banner">Click on the chart to set an alert (Esc to cancel)</div>
+      )}
+
+      {showAlertsPanel && (
+        <div className="custom-panel-overlay alerts-overlay">
+          <AlertsPanel
+            symbol={symbol}
+            currentPrice={data.length ? data[data.length - 1].close : 0}
+            alerts={alerts}
+            armed={alertArmed}
+            onAdd={onAddAlert}
+            onArm={armAlert}
+            onRemove={onRemoveAlert}
+            onClearTriggered={onClearTriggeredAlerts}
+            onSelectSymbol={onSelectSymbol}
+          />
+        </div>
+      )}
+
       {showCustomPanel && (
         <div className="custom-panel-overlay">
           <CustomIndicatorPanel
@@ -1086,7 +1180,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         </div>
       )}
       
-      <div ref={chartContainerRef} className="chart" />
+      <div ref={chartContainerRef} className={`chart ${alertArmed ? 'alert-cursor' : ''}`} />
 
       <div className="session-legend">
         <span><i style={{ background: SESSION_COLOR.pre }} />Pre-market</span>

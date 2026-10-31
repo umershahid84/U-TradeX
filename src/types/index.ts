@@ -118,3 +118,21 @@ export interface CustomIndicatorStatus {
   warnings: string[];
   inputs: import('../pine').PineInput[];
 }
+
+export interface PriceAlert {
+  id: string;
+  symbol: string;
+  price: number;
+  /** Fires when the price rises to the level ('above') or falls to it ('below') */
+  direction: 'above' | 'below';
+  createdAt: number;
+  triggeredAt?: number;
+  triggeredPrice?: number;
+}
+
+export interface Toast {
+  id: string;
+  title: string;
+  body: string;
+  symbol?: string;
+}

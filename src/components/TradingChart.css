@@ -302,3 +302,10 @@
 }
 .session-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: middle; opacity: 0.85; }
 @media (max-width: 900px) { .session-legend { justify-content: flex-start; } }
+
+.alert-toggle.has-alerts { border-color: #FFB300; color: #FFD54F; }
+.alert-cursor { cursor: crosshair; }
+.alert-cursor canvas { cursor: crosshair !important; }
+.alert-armed-banner { background: rgba(255, 179, 0, 0.95); color: #1a1a1a; }
+.alerts-overlay { z-index: 16; }
+@media (max-width: 900px) { .alerts-overlay { max-width: none; } }

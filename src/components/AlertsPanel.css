@@ -1,0 +1,26 @@
+.alerts-panel { background: #141938; border-radius: 8px; padding: 14px; color: #e0e0e0; width: 340px; max-width: 100%; box-sizing: border-box; }
+.alerts-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+.alerts-head h3 { margin: 0; font-size: 15px; }
+.alerts-cur { font-size: 12px; color: #9a9ec0; }
+.alerts-add { display: flex; gap: 6px; margin-bottom: 6px; }
+.alerts-add input { flex: 1; min-width: 0; padding: 8px 10px; background: #1a1e3f; border: 1px solid #2a2e4f; border-radius: 4px; color: #e0e0e0; font-size: 13px; }
+.alerts-add input:focus { outline: none; border-color: #FFB300; }
+.alerts-add button { padding: 8px 14px; background: #FFB300; border: none; border-radius: 4px; color: #1a1a1a; font-weight: 700; cursor: pointer; }
+.alerts-add button:disabled { background: #2a2e4f; color: #6a6e90; cursor: default; }
+.alerts-click { width: 100%; padding: 7px; background: none; border: 1px dashed #3a3e6f; border-radius: 4px; color: #9a9ec0; font-size: 12px; cursor: pointer; margin-bottom: 12px; }
+.alerts-click:hover { border-color: #FFB300; color: #FFB300; }
+.alerts-click.armed { border-style: solid; border-color: #FFB300; color: #FFB300; background: rgba(255, 179, 0, 0.1); }
+.alerts-section { display: flex; justify-content: space-between; align-items: center; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #8a8fb5; font-weight: 600; margin: 10px 0 6px; }
+.alerts-clear { background: none; border: none; color: #8a8fb5; font-size: 11px; cursor: pointer; text-decoration: underline; }
+.alerts-empty { font-size: 12px; color: #6a6e90; }
+.alert-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 12px; }
+.alert-dir.above { color: #26a69a; } .alert-dir.below { color: #ef5350; }
+.alert-row.fired { opacity: 0.6; } .alert-row.fired .alert-dir { color: #FFB300; }
+.alert-sym { background: none; border: none; color: #e0e0e0; font-weight: 700; cursor: pointer; padding: 0; font-size: 12px; }
+.alert-price { font-weight: 700; }
+.alert-note { flex: 1; color: #8a8fb5; }
+.alert-note em { font-style: normal; color: #6a6e90; }
+.alert-x { background: none; border: none; color: #6a6e90; cursor: pointer; font-size: 11px; }
+.alert-x:hover { color: #ef5350; }
+.alerts-foot { margin-top: 12px; font-size: 10px; color: #6a6e90; line-height: 1.4; }
+@media (max-width: 900px) { .alerts-add input { font-size: 16px; } }

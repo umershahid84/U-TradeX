@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Navbar } from './components/Navbar';
 import { TradingChart } from './components/TradingChart';
 import { TradingPanel } from './components/TradingPanel';
@@ -12,6 +12,8 @@ import { FearGreedIndicator } from './components/FearGreedIndicator';
 import { TPSLPanel } from './components/TPSLPanel';
 import { OptionsPanel } from './components/OptionsPanel';
 import { usePaperTrading } from './hooks/usePaperTrading';
+import { usePriceAlerts } from './hooks/usePriceAlerts';
+import { Toasts } from './components/Toasts';
 import { RealMarketDataService, QuoteDetails } from './services/realMarketData';
 import { Session, SESSION_COLOR, SESSION_LABEL, sessionAt } from './utils/marketSessions';
 import {
@@ -135,6 +137,11 @@ function App() {
     updatePositionPrices,
     buyOption,
   } = usePaperTrading();
+
+  const { alerts, toasts, addAlert, removeAlert, clearTriggered, check: checkAlerts, dismissToast } = usePriceAlerts();
+  // The live-price subscription is created once per symbol, so reach the latest check through a ref
+  const checkAlertsRef = useRef(checkAlerts);
+  checkAlertsRef.current = checkAlerts;
 
   // Map TimeRange to Yahoo Finance range format
   const getYahooRange = (range: TimeRange): string => {
@@ -289,6 +296,7 @@ function App() {
 
       // Check TP/SL
       checkTPSL(symbol, price);
+      checkAlertsRef.current(symbol, price);
     }, includeAfterHours);
 
     return unsubscribe;
@@ -314,6 +322,31 @@ function App() {
       unsubscribers.forEach(unsub => unsub());
     };
   }, [heldSymbols, updatePositionPrices, checkTPSL]);
+
+  // Alerts on symbols other than the charted one: check them with a batched quote every 10s
+  const otherAlertSymbols = [...new Set(
+    alerts.filter((a) => !a.triggeredAt && a.symbol.toUpperCase() !== symbol.toUpperCase()).map((a) => a.symbol)
+  )].sort().join(',');
+
+  useEffect(() => {
+    if (!otherAlertSymbols) return;
+    let cancelled = false;
+    const poll = async () => {
+      if (document.hidden) return;
+      try {
+        const { quotes } = await marketData.getQuotes(otherAlertSymbols.split(','));
+        if (!cancelled) quotes.forEach((q) => checkAlertsRef.current(q.symbol, q.price));
+      } catch {
+        /* try again next tick */
+      }
+    };
+    void poll();
+    const id = setInterval(poll, 10_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [otherAlertSymbols]);
 
   // Current trading session, and regular/extended-hours price moves for the header
   useEffect(() => {
@@ -534,6 +567,11 @@ function App() {
               timeframe={timeframe}
               data={chartData}
               onPriceUpdate={setCurrentPrice}
+              alerts={alerts}
+              onAddAlert={(price) => addAlert(symbol, price, currentPrice)}
+              onRemoveAlert={removeAlert}
+              onClearTriggeredAlerts={clearTriggered}
+              onSelectSymbol={handleSymbolChange}
             />
           </div>
 
@@ -561,6 +599,8 @@ function App() {
           </button>
         )}
       </div>
+
+      <Toasts toasts={toasts} onDismiss={dismissToast} onSelectSymbol={handleSymbolChange} />
 
       {isMobile && (
         <nav className="mobile-nav" aria-label="Sections">
