@@ -7,22 +7,18 @@ export default defineConfig({
     port: 3000,
     open: true,
     proxy: {
-      // Yahoo Finance has no CORS headers; proxy it through the dev server
-      '/api/yahoo': {
-        target: 'https://query1.finance.yahoo.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/yahoo/, ''),
-        headers: { 'User-Agent': 'Mozilla/5.0' }
+      // Market data comes from the local yfinance server (server/app.py)
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true
       }
     }
   },
   preview: {
     proxy: {
-      '/api/yahoo': {
-        target: 'https://query1.finance.yahoo.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/yahoo/, ''),
-        headers: { 'User-Agent': 'Mozilla/5.0' }
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true
       }
     }
   }

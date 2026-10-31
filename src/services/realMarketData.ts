@@ -72,30 +72,22 @@ export class RealMarketDataService {
   }
 
 
-  // Yahoo does not send CORS headers, so a browser cannot call it directly.
-  // Try the Vite dev/preview proxy first (same-origin, most reliable), then the
-  // public hosts, then CORS proxies.
-  private async yahooGet(path: string, timeout = 8000): Promise<any> {
-    const candidates = [
-      `/api/yahoo/${path}`,
-      `https://query1.finance.yahoo.com/${path}`,
-      `https://query2.finance.yahoo.com/${path}`,
-      `https://corsproxy.io/?${encodeURIComponent(`https://query1.finance.yahoo.com/${path}`)}`,
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query1.finance.yahoo.com/${path}`)}`,
-    ];
-    let lastError: unknown;
-    for (const url of candidates) {
-      try {
-        const response = await axios.get(url, { timeout, headers: { Accept: 'application/json' } });
-        // Dev server returns index.html for unknown routes - skip non-JSON bodies
-        if (response.data && typeof response.data === 'object') {
-          return response.data;
-        }
-      } catch (error) {
-        lastError = error;
+  // Market data comes from the local yfinance server (server/app.py), proxied by
+  // Vite at /api. Browsers cannot call Yahoo directly.
+  private async apiGet<T>(path: string, params: Record<string, string>, timeout = 15000): Promise<T> {
+    try {
+      const response = await axios.get<T>(`/api/${path}`, { params, timeout });
+      if (!response.data || typeof response.data !== 'object') {
+        throw new Error('Market data server is not running (run `npm run server`)');
       }
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const detail = error.response?.data?.error;
+        throw new Error(detail || 'Market data server unreachable (run `npm run server`)');
+      }
+      throw error;
     }
-    throw lastError ?? new Error('All market data endpoints failed');
   }
 
   // Fetch real historical data from Yahoo Finance
@@ -105,127 +97,43 @@ export class RealMarketDataService {
     range: string = '1d',
     includePrePost: boolean = false
   ): Promise<ChartData[]> {
-    const yahooSymbol = encodeURIComponent(this.normalizeSymbol(symbol));
-    const params = new URLSearchParams({
+    const data = await this.apiGet<{ bars: ChartData[] }>('chart', {
+      symbol: this.normalizeSymbol(symbol),
       interval,
       range,
-      includePrePost: includePrePost ? 'true' : 'false',
+      prepost: String(includePrePost),
     });
 
-    const data = await this.yahooGet(`v8/finance/chart/${yahooSymbol}?${params.toString()}`, 10000);
-    const result = data?.chart?.result?.[0];
-    const quotes = result?.indicators?.quote?.[0];
-
-    if (!result || !Array.isArray(result.timestamp) || !quotes) {
+    if (!Array.isArray(data.bars) || data.bars.length === 0) {
       throw new Error(`No market data returned for ${symbol}`);
     }
 
-    // Skip bars with null OHLC (Yahoo returns nulls for empty intervals) rather than
-    // inventing values. Also drop duplicate timestamps, which the chart rejects.
-    const chartData: ChartData[] = [];
-    result.timestamp.forEach((time: number, i: number) => {
-      const { open, high, low, close, volume } = {
-        open: quotes.open[i],
-        high: quotes.high[i],
-        low: quotes.low[i],
-        close: quotes.close[i],
-        volume: quotes.volume[i],
-      };
-      if (close == null || open == null || high == null || low == null) return;
-      const ms = time * 1000;
-      if (chartData.length && chartData[chartData.length - 1].time >= ms) return;
-      chartData.push({ time: ms, open, high, low, close, volume: volume || 0 });
-    });
-
-    if (chartData.length === 0) {
-      throw new Error(`Empty market data for ${symbol}`);
-    }
-
-    // Use the exchange's current price for the newest bar when available
-    const meta = result.meta;
-    const last = chartData[chartData.length - 1];
-    if (meta?.regularMarketPrice && !includePrePost) {
-      last.close = meta.regularMarketPrice;
-      last.high = Math.max(last.high, last.close);
-      last.low = Math.min(last.low, last.close);
-    }
-
-    this.priceCache.set(symbol, last.close);
-    return chartData;
+    this.priceCache.set(symbol, data.bars[data.bars.length - 1].close);
+    return data.bars;
   }
 
   // Get current quote for a symbol. Throws if no live price could be fetched
   // (callers keep showing the last known real price instead of a made-up one).
   async getCurrentPrice(symbol: string, includePrePost: boolean = true): Promise<number> {
-    const yahooSymbol = encodeURIComponent(this.normalizeSymbol(symbol));
-    const params = new URLSearchParams({
-      interval: '1m',
-      range: '1d',
-      includePrePost: includePrePost ? 'true' : 'false',
-    });
-    const data = await this.yahooGet(`v8/finance/chart/${yahooSymbol}?${params.toString()}`);
-    const result = data?.chart?.result?.[0];
+    const data = await this.apiGet<{ price: number }>('quote', {
+      symbol: this.normalizeSymbol(symbol),
+      prepost: String(includePrePost),
+    }, 8000);
 
-    // Prefer the latest 1m close when extended hours are on, since regularMarketPrice
-    // only reflects the regular session.
-    let price: number | undefined;
-    if (includePrePost) {
-      const closes: (number | null)[] = result?.indicators?.quote?.[0]?.close ?? [];
-      for (let i = closes.length - 1; i >= 0; i--) {
-        if (closes[i] != null) {
-          price = closes[i] as number;
-          break;
-        }
-      }
-    }
-    price = price ?? result?.meta?.regularMarketPrice;
-
-    if (!price || price <= 0) {
+    if (!data.price || data.price <= 0) {
       throw new Error(`No live price for ${symbol}`);
     }
-    this.priceCache.set(symbol, price);
-    return price;
+    this.priceCache.set(symbol, data.price);
+    return data.price;
   }
 
   // Fetch real options chain data
   async fetchOptionsChain(symbol: string, expirationDate?: string): Promise<OptionChain[]> {
     try {
-      const params = expirationDate ? `?date=${expirationDate}` : '';
-      
-      const data = await this.yahooGet(`v7/finance/options/${symbol}${params}`);
-      const result = data?.optionChain?.result?.[0];
-
-      if (!result || !result.options) {
-        console.error('No options data for', symbol);
-        return [];
-      }
-
-      const optionChains: OptionChain[] = result.options.map((opt: any) => ({
-        expirationDate: new Date(opt.expirationDate * 1000).toISOString().split('T')[0],
-        calls: opt.calls?.map((call: any) => ({
-          strike: call.strike,
-          lastPrice: call.lastPrice || 0,
-          bid: call.bid || 0,
-          ask: call.ask || 0,
-          volume: call.volume || 0,
-          openInterest: call.openInterest || 0,
-          impliedVolatility: call.impliedVolatility || 0,
-          inTheMoney: call.inTheMoney || false,
-        })) || [],
-        puts: opt.puts?.map((put: any) => ({
-          strike: put.strike,
-          lastPrice: put.lastPrice || 0,
-          bid: put.bid || 0,
-          ask: put.ask || 0,
-          volume: put.volume || 0,
-          openInterest: put.openInterest || 0,
-          impliedVolatility: put.impliedVolatility || 0,
-          inTheMoney: put.inTheMoney || false,
-        })) || [],
-      }));
-
-      console.log(`✅ Fetched REAL options data for ${symbol}`);
-      return optionChains;
+      const params: Record<string, string> = { symbol: this.normalizeSymbol(symbol) };
+      if (expirationDate) params.date = expirationDate;
+      const data = await this.apiGet<{ chains: OptionChain[] }>('options', params);
+      return data.chains ?? [];
     } catch (error) {
       console.error('Error fetching options chain:', error);
       return [];
@@ -235,16 +143,10 @@ export class RealMarketDataService {
   // Get available expiration dates for options
   async getOptionExpirations(symbol: string): Promise<string[]> {
     try {
-      const data = await this.yahooGet(`v7/finance/options/${symbol}`);
-      const result = data?.optionChain?.result?.[0];
-
-      if (!result || !result.expirationDates) {
-        return [];
-      }
-
-      return result.expirationDates.map((timestamp: number) => 
-        new Date(timestamp * 1000).toISOString().split('T')[0]
-      );
+      const data = await this.apiGet<{ expirations: string[] }>('options/expirations', {
+        symbol: this.normalizeSymbol(symbol),
+      });
+      return data.expirations ?? [];
     } catch (error) {
       console.error('Error fetching expiration dates:', error);
       return [];
