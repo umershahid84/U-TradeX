@@ -32,6 +32,7 @@ interface TradingChartProps {
   onPriceUpdate?: (price: number) => void;
   alerts: PriceAlert[];
   onAddAlert: (price: number) => void;
+  onMoveAlert: (id: string, price: number) => void;
   onRemoveAlert: (id: string) => void;
   onClearTriggeredAlerts: () => void;
   onSelectSymbol: (symbol: string) => void;
@@ -126,6 +127,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   onPriceUpdate,
   alerts,
   onAddAlert,
+  onMoveAlert,
   onRemoveAlert,
   onClearTriggeredAlerts,
   onSelectSymbol,
@@ -176,7 +178,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const alertArmedRef = useRef(false);
   const onAddAlertRef = useRef(onAddAlert);
   onAddAlertRef.current = onAddAlert;
-  const alertLinesRef = useRef<IPriceLine[]>([]);
+  const alertLinesRef = useRef<{ id: string; line: IPriceLine }[]>([]);
+  const activeAlertsRef = useRef<PriceAlert[]>([]);
+  const onMoveAlertRef = useRef(onMoveAlert);
+  onMoveAlertRef.current = onMoveAlert;
+  // Right-click menu: add an alert at the cursor's price, or delete the alert under it
+  const [menu, setMenu] = useState<{ x: number; y: number; price: number; alertId?: string; alertPrice?: number } | null>(null);
   const [customIndicators, setCustomIndicators] = useState<CustomIndicator[]>(() => {
     try {
       const saved = localStorage.getItem('customIndicators');
@@ -843,23 +850,160 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   };
 
   // Draw the active alerts of this symbol as dashed lines on the price scale
+  const activeHere = alerts.filter((a) => !a.triggeredAt && a.symbol.toUpperCase() === symbol.toUpperCase());
+  activeAlertsRef.current = activeHere;
+
   useEffect(() => {
     const series = candleSeriesRef.current;
     if (!series) return;
-    alertLinesRef.current.forEach((line: IPriceLine) => series.removePriceLine(line));
-    alertLinesRef.current = alerts
-      .filter((a) => !a.triggeredAt && a.symbol.toUpperCase() === symbol.toUpperCase())
-      .map((a) =>
-        series.createPriceLine({
-          price: a.price,
-          color: '#FFB300',
-          lineWidth: 1,
-          lineStyle: 2,
-          axisLabelVisible: true,
-          title: `🔔 ${a.direction === 'above' ? '▲' : '▼'}`,
-        })
-      );
+    alertLinesRef.current.forEach(({ line }) => series.removePriceLine(line));
+    alertLinesRef.current = activeAlertsRef.current.map((a) => ({
+      id: a.id,
+      line: series.createPriceLine({
+        price: a.price,
+        color: '#FFB300',
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: `🔔 ${a.direction === 'above' ? '▲' : '▼'}`,
+      }),
+    }));
   }, [alerts, symbol]);
+
+  // Right-click to add an alert at the cursor, and drag an alert's line up or down to move it
+  useEffect(() => {
+    const el = chartContainerRef.current;
+    const chart = chartRef.current;
+    const series = candleSeriesRef.current;
+    if (!el || !chart || !series) return;
+
+    const HIT_PX = 7; // how close to a line counts as grabbing it
+    const paneHeight = () => chart.panes()[0]?.getHeight() ?? el.clientHeight;
+    const point = (e: MouseEvent | TouchEvent) => ('touches' in e ? (e.touches[0] ?? (e as TouchEvent).changedTouches[0]) : e);
+
+    const priceAtY = (clientY: number): number | null => {
+      const y = Math.max(0, Math.min(paneHeight() - 1, clientY - el.getBoundingClientRect().top));
+      const price = series.coordinateToPrice(y);
+      return price === null ? null : (price as number);
+    };
+
+    // The active alert whose line is under the pointer (plot area only, not the price axis)
+    const alertAt = (clientX: number, clientY: number): PriceAlert | null => {
+      const rect = el.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+      if (x < 0 || x > chart.timeScale().width() || y < 0 || y > paneHeight()) return null;
+      let best: PriceAlert | null = null;
+      let bestDist = HIT_PX + 1;
+      for (const a of activeAlertsRef.current) {
+        const ay = series.priceToCoordinate(a.price);
+        if (ay === null) continue;
+        const d = Math.abs((ay as number) - y);
+        if (d < bestDist) {
+          best = a;
+          bestDist = d;
+        }
+      }
+      return best;
+    };
+
+    let drag: { id: string; price: number } | null = null;
+    let restore: { scroll: unknown; scale: unknown } | null = null;
+
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      if (selectedToolRef.current !== 'none' || alertArmedRef.current) return;
+      if ('button' in e && e.button !== 0) return;
+      const pt = point(e);
+      const hit = alertAt(pt.clientX, pt.clientY);
+      if (!hit) return;
+      // keep the chart from panning while the line is dragged
+      e.stopPropagation();
+      if (e.cancelable) e.preventDefault();
+      drag = { id: hit.id, price: hit.price };
+      restore = { scroll: chart.options().handleScroll, scale: chart.options().handleScale };
+      chart.applyOptions({ handleScroll: false, handleScale: false });
+      el.classList.add('alert-dragging');
+      setMenu(null);
+    };
+
+    const onMove = (e: MouseEvent | TouchEvent) => {
+      const pt = point(e);
+      if (drag) {
+        if (e.cancelable) e.preventDefault();
+        const price = priceAtY(pt.clientY);
+        if (price !== null && price > 0) {
+          drag.price = Math.round(price * 100) / 100;
+          alertLinesRef.current.find((l) => l.id === drag!.id)?.line.applyOptions({ price: drag.price });
+        }
+        return;
+      }
+      if ('touches' in e) return;
+      el.classList.toggle('alert-hover', alertAt(pt.clientX, pt.clientY) !== null && selectedToolRef.current === 'none');
+    };
+
+    const onUp = () => {
+      if (!drag) return;
+      const done = drag;
+      drag = null;
+      if (restore) {
+        chart.applyOptions({ handleScroll: restore.scroll as never, handleScale: restore.scale as never });
+        restore = null;
+      }
+      el.classList.remove('alert-dragging');
+      onMoveAlertRef.current(done.id, done.price);
+    };
+
+    const onContext = (e: MouseEvent) => {
+      const rect = el.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      if (x > chart.timeScale().width() || y > paneHeight()) return; // axis or lower panes: leave the browser menu
+      e.preventDefault();
+      const price = priceAtY(e.clientY);
+      if (price === null || price <= 0) return;
+      const hit = alertAt(e.clientX, e.clientY);
+      setMenu({ x: e.clientX, y: e.clientY, price, alertId: hit?.id, alertPrice: hit?.price });
+    };
+
+    el.addEventListener('mousedown', onDown, true);
+    el.addEventListener('touchstart', onDown, { capture: true, passive: false });
+    el.addEventListener('mousemove', onMove);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchend', onUp);
+    el.addEventListener('contextmenu', onContext);
+    return () => {
+      el.removeEventListener('mousedown', onDown, true);
+      el.removeEventListener('touchstart', onDown, true);
+      el.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchend', onUp);
+      el.removeEventListener('contextmenu', onContext);
+    };
+  }, []);
+
+  // Close the right-click menu on any click elsewhere, Esc, or scroll
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent && e.key !== 'Escape') return;
+      if (e instanceof MouseEvent && (e.target as Element | null)?.closest('.chart-context-menu')) return;
+      setMenu(null);
+    };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', close);
+    window.addEventListener('wheel', close, { passive: true });
+    window.addEventListener('blur', close);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', close);
+      window.removeEventListener('wheel', close);
+      window.removeEventListener('blur', close);
+    };
+  }, [menu]);
 
   // Auto charting: analyse the bars on screen and draw levels, trendlines and patterns
   const autoResult = useMemo(() => (autoChart.enabled ? analyzeChart(data) : null), [data, autoChart.enabled]);
@@ -1219,6 +1363,25 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             onClearTriggered={onClearTriggeredAlerts}
             onSelectSymbol={onSelectSymbol}
           />
+        </div>
+      )}
+
+      {menu && (
+        <div
+          className="chart-context-menu"
+          style={{ left: Math.min(menu.x, window.innerWidth - 230), top: Math.min(menu.y, window.innerHeight - 90) }}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          {menu.alertId ? (
+            <button type="button" onClick={() => { onRemoveAlert(menu.alertId!); setMenu(null); }}>
+              🗑️ Delete alert at ${menu.alertPrice!.toFixed(2)}
+            </button>
+          ) : (
+            <button type="button" onClick={() => { onAddAlert(menu.price); setMenu(null); }}>
+              🔔 Add alert at ${menu.price.toFixed(2)}
+            </button>
+          )}
+          <span className="menu-hint">{menu.alertId ? 'Drag the line to move it' : `${symbol} · right-click`}</span>
         </div>
       )}
 

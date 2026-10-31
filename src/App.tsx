@@ -138,7 +138,7 @@ function App() {
     buyOption,
   } = usePaperTrading();
 
-  const { alerts, toasts, addAlert, removeAlert, clearTriggered, check: checkAlerts, dismissToast } = usePriceAlerts();
+  const { alerts, toasts, addAlert, moveAlert, removeAlert, clearTriggered, check: checkAlerts, dismissToast } = usePriceAlerts();
   // The live-price subscription is created once per symbol, so reach the latest check through a ref
   const checkAlertsRef = useRef(checkAlerts);
   checkAlertsRef.current = checkAlerts;
@@ -569,6 +569,7 @@ function App() {
               onPriceUpdate={setCurrentPrice}
               alerts={alerts}
               onAddAlert={(price) => addAlert(symbol, price, currentPrice)}
+              onMoveAlert={(id, price) => moveAlert(id, price, currentPrice)}
               onRemoveAlert={removeAlert}
               onClearTriggeredAlerts={clearTriggered}
               onSelectSymbol={handleSymbolChange}

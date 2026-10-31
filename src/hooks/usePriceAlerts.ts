@@ -71,6 +71,15 @@ export const usePriceAlerts = () => {
     return true;
   }, []);
 
+  // Re-price an alert (dragged on the chart); its direction follows the new level
+  const moveAlert = useCallback((id: string, price: number, currentPrice: number) => {
+    if (!Number.isFinite(price) || price <= 0) return;
+    const rounded = Math.round(price * 100) / 100;
+    setAlerts((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, price: rounded, direction: rounded >= currentPrice ? 'above' : 'below' } : a))
+    );
+  }, []);
+
   const removeAlert = useCallback((id: string) => setAlerts((prev) => prev.filter((a) => a.id !== id)), []);
   const clearTriggered = useCallback(() => setAlerts((prev) => prev.filter((a) => !a.triggeredAt)), []);
 
@@ -107,5 +116,5 @@ export const usePriceAlerts = () => {
     chime();
   }, [dismissToast]);
 
-  return { alerts, toasts, addAlert, removeAlert, clearTriggered, check, dismissToast };
+  return { alerts, toasts, addAlert, moveAlert, removeAlert, clearTriggered, check, dismissToast };
 };
