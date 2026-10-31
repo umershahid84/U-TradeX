@@ -1,60 +1,52 @@
 import { FearGreedData } from '../types';
 
+const clampN = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
+
+/**
+ * Sentiment reading for the charted symbol (0 = extreme fear, 100 = extreme greed), blended from
+ * RSI, price vs the 20-day average, the 20/50 trend and volume. Every input moves the score
+ * smoothly; `volumeRatio` is null when volume is unavailable and is then ignored.
+ */
 export const calculateFearGreed = (
   price: number,
   sma20: number,
   sma50: number,
   rsi: number,
-  volume: number,
-  avgVolume: number
+  volumeRatio: number | null,
+  priceChange: number
 ): FearGreedData => {
-  // Calculate various factors
-  const priceVsSMA = ((price - sma20) / sma20) * 100;
-  const trendStrength = ((sma20 - sma50) / sma50) * 100;
-  const volumeRatio = volume / avgVolume;
+  const priceVsSMA = ((price - sma20) / sma20) * 100; // %
+  const trendStrength = ((sma20 - sma50) / sma50) * 100; // %
 
-  // Weight different factors
-  let score = 50; // Start neutral
+  const parts: { score: number; weight: number }[] = [
+    { score: clampN(rsi, 0, 100), weight: 40 },
+    { score: 50 + clampN(priceVsSMA / 5, -1, 1) * 50, weight: 25 },
+    { score: 50 + clampN(trendStrength / 3, -1, 1) * 50, weight: 20 },
+  ];
+  // Heavy volume amplifies the move it comes with: buying on up bars reads as greed, selling as fear
+  if (volumeRatio !== null && Number.isFinite(volumeRatio)) {
+    const direction = Math.sign(priceChange);
+    parts.push({ score: 50 + clampN((volumeRatio - 1) / 1.5, -1, 1) * direction * 50, weight: 15 });
+  }
 
-  // RSI factor (30-70 range, most important)
-  if (rsi < 30) score -= 20;
-  else if (rsi < 40) score -= 10;
-  else if (rsi > 70) score += 20;
-  else if (rsi > 60) score += 10;
+  const totalWeight = parts.reduce((s, p) => s + p.weight, 0);
+  const score = clampN(parts.reduce((s, p) => s + p.score * p.weight, 0) / totalWeight, 0, 100);
 
-  // Price vs moving average
-  if (priceVsSMA < -5) score -= 15;
-  else if (priceVsSMA < -2) score -= 10;
-  else if (priceVsSMA > 5) score += 15;
-  else if (priceVsSMA > 2) score += 10;
-
-  // Trend strength
-  if (trendStrength < -3) score -= 10;
-  else if (trendStrength > 3) score += 10;
-
-  // Volume
-  if (volumeRatio > 1.5) score += 5;
-  else if (volumeRatio < 0.5) score -= 5;
-
-  // Clamp between 0 and 100
-  score = Math.max(0, Math.min(100, score));
-
-  // Determine level
   let level: FearGreedData['level'];
-  if (score <= 20) level = 'extreme fear';
-  else if (score <= 40) level = 'fear';
-  else if (score <= 60) level = 'neutral';
-  else if (score <= 80) level = 'greed';
+  if (score < 25) level = 'extreme fear';
+  else if (score < 45) level = 'fear';
+  else if (score < 55) level = 'neutral';
+  else if (score < 75) level = 'greed';
   else level = 'extreme greed';
 
-  // Determine signal
-  let signal: FearGreedData['signal'];
   const oversold = rsi < 30;
   const overbought = rsi > 70;
 
-  if (oversold && score < 30) signal = 'STRONG BUY';
+  // Contrarian read: fear is where buyers step in, greed is where they get stretched
+  let signal: FearGreedData['signal'];
+  if (score < 25 || (oversold && score < 35)) signal = 'STRONG BUY';
   else if (score < 40) signal = 'BUY';
-  else if (overbought && score > 70) signal = 'STRONG SELL';
+  else if (score > 75 || (overbought && score > 65)) signal = 'STRONG SELL';
   else if (score > 60) signal = 'SELL';
   else signal = 'HOLD';
 

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ChartData } from '../types';
+import { ChartData, MarketFearGreed } from '../types';
 
 // Free API endpoints for real market data
 // Using Yahoo Finance API (via query1.finance.yahoo.com)
@@ -125,6 +125,11 @@ export class RealMarketDataService {
     }
     this.priceCache.set(symbol, data.price);
     return data.price;
+  }
+
+  // Market-wide Fear & Greed index (CNN's, or an estimate if CNN is unreachable)
+  async getMarketFearGreed(): Promise<MarketFearGreed> {
+    return this.apiGet<MarketFearGreed>('feargreed', {}, 15000);
   }
 
   // Fetch real options chain data

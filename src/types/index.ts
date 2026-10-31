@@ -63,6 +63,19 @@ export interface FearGreedData {
   overbought: boolean;
 }
 
+export interface MarketFearGreed {
+  score: number; // 0-100
+  rating: string;
+  previousClose: number | null;
+  previousWeek: number | null;
+  previousMonth: number | null;
+  previousYear: number | null;
+  updated: string;
+  /** 'cnn' is CNN's published index; 'estimate' is a rougher stand-in when CNN is unreachable */
+  source: 'cnn' | 'estimate';
+  components: { name: string; score: number; rating: string }[];
+}
+
 export type TimeFrame = '1s' | '5s' | '10s' | '30s' | '1m' | '2m' | '5m' | '10m' | '15m' | '30m' | '1h' | '4h' | 'D' | 'W' | 'M' | '1Q' | '1Y';
 export type TimeRange = '1D' | '5D' | '1M' | '3M' | '6M' | 'YTD' | '1Y' | '5Y' | 'MAX';
 

@@ -13,7 +13,7 @@ import {
   calculateSMA,
   calculateRSI,
 } from './utils/indicators';
-import { TimeFrame, TimeRange, ChartData, FearGreedData, TakeProfitStopLoss } from './types';
+import { TimeFrame, TimeRange, ChartData, FearGreedData, MarketFearGreed, TakeProfitStopLoss } from './types';
 import './App.css';
 
 const marketData = RealMarketDataService.getInstance();
@@ -63,13 +63,10 @@ function App() {
   const [timeRange, setTimeRange] = useState<TimeRange>('1D');
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [currentPrice, setCurrentPrice] = useState<number>(0);
-  const [fearGreedData, setFearGreedData] = useState<FearGreedData>({
-    value: 50,
-    level: 'neutral',
-    signal: 'HOLD',
-    oversold: false,
-    overbought: false,
-  });
+  // Sentiment of the charted symbol; null until there is enough data to read
+  const [fearGreedData, setFearGreedData] = useState<FearGreedData | null>(null);
+  const [marketFearGreed, setMarketFearGreed] = useState<MarketFearGreed | null>(null);
+  const [marketFearGreedError, setMarketFearGreedError] = useState('');
   const [tpslSettings, setTpslSettings] = useState<Map<string, TakeProfitStopLoss>>(new Map());
   const [includeAfterHours, setIncludeAfterHours] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
@@ -173,6 +170,7 @@ function App() {
     const loadData = async () => {
       setConnectionStatus('connecting');
       setDataError('');
+      setFearGreedData(null); // don't show the previous symbol's reading while loading
       const yahooRange = getYahooRange(timeRange);
       const yahooInterval = getYahooInterval(timeframe);
       
@@ -268,29 +266,61 @@ function App() {
     };
   }, [heldSymbols, updatePositionPrices, checkTPSL]);
 
-  // Calculate Fear & Greed indicator
+  // Market-wide Fear & Greed (CNN's index), refreshed every few minutes
   useEffect(() => {
-    if (chartData.length < 50) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const fg = await marketData.getMarketFearGreed();
+        if (!cancelled) {
+          setMarketFearGreed(fg);
+          setMarketFearGreedError('');
+        }
+      } catch (e) {
+        if (!cancelled) setMarketFearGreedError(e instanceof Error ? e.message : String(e));
+      }
+    };
+    void load();
+    const id = setInterval(load, 5 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  // Per-symbol sentiment from the chart being viewed
+  useEffect(() => {
+    if (chartData.length < 50) {
+      setFearGreedData(null);
+      return;
+    }
 
     const closes = chartData.map((d) => d.close);
     const volumes = chartData.map((d) => d.volume);
     const sma20 = calculateSMA(closes, 20);
     const sma50 = calculateSMA(closes, 50);
     const rsi = calculateRSI(closes);
-    
-    const avgVolume = volumes.slice(-20).reduce((a, b) => a + b, 0) / 20;
-    const lastVolume = volumes[volumes.length - 1];
 
-    const fg = calculateFearGreed(
-      currentPrice,
-      sma20[sma20.length - 1] || currentPrice,
-      sma50[sma50.length - 1] || currentPrice,
-      rsi,
-      lastVolume,
-      avgVolume
+    // Compare the last bar that has a volume against the average, so a freshly opened live bar
+    // (volume 0 so far) does not read as a collapse in volume
+    const withVolume = volumes.map((v, i) => ({ v, i })).filter((x) => x.v > 0);
+    let volumeRatio: number | null = null;
+    if (withVolume.length > 21) {
+      const lastIdx = withVolume[withVolume.length - 1].i;
+      const avg = withVolume.slice(-21, -1).reduce((a, b) => a + b.v, 0) / 20;
+      volumeRatio = avg > 0 ? volumes[lastIdx] / avg : null;
+    }
+
+    setFearGreedData(
+      calculateFearGreed(
+        currentPrice || closes[closes.length - 1],
+        sma20[sma20.length - 1] || closes[closes.length - 1],
+        sma50[sma50.length - 1] || closes[closes.length - 1],
+        rsi,
+        volumeRatio,
+        closes[closes.length - 1] - closes[closes.length - 2]
+      )
     );
-
-    setFearGreedData(fg);
   }, [chartData, currentPrice]);
 
   const handleSymbolChange = useCallback((newSymbol: string) => {
@@ -406,7 +436,12 @@ function App() {
               ▶
             </button>
             <div className="sidebar-panels">
-              <FearGreedIndicator data={fearGreedData} />
+              <FearGreedIndicator
+                symbol={symbol}
+                market={marketFearGreed}
+                marketError={marketFearGreedError}
+                ticker={fearGreedData}
+              />
               
               <TradingPanel
                 symbol={symbol}
