@@ -23,8 +23,8 @@
 }
 
 .left-sidebar {
-  width: 300px;
-  flex: 0 0 300px;
+  width: 340px;
+  flex: 0 0 340px;
 }
 
 .right-sidebar {
@@ -268,8 +268,8 @@
 
 @media (max-width: 1400px) {
   .left-sidebar {
-    width: 250px;
-    flex-basis: 250px;
+    width: 300px;
+    flex-basis: 300px;
   }
 
   .right-sidebar {

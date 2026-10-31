@@ -89,6 +89,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
 
+      <div className="navbar-range-row">
       <div className="range-selector">
         <div className="selector-label">Range:</div>
         <div className="range-buttons">
@@ -105,6 +106,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {children}
+      </div>
     </nav>
   );
 };

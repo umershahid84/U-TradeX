@@ -1,14 +1,14 @@
 .portfolio-bar { position: relative; margin-left: auto; }
 
 .portfolio-summary {
-  display: flex; align-items: center; gap: 10px; padding: 7px 12px; background: #1a1e3f;
-  border: 1px solid #2a2e4f; border-radius: 6px; color: #e0e0e0; cursor: pointer; font-size: 13px;
-  white-space: nowrap;
+  display: flex; align-items: center; gap: 8px; padding: 4px 10px; background: #1a1e3f;
+  border: 1px solid #2a2e4f; border-radius: 6px; color: #e0e0e0; cursor: pointer; font-size: 12px;
+  white-space: nowrap; line-height: 1.4;
 }
 .portfolio-summary:hover, .portfolio-summary.open { border-color: #3a3e6f; background: #1f2450; }
-.pb-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #8a8fb5; font-weight: 600; }
+.pb-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #8a8fb5; font-weight: 600; }
 .pb-value { font-weight: 700; }
-.pb-pnl { font-weight: 600; font-size: 12px; }
+.pb-pnl { font-weight: 600; font-size: 11px; }
 .pb-pnl.up { color: #26a69a; }
 .pb-pnl.down { color: #ef5350; }
 .pb-count { background: #2a2e4f; color: #c0c4e0; border-radius: 9px; padding: 0 7px; font-size: 11px; font-weight: 600; }

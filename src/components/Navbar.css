@@ -177,3 +177,12 @@
     font-size: 12px;
   }
 }
+
+/* Range buttons and the portfolio summary share one row */
+.navbar-range-row { display: flex; align-items: center; gap: 16px; flex: 1 1 auto; min-width: 0; }
+.navbar-range-row .range-selector { flex: 0 1 auto; min-width: 0; }
+
+@media (max-width: 900px) {
+  .navbar-range-row { flex-direction: column; align-items: stretch; width: 100%; gap: 8px; }
+  .navbar-range-row .range-selector { width: 100%; }
+}

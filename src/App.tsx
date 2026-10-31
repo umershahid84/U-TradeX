@@ -3,7 +3,7 @@ import { Navbar } from './components/Navbar';
 import { TradingChart } from './components/TradingChart';
 import { TradingPanel } from './components/TradingPanel';
 import { PortfolioBar } from './components/PortfolioBar';
-import { Dock, DockPosition } from './components/Dock';
+import { PanelFrame, PanelId, Placement } from './components/PanelFrame';
 import { Watchlist } from './components/Watchlist';
 import { FearGreedIndicator } from './components/FearGreedIndicator';
 import { TPSLPanel } from './components/TPSLPanel';
@@ -89,6 +89,21 @@ const setStorageValue = (key: string, value: string): void => {
   }
 };
 
+const PANEL_IDS: PanelId[] = ['watchlist', 'options'];
+
+const loadPlacement = (): Record<PanelId, Placement> => {
+  const fallback: Record<PanelId, Placement> = { watchlist: 'left', options: 'left' };
+  try {
+    const saved = JSON.parse(getStorageValue('panelPlacement', 'null'));
+    PANEL_IDS.forEach((id) => {
+      if (['left', 'top', 'bottom'].includes(saved?.[id])) fallback[id] = saved[id];
+    });
+  } catch {
+    /* use defaults */
+  }
+  return fallback;
+};
+
 function App() {
   const [symbol, setSymbol] = useState(() => {
     return getStorageValue('lastViewedSymbol', 'AAPL');
@@ -109,10 +124,11 @@ function App() {
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
   const [dataError, setDataError] = useState<string>('');
   const isMobile = useIsMobile();
-  const [dockOpen, setDockOpen] = useState(() => getStorageValue('dockOpen', 'true') !== 'false');
-  const [dockPosition, setDockPosition] = useState<DockPosition>(
-    () => (getStorageValue('dockPosition', 'bottom') === 'top' ? 'top' : 'bottom')
-  );
+  const [showLeftSidebar, setShowLeftSidebar] = useState(() => {
+    return getStorageValue('showLeftSidebar', 'true') !== 'false';
+  });
+  // Where the watchlist and options panels are shown: left sidebar, above or below the chart
+  const [placement, setPlacement] = useState<Record<PanelId, Placement>>(loadPlacement);
   const [showRightSidebar, setShowRightSidebar] = useState(() => {
     return getStorageValue('showRightSidebar', 'true') !== 'false';
   });
@@ -405,6 +421,12 @@ function App() {
     alert(`TP/SL set for ${tpsl.symbol}`);
   };
 
+  const toggleLeftSidebar = () => {
+    const newValue = !showLeftSidebar;
+    setShowLeftSidebar(newValue);
+    setStorageValue('showLeftSidebar', String(newValue));
+  };
+
   const toggleRightSidebar = () => {
     const newValue = !showRightSidebar;
     setShowRightSidebar(newValue);
@@ -414,33 +436,39 @@ function App() {
   // On mobile the panels stack below the chart, so the collapse toggle doesn't apply
   const rightVisible = showRightSidebar || isMobile;
 
-  const dockPanel = dockOpen && (
-    <Dock
-      position={isMobile ? 'bottom' : dockPosition}
-      onPositionChange={(p) => { setDockPosition(p); setStorageValue('dockPosition', p); }}
-      onClose={() => { setDockOpen(false); setStorageValue('dockOpen', 'false'); }}
-    >
-      <Watchlist activeSymbol={symbol} onSelect={handleSymbolChange} />
-      <OptionsPanel
-        symbol={symbol}
-        currentPrice={currentPrice}
-        balance={account.balance}
-        chartData={chartData}
-        chartLabel={`${timeframe} · ${timeRange}`}
-        onBuyOption={buyOption}
-      />
-    </Dock>
+  const movePanel = (id: PanelId, to: Placement) => {
+    setPlacement((prev) => {
+      const next = { ...prev, [id]: to };
+      setStorageValue('panelPlacement', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  // On phones everything stacks below the chart, whatever was chosen
+  const placeOf = (id: PanelId): Placement => (isMobile ? 'bottom' : placement[id]);
+
+  const panelNode = (id: PanelId) => (
+    <PanelFrame key={id} id={id} placement={placeOf(id)} movable={!isMobile} onMove={(to) => movePanel(id, to)}>
+      {id === 'watchlist' ? (
+        <Watchlist activeSymbol={symbol} onSelect={handleSymbolChange} />
+      ) : (
+        <OptionsPanel
+          symbol={symbol}
+          currentPrice={currentPrice}
+          balance={account.balance}
+          chartData={chartData}
+          chartLabel={`${timeframe} · ${timeRange}`}
+          onBuyOption={buyOption}
+        />
+      )}
+    </PanelFrame>
   );
-  const dockToggle = !dockOpen && (
-    <button
-      type="button"
-      className="dock-show"
-      onClick={() => { setDockOpen(true); setStorageValue('dockOpen', 'true'); }}
-    >
-      ▸ Show Watchlist &amp; Options
-    </button>
-  );
-  const dockAbove = !isMobile && dockPosition === 'top';
+
+  const panelsAt = (where: Placement) => PANEL_IDS.filter((id) => placeOf(id) === where);
+  const leftPanels = panelsAt('left');
+  const topPanels = panelsAt('top');
+  const bottomPanels = panelsAt('bottom');
+  const leftVisible = leftPanels.length > 0 && (showLeftSidebar || isMobile);
 
   return (
     <div className="app">
@@ -456,9 +484,23 @@ function App() {
       </Navbar>
       
       <div className="main-content">
+        {leftVisible && (
+          <div className="left-sidebar">
+            <button className="sidebar-toggle left" onClick={toggleLeftSidebar} title="Hide sidebar">
+              ◀
+            </button>
+            <div className="sidebar-panels">{leftPanels.map(panelNode)}</div>
+          </div>
+        )}
+
+        {leftPanels.length > 0 && !leftVisible && (
+          <button className="sidebar-toggle-collapsed left" onClick={toggleLeftSidebar} title="Show sidebar">
+            ▶
+          </button>
+        )}
+
         <div className="center-column">
-        {dockAbove && dockPanel}
-        {dockAbove && dockToggle}
+        {topPanels.length > 0 && <div className="panel-strip">{topPanels.map(panelNode)}</div>}
         <div className="chart-area">
           <div className="chart-header">
             <div className="symbol-info">
@@ -509,8 +551,7 @@ function App() {
             onPriceUpdate={setCurrentPrice}
           />
         </div>
-        {!dockAbove && dockPanel}
-        {!dockAbove && dockToggle}
+        {bottomPanels.length > 0 && <div className="panel-strip">{bottomPanels.map(panelNode)}</div>}
         </div>
 
         {rightVisible && (
