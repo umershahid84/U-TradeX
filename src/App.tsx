@@ -7,7 +7,8 @@ import { FearGreedIndicator } from './components/FearGreedIndicator';
 import { TPSLPanel } from './components/TPSLPanel';
 import { OptionsPanel } from './components/OptionsPanel';
 import { usePaperTrading } from './hooks/usePaperTrading';
-import { RealMarketDataService } from './services/realMarketData';
+import { RealMarketDataService, QuoteDetails } from './services/realMarketData';
+import { Session, SESSION_COLOR, SESSION_LABEL, sessionAt } from './utils/marketSessions';
 import {
   calculateFearGreed,
   calculateSMA,
@@ -17,6 +18,37 @@ import { TimeFrame, TimeRange, ChartData, FearGreedData, MarketFearGreed, TakePr
 import './App.css';
 
 const marketData = RealMarketDataService.getInstance();
+
+const fmtMove = (change: number | null, pct: number | null) =>
+  change === null || pct === null ? '' : `${change >= 0 ? '+' : '-'}${Math.abs(change).toFixed(2)} (${pct >= 0 ? '+' : '-'}${Math.abs(pct).toFixed(2)}%)`;
+
+// Regular-session close and extended-hours moves, e.g. "At close $344.63 -4.28" then "After hours $345.10 +0.47"
+const SessionMoves = ({ quote }: { quote: QuoteDetails | null }) => {
+  if (!quote) return null;
+  const rows: { key: string; label: string; icon: string; price: number | null; change: number | null; pct: number | null; color: string }[] = [
+    { key: 'reg', label: quote.marketState === 'REGULAR' ? 'Market' : 'At close', icon: '', price: quote.regularPrice, change: quote.regularChange, pct: quote.regularChangePercent, color: SESSION_COLOR.regular },
+    { key: 'pre', label: 'Pre-market', icon: '☀', price: quote.preMarketPrice, change: quote.preMarketChange, pct: quote.preMarketChangePercent, color: SESSION_COLOR.pre },
+    { key: 'post', label: 'After hours', icon: '🌙', price: quote.postMarketPrice, change: quote.postMarketChange, pct: quote.postMarketChangePercent, color: SESSION_COLOR.post },
+  ];
+  // Pre-market belongs to the day ahead, after-hours to the day just finished: show only the live one
+  const visible = rows.filter((r) => {
+    if (r.price === null) return false;
+    if (r.key === 'pre') return quote.marketState === 'PRE' || quote.marketState === 'PREPRE';
+    if (r.key === 'post') return quote.marketState !== 'REGULAR' && quote.marketState !== 'PRE' && quote.marketState !== 'PREPRE';
+    return true;
+  });
+  return (
+    <div className="session-moves">
+      {visible.map((r) => (
+        <div key={r.key} className="session-move">
+          <span className="sm-label" style={{ color: r.color }}>{r.icon} {r.label}</span>
+          <span className="sm-price">${r.price!.toFixed(2)}</span>
+          <span className={`sm-change ${(r.change ?? 0) >= 0 ? 'up' : 'down'}`}>{fmtMove(r.change, r.pct)}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 const MOBILE_QUERY = '(max-width: 900px)';
 
@@ -68,7 +100,10 @@ function App() {
   const [marketFearGreed, setMarketFearGreed] = useState<MarketFearGreed | null>(null);
   const [marketFearGreedError, setMarketFearGreedError] = useState('');
   const [tpslSettings, setTpslSettings] = useState<Map<string, TakeProfitStopLoss>>(new Map());
-  const [includeAfterHours, setIncludeAfterHours] = useState(false);
+  // On by default so pre-market and after-hours trading shows on the chart
+  const [includeAfterHours, setIncludeAfterHours] = useState(true);
+  const [quoteDetails, setQuoteDetails] = useState<QuoteDetails | null>(null);
+  const [session, setSession] = useState<Session>(() => sessionAt(Date.now()));
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
   const [dataError, setDataError] = useState<string>('');
   const isMobile = useIsMobile();
@@ -266,6 +301,32 @@ function App() {
     };
   }, [heldSymbols, updatePositionPrices, checkTPSL]);
 
+  // Current trading session, and regular/extended-hours price moves for the header
+  useEffect(() => {
+    const tick = () => setSession(sessionAt(Date.now()));
+    const id = setInterval(tick, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setQuoteDetails(null);
+    const load = async () => {
+      try {
+        const q = await marketData.getQuoteDetails(symbol);
+        if (!cancelled) setQuoteDetails(q);
+      } catch {
+        /* header details are optional */
+      }
+    };
+    void load();
+    const id = setInterval(load, 10_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [symbol]);
+
   // Market-wide Fear & Greed (CNN's index), refreshed every few minutes
   useEffect(() => {
     let cancelled = false;
@@ -391,7 +452,12 @@ function App() {
               <div className="price-display">
                 <span className="current-price">${currentPrice.toFixed(2)}</span>
               </div>
+              <span className="session-badge" style={{ color: SESSION_COLOR[session], borderColor: SESSION_COLOR[session] }}>
+                <i style={{ background: SESSION_COLOR[session] }} />
+                {SESSION_LABEL[session]}
+              </span>
             </div>
+            <SessionMoves quote={quoteDetails} />
             <div className="bid-ask-display">
               <div className="bid-price">
                 <span className="label">BID:</span>

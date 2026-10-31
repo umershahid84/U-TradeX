@@ -16,6 +16,21 @@ export interface OptionChainData {
   inTheMoney: boolean;
 }
 
+export interface QuoteDetails {
+  price: number;
+  marketState: string;
+  regularPrice: number | null;
+  regularChange: number | null;
+  regularChangePercent: number | null;
+  previousClose: number | null;
+  preMarketPrice: number | null;
+  preMarketChange: number | null;
+  preMarketChangePercent: number | null;
+  postMarketPrice: number | null;
+  postMarketChange: number | null;
+  postMarketChangePercent: number | null;
+}
+
 export interface OptionChain {
   calls: OptionChainData[];
   puts: OptionChainData[];
@@ -125,6 +140,11 @@ export class RealMarketDataService {
     }
     this.priceCache.set(symbol, data.price);
     return data.price;
+  }
+
+  // Regular-session close plus pre-market / after-hours moves for the header
+  async getQuoteDetails(symbol: string): Promise<QuoteDetails> {
+    return this.apiGet<QuoteDetails>('quote', { symbol: this.normalizeSymbol(symbol), prepost: 'true' }, 8000);
   }
 
   // Market-wide Fear & Greed index (CNN's, or an estimate if CNN is unreachable)

@@ -346,3 +346,28 @@
     overflow-wrap: anywhere;
   }
 }
+
+.session-badge {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border: 1px solid;
+  border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.session-badge i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+.session-moves { display: flex; flex-direction: column; gap: 3px; margin: 0 24px 0 auto; font-size: 12px; }
+.session-move { display: flex; gap: 10px; align-items: baseline; justify-content: flex-end; }
+.sm-label { font-weight: 600; min-width: 90px; text-align: right; }
+.sm-price { color: #e0e0e0; font-weight: 600; }
+.sm-change.up { color: #26a69a; }
+.sm-change.down { color: #ef5350; }
+
+@media (max-width: 900px) {
+  .session-moves { margin: 0; }
+  .session-move { justify-content: flex-start; }
+  .sm-label { text-align: left; min-width: 90px; }
+}
+
+.chart-header { flex-wrap: wrap; gap: 8px 16px; }
+.session-move { white-space: nowrap; }
+.session-moves { margin: 0 auto 0 0; }
+.bid-ask-display { flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+@media (max-width: 900px) { .bid-ask-display { margin-left: 0; justify-content: flex-start; } }

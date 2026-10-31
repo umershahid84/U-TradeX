@@ -283,3 +283,10 @@
   .indicator-panel { position: relative; }
   .cloud-pair input[type='number'] { font-size: 16px; width: 60px; }
 }
+
+.session-legend {
+  display: flex; flex-wrap: wrap; gap: 4px 14px; justify-content: flex-end; padding: 4px 12px;
+  font-size: 10px; color: #9a9ec0; flex-shrink: 0;
+}
+.session-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: middle; opacity: 0.85; }
+@media (max-width: 900px) { .session-legend { justify-content: flex-start; } }

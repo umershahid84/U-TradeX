@@ -16,6 +16,8 @@ import { IndicatorPanels } from './IndicatorPanels';
 import { CustomIndicatorPanel } from './CustomIndicatorPanel';
 import { CustomIndicatorManager } from './customIndicatorManager';
 import { CloudSeries } from '../plugins/cloudSeries';
+import { attachSessionBands, SessionBandsPrimitive } from '../plugins/sessionBands';
+import { buildSessionLayout, sessionAt, SESSION_COLOR } from '../utils/marketSessions';
 import './TradingChart.css';
 
 interface TradingChartProps {
@@ -117,6 +119,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null) as any;
   const indicatorSeriesRef = useRef<Map<string, ISeriesApi<any>>>(new Map());
   const customManagerRef = useRef<CustomIndicatorManager | null>(null);
+  const sessionBandsRef = useRef<SessionBandsPrimitive | null>(null);
   const drawingsRef = useRef<DrawingObject[]>([]);
   const drawingStateRef = useRef<{
     isDrawing: boolean;
@@ -425,6 +428,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
     candleSeriesRef.current = candleSeries;
     customManagerRef.current = new CustomIndicatorManager(chart, candleSeries);
+    sessionBandsRef.current = attachSessionBands(candleSeries);
 
     // Add click handler for drawing tools
     chart.subscribeClick((param) => {
@@ -477,15 +481,29 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     if (!candleSeriesRef.current || !data.length) return;
 
     // Convert data to lightweight-charts format
-    const chartData: CandlestickData[] = data.map(d => ({
-      time: (d.time / 1000) as Time,
-      open: d.open,
-      high: d.high,
-      low: d.low,
-      close: d.close,
-    }));
+    // Extended-hours candles are drawn paler than regular-session ones, like other platforms
+    const chartData: CandlestickData[] = data.map(d => {
+      const candle: CandlestickData = {
+        time: (d.time / 1000) as Time,
+        open: d.open,
+        high: d.high,
+        low: d.low,
+        close: d.close,
+      };
+      const session = sessionAt(d.time);
+      if (session !== 'regular') {
+        const c = d.close >= d.open ? 'rgba(38, 166, 154, 0.55)' : 'rgba(239, 83, 80, 0.55)';
+        candle.color = c;
+        candle.wickColor = c;
+        candle.borderColor = c;
+      }
+      return candle;
+    });
 
     candleSeriesRef.current.setData(chartData);
+
+    const { bands, gaps } = buildSessionLayout(data);
+    sessionBandsRef.current?.setLayout(bands, gaps);
 
     // Notify parent of latest price
     if (onPriceUpdate && data.length > 0) {
@@ -1068,6 +1086,13 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       )}
       
       <div ref={chartContainerRef} className="chart" />
+
+      <div className="session-legend">
+        <span><i style={{ background: SESSION_COLOR.pre }} />Pre-market</span>
+        <span><i style={{ background: SESSION_COLOR.regular }} />Regular</span>
+        <span><i style={{ background: SESSION_COLOR.post }} />After hours</span>
+        <span><i style={{ background: SESSION_COLOR.overnight }} />Overnight</span>
+      </div>
       
       <IndicatorPanels 
         data={data}

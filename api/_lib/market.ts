@@ -118,9 +118,25 @@ async function quote(q: Query): Promise<ApiResult> {
   }
   if (!price || price <= 0) return fail(404, `No live price for ${symbol}`);
 
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
   return {
     status: 200,
-    body: { symbol, price, marketState: r.marketState, timestamp: Date.now() },
+    body: {
+      symbol,
+      price,
+      marketState: r.marketState,
+      timestamp: Date.now(),
+      regularPrice: n(r.regularMarketPrice),
+      regularChange: n(r.regularMarketChange),
+      regularChangePercent: n(r.regularMarketChangePercent),
+      previousClose: n(r.regularMarketPreviousClose),
+      preMarketPrice: n(r.preMarketPrice),
+      preMarketChange: n(r.preMarketChange),
+      preMarketChangePercent: n(r.preMarketChangePercent),
+      postMarketPrice: n(r.postMarketPrice),
+      postMarketChange: n(r.postMarketChange),
+      postMarketChangePercent: n(r.postMarketChangePercent),
+    },
     cacheSeconds: 1,
   };
 }
