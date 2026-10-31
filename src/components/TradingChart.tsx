@@ -436,13 +436,20 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       handleChartClick(param.time as Time, price as number);
     });
 
-    // Handle resize
+    // Handle resize. When the width changes (e.g. a sidebar is shown or hidden) refit the
+    // candles so they use the new space instead of staying bunched to one side.
+    let lastWidth = chartContainerRef.current.clientWidth;
     const handleResize = () => {
       if (chartContainerRef.current && chartRef.current) {
+        const width = chartContainerRef.current.clientWidth;
         chartRef.current.applyOptions({
-          width: chartContainerRef.current.clientWidth,
+          width,
           height: chartContainerRef.current.clientHeight,
         });
+        if (width !== lastWidth) {
+          lastWidth = width;
+          chartRef.current.timeScale().fitContent();
+        }
       }
     };
 

@@ -8,8 +8,7 @@
 
 .main-content {
   flex: 1;
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
   gap: 12px;
   padding: 12px;
   overflow: hidden;
@@ -25,10 +24,12 @@
 
 .left-sidebar {
   width: 300px;
+  flex: 0 0 300px;
 }
 
 .right-sidebar {
   width: 350px;
+  flex: 0 0 350px;
 }
 
 .sidebar-toggle {
@@ -108,6 +109,9 @@
 }
 
 .chart-area {
+  /* takes all remaining width, so it grows to full screen when the sidebars are hidden */
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background: #141938;
@@ -253,19 +257,27 @@
 }
 
 @media (max-width: 1400px) {
-  .main-content {
-    grid-template-columns: 250px 1fr 300px;
+  .left-sidebar {
+    width: 250px;
+    flex-basis: 250px;
+  }
+
+  .right-sidebar {
+    width: 300px;
+    flex-basis: 300px;
   }
 }
 
 @media (max-width: 1200px) and (min-width: 901px) {
   .main-content {
+    display: grid;
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr auto;
   }
 
   .left-sidebar,
   .right-sidebar {
+    width: auto;
     max-height: 300px;
   }
 }
@@ -287,12 +299,13 @@
     gap: 8px;
   }
 
-  .chart-area { order: 1; height: 80vh; height: 80dvh; min-height: 520px; }
+  .chart-area { order: 1; flex: none; height: 80vh; height: 80dvh; min-height: 520px; }
   .right-sidebar { order: 2; }
   .left-sidebar { order: 3; }
 
   .left-sidebar,
   .right-sidebar {
+    flex: none;
     width: 100%;
     max-height: none;
     overflow: visible;
