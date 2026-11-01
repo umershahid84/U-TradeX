@@ -390,3 +390,6 @@
 .trading-chart-container[data-chart-theme='light'] .drawing-rail { background: #f1f3f8; border-right-color: #d1d4dc; }
 .trading-chart-container[data-chart-theme='light'] .rail-btn { color: #131722; }
 .trading-chart-container[data-chart-theme='light'] .rail-btn:hover { background: #e0e3eb; border-color: #c4c7d0; }
+
+.alpha-lens { display: flex; gap: 6px; }
+.alpha-lens input { width: 54px; padding: 3px 4px; background: #0f1330; border: 1px solid #3a3e6f; border-radius: 3px; color: #e0e0e0; font-size: 12px; }

@@ -1,0 +1,9 @@
+.alpha-dash {
+  position: absolute; top: 10px; right: 80px; z-index: 9; width: 215px; font-size: 12px; text-align: center;
+  background: rgba(24, 27, 38, 0.92); color: #fff; border-radius: 4px; overflow: hidden; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+.ad-head { padding: 5px; font-weight: 700; letter-spacing: 0.5px; background: #1c1f2b; border-bottom: 1px solid #2f3345; }
+.ad-row { padding: 4px 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); font-variant-numeric: tabular-nums; }
+.ad-trend { font-weight: 700; }
+.ad-note { padding: 3px; font-size: 9px; color: #7a7e9f; }
+@media (max-width: 900px) { .alpha-dash { position: relative; top: auto; right: auto; width: auto; margin: 0 8px 8px; } }

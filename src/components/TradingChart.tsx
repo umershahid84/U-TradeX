@@ -17,6 +17,9 @@ import { AlertsPanel } from './AlertsPanel';
 import { AutoChartManager, AutoChartOptions } from './autoChartManager';
 import { AutoChartBadge } from './AutoChartBadge';
 import { ChartLegend, LegendItem } from './ChartLegend';
+import { AlphaManager } from './alphaManager';
+import { AlphaDashboard } from './AlphaDashboard';
+import { AlphaOptions, DEFAULT_ALPHA, analyzeAlpha } from '../utils/alphaSignals';
 import { ChartStylePopover } from './ChartStylePopover';
 import {
   ChartStyleSettings, DOWN_COLOR, THEME_COLORS, UP_COLOR, loadChartStyle, saveChartStyle, toHeikinAshi,
@@ -144,6 +147,17 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   // invisible but kept, since session shading, markers, alerts and scales all hang off it
   const displaySeriesRef = useRef<ISeriesApi<any> | null>(null);
   const autoChartRef = useRef<AutoChartManager | null>(null);
+  const alphaRef = useRef<AlphaManager | null>(null);
+  // Alpha Signals: trend line, stage labels and dashboard (an original indicator)
+  const [alpha, setAlpha] = useState<AlphaOptions>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('alphaSignals') ?? 'null');
+      if (saved && typeof saved.enabled === 'boolean') return { ...DEFAULT_ALPHA, ...saved };
+    } catch {
+      /* defaults */
+    }
+    return DEFAULT_ALPHA;
+  });
   const [autoChart, setAutoChart] = useState<AutoChartOptions>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('autoChart') ?? 'null');
@@ -480,6 +494,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     customManagerRef.current = new CustomIndicatorManager(chart, candleSeries);
     sessionBandsRef.current = attachSessionBands(candleSeries);
     autoChartRef.current = new AutoChartManager(chart, candleSeries);
+    alphaRef.current = new AlphaManager(chart, candleSeries);
 
     // Add click handler for drawing tools
     chart.subscribeClick((param) => {
@@ -1194,6 +1209,26 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     autoChartRef.current?.update(autoResult, data, { ...autoChart, enabled: autoShown });
   }, [autoResult, data, autoChart, autoShown]);
 
+  // Alpha Signals
+  const alphaShown = alpha.enabled && !hiddenIds.includes('alpha-signals');
+  const alphaResult = useMemo(
+    () => (alphaShown ? analyzeAlpha(data, alpha) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data, alphaShown, alpha.fast, alpha.slow]
+  );
+
+  useEffect(() => {
+    alphaRef.current?.update(alphaResult, data, { enabled: alphaShown, labels: alpha.labels });
+  }, [alphaResult, data, alphaShown, alpha.labels]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('alphaSignals', JSON.stringify(alpha));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [alpha]);
+
   useEffect(() => {
     try {
       localStorage.setItem('autoChart', JSON.stringify(autoChart));
@@ -1267,6 +1302,17 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       onRemove: () => setIndicators((prev) => ({ ...prev, [b.key]: false })),
     });
   });
+  if (alpha.enabled) {
+    legendItems.push({
+      id: 'alpha-signals',
+      name: 'Alpha Signals',
+      params: `${alpha.fast} ${alpha.slow}`,
+      color: '#1FD37A',
+      hidden: isHidden('alpha-signals'),
+      onToggle: () => toggleHidden('alpha-signals'),
+      onRemove: () => setAlpha((a) => ({ ...a, enabled: false })),
+    });
+  }
   if (autoChart.enabled) {
     legendItems.push({
       id: 'auto-chart',
@@ -1515,6 +1561,32 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             {renderCloudInstances()}
 
             <div className="indicator-group auto-group">
+              <h4>Alpha Signals</h4>
+              <label>
+                <input type="checkbox" checked={alpha.enabled} onChange={() => setAlpha((a) => ({ ...a, enabled: !a.enabled }))} />
+                Alpha Signals
+              </label>
+              <label className={alpha.enabled ? '' : 'sub-off'}>
+                <input type="checkbox" checked={alpha.labels} disabled={!alpha.enabled} onChange={() => setAlpha((a) => ({ ...a, labels: !a.labels }))} />
+                Stage labels
+              </label>
+              <label className={alpha.enabled ? '' : 'sub-off'}>
+                <input type="checkbox" checked={alpha.dashboard} disabled={!alpha.enabled} onChange={() => setAlpha((a) => ({ ...a, dashboard: !a.dashboard }))} />
+                Dashboard
+              </label>
+              <label className={`cloud-tf ${alpha.enabled ? '' : 'sub-off'}`}>
+                <span>Fast / slow line</span>
+                <span className="alpha-lens">
+                  <input type="number" min={2} max={100} value={alpha.fast} disabled={!alpha.enabled}
+                    onChange={(e) => { const v = parseInt(e.target.value, 10); if (v >= 2 && v < alpha.slow) setAlpha((a) => ({ ...a, fast: v })); }} />
+                  <input type="number" min={5} max={300} value={alpha.slow} disabled={!alpha.enabled}
+                    onChange={(e) => { const v = parseInt(e.target.value, 10); if (v > alpha.fast && v <= 300) setAlpha((a) => ({ ...a, slow: v })); }} />
+                </span>
+              </label>
+              <small className="auto-hint">Original trend and stage indicator</small>
+            </div>
+
+            <div className="indicator-group auto-group">
               <h4>Auto Charting</h4>
               <label>
                 <input
@@ -1686,6 +1758,10 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       )}
       
       <div ref={chartContainerRef} className={`chart ${alertArmed ? 'alert-cursor' : ''}`} />
+
+      {alphaShown && alpha.dashboard && (
+        <AlphaDashboard dash={alphaResult?.dashboard ?? null} decimals={(data[data.length - 1]?.close ?? 100) < 10 ? 4 : 2} />
+      )}
 
       {autoShown && (
         <AutoChartBadge result={autoResult} barCount={data.length} timeframe={timeframe} />
