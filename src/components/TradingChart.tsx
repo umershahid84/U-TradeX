@@ -8,16 +8,22 @@ import {
   Time, 
   LineData,
   CandlestickSeries,
-  LineSeries
+  LineSeries,
+  AreaSeries,
+  BarSeries
 } from 'lightweight-charts';
 import { ChartData, TimeFrame, CustomIndicator, CustomIndicatorStatus, PriceAlert } from '../types';
 import { AlertsPanel } from './AlertsPanel';
 import { AutoChartManager, AutoChartOptions } from './autoChartManager';
 import { AutoChartBadge } from './AutoChartBadge';
 import { ChartLegend, LegendItem } from './ChartLegend';
+import { ChartStylePopover } from './ChartStylePopover';
+import {
+  ChartStyleSettings, DOWN_COLOR, THEME_COLORS, UP_COLOR, loadChartStyle, saveChartStyle, toHeikinAshi,
+} from '../utils/chartStyle';
 import { analyzeChart } from '../utils/autoChart';
 import { calculateSMA, calculateVWAP, calculateBollingerBands } from '../utils/indicators';
-import { CloudTf, alignHtfMa, buildTimeframeBars, chartIntervalMs, movingAverage, shiftSeries, sourceValue, tfOption } from '../utils/htfEma';
+import { CLOUD_TFS, CloudTf, alignHtfMa, buildTimeframeBars, chartIntervalMs, movingAverage, shiftSeries, sourceValue, tfOption } from '../utils/htfEma';
 import {
   CloudInstance, hexToRgba, instanceTf, instanceTitle, isVisibleOn, loadCloudInstances, newInstance, saveCloudInstances,
 } from './emaClouds/cloudConfig';
@@ -117,6 +123,14 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const [ripsterTrend, setRipsterTrend] = useState<'bullish' | 'bearish' | 'neutral'>('neutral');
   const [showCustomPanel, setShowCustomPanel] = useState(false);
   const [showAlertsPanel, setShowAlertsPanel] = useState(false);
+  // Chart type (candles, hollow, bars, Heikin Ashi, line, area) and light/dark background
+  const [chartStyle, setChartStyle] = useState<ChartStyleSettings>(loadChartStyle);
+  const [showStylePopover, setShowStylePopover] = useState(false);
+  const chartStyleRef = useRef(chartStyle);
+  chartStyleRef.current = chartStyle;
+  // Line, area and bar charts are drawn by this series; the candlestick series underneath is made
+  // invisible but kept, since session shading, markers, alerts and scales all hang off it
+  const displaySeriesRef = useRef<ISeriesApi<any> | null>(null);
   const autoChartRef = useRef<AutoChartManager | null>(null);
   const [autoChart, setAutoChart] = useState<AutoChartOptions>(() => {
     try {
@@ -476,16 +490,116 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       if (chartContainerRef.current) {
         resizeObserver.unobserve(chartContainerRef.current);
       }
+      // the line / area / bar series dies with its chart
+      displaySeriesRef.current = null;
       chart.remove();
     };
   }, []);
+
+  // Feed the line / area / bar series from the real bars
+  const pushDisplayData = (bars: ChartData[]) => {
+    const series = displaySeriesRef.current;
+    const type = chartStyleRef.current.type;
+    if (!series) return;
+    if (type === 'bars') {
+      series.setData(
+        bars.map((d) => {
+          const point: { time: Time; open: number; high: number; low: number; close: number; color?: string } = {
+            time: (d.time / 1000) as Time, open: d.open, high: d.high, low: d.low, close: d.close,
+          };
+          if (sessionAt(d.time) !== 'regular') point.color = d.close >= d.open ? 'rgba(38, 166, 154, 0.55)' : 'rgba(239, 83, 80, 0.55)';
+          return point;
+        })
+      );
+    } else {
+      series.setData(bars.map((d) => ({ time: (d.time / 1000) as Time, value: d.close })));
+    }
+  };
+
+  // Apply the theme and chart type to the chart and its series
+  useEffect(() => {
+    const chart = chartRef.current;
+    const candles = candleSeriesRef.current;
+    if (!chart || !candles) return;
+    const colors = THEME_COLORS[chartStyle.theme];
+
+    chart.applyOptions({
+      layout: { background: { color: colors.bg }, textColor: colors.text },
+      grid: { vertLines: { color: colors.grid }, horzLines: { color: colors.grid } },
+      rightPriceScale: { borderColor: colors.border },
+      timeScale: { borderColor: colors.border },
+    });
+
+    if (displaySeriesRef.current) {
+      try {
+        chart.removeSeries(displaySeriesRef.current);
+      } catch {
+        /* belonged to a chart that has already been removed */
+      }
+      displaySeriesRef.current = null;
+    }
+
+    const clear = 'rgba(0, 0, 0, 0)';
+    const type = chartStyle.type;
+    if (type === 'candles' || type === 'heikin' || type === 'hollow') {
+      const hollow = type === 'hollow';
+      candles.applyOptions({
+        upColor: hollow ? colors.bg : UP_COLOR,
+        downColor: DOWN_COLOR,
+        borderVisible: hollow,
+        borderUpColor: UP_COLOR,
+        borderDownColor: DOWN_COLOR,
+        wickUpColor: UP_COLOR,
+        wickDownColor: DOWN_COLOR,
+        lastValueVisible: true,
+        priceLineVisible: true,
+        autoscaleInfoProvider: (original: () => unknown) => original() as never,
+      });
+    } else {
+      // keep the candles for everything that hangs off them, but draw them invisible
+      candles.applyOptions({
+        upColor: clear, downColor: clear, wickUpColor: clear, wickDownColor: clear,
+        borderUpColor: clear, borderDownColor: clear, borderVisible: false,
+        lastValueVisible: false, priceLineVisible: false,
+        // a line chart should scale to its closes, not the invisible highs and lows
+        autoscaleInfoProvider: type === 'bars' ? ((original: () => unknown) => original() as never) : () => null,
+      });
+      if (type === 'bars') {
+        displaySeriesRef.current = chart.addSeries(BarSeries, { upColor: UP_COLOR, downColor: DOWN_COLOR, thinBars: false });
+      } else if (type === 'line') {
+        displaySeriesRef.current = chart.addSeries(LineSeries, { color: colors.line, lineWidth: 2 });
+      } else {
+        displaySeriesRef.current = chart.addSeries(AreaSeries, {
+          lineColor: colors.line,
+          topColor: chartStyle.theme === 'dark' ? 'rgba(92, 141, 255, 0.35)' : 'rgba(41, 98, 255, 0.28)',
+          bottomColor: 'rgba(41, 98, 255, 0)',
+          lineWidth: 2,
+        });
+      }
+      displaySeriesRef.current!.setSeriesOrder(1);
+      pushDisplayData(dataRef.current);
+    }
+
+    // re-send the candle data so per-bar colours match the new type
+    if (dataRef.current.length) {
+      const source = type === 'heikin' ? toHeikinAshi(dataRef.current) : dataRef.current;
+      candles.setData(
+        source.map((d) => ({ time: (d.time / 1000) as Time, open: d.open, high: d.high, low: d.low, close: d.close }))
+      );
+    }
+    saveChartStyle(chartStyle);
+  }, [chartStyle]);
 
   useEffect(() => {
     if (!candleSeriesRef.current || !data.length) return;
 
     // Convert data to lightweight-charts format
+    const style = chartStyleRef.current;
+    const hiddenCandles = style.type === 'bars' || style.type === 'line' || style.type === 'area';
+    const source = style.type === 'heikin' ? toHeikinAshi(data) : data;
+
     // Extended-hours candles are drawn paler than regular-session ones, like other platforms
-    const chartData: CandlestickData[] = data.map(d => {
+    const chartData: CandlestickData[] = source.map(d => {
       const candle: CandlestickData = {
         time: (d.time / 1000) as Time,
         open: d.open,
@@ -494,7 +608,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         close: d.close,
       };
       const session = sessionAt(d.time);
-      if (session !== 'regular') {
+      // hollow candles keep their own look, and hidden candles must stay invisible
+      if (session !== 'regular' && !hiddenCandles && style.type !== 'hollow') {
         const c = d.close >= d.open ? 'rgba(38, 166, 154, 0.55)' : 'rgba(239, 83, 80, 0.55)';
         candle.color = c;
         candle.wickColor = c;
@@ -504,6 +619,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     });
 
     candleSeriesRef.current.setData(chartData);
+    pushDisplayData(data);
 
     const { bands, gaps } = buildSessionLayout(data);
     sessionBandsRef.current?.setLayout(bands, gaps);
@@ -512,7 +628,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     if (onPriceUpdate && data.length > 0) {
       onPriceUpdate(data[data.length - 1].close);
     }
-  }, [data, onPriceUpdate]);
+  }, [data, onPriceUpdate, chartStyle.type]);
 
   // Separate effect for fitting content when symbol changes
   useEffect(() => {
@@ -528,9 +644,13 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   // Load bars for every timeframe a visible cloud uses, and keep them fresh
   const chartMs = chartIntervalMs(data);
 
+  // Averages need history to settle (a 200-bar EMA on a one-day chart has barely started), so for
+  // instances that read the chart's own candles we also load older candles of the same size
+  const warmTf: CloudTf | null = CLOUD_TFS.find((o) => o.value !== 'chart' && o.ms === chartMs)?.value ?? null;
+
   const neededTfs = clouds
     .filter((inst) => inst.enabled && isVisibleOn(inst, chartMs) && inst.clouds.some((c) => c.enabled))
-    .map((inst) => instanceTf(inst))
+    .map((inst) => (instanceTf(inst) === 'chart' && warmTf ? warmTf : instanceTf(inst)))
     .filter((tf) => tf !== 'chart')
     .filter((tf, i, all) => all.indexOf(tf) === i)
     .sort()
@@ -580,7 +700,10 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       let v = cache.get(key);
       if (!v) {
         if (tf === 'chart') {
-          v = movingAverage(chartData.map((d) => sourceValue(d, group.source)), period, group.maType);
+          // compute over older candles of the same size plus the chart's own, then keep the chart's part
+          const older = warmTf ? (htfBars[warmTf] ?? []).filter((b) => b.time < chartData[0].time) : [];
+          const all = movingAverage([...older, ...chartData].map((d) => sourceValue(d, group.source)), period, group.maType);
+          v = all.slice(older.length);
         } else {
           const bars = htfBars[tf];
           // not loaded yet: draw nothing rather than the wrong timeframe
@@ -1255,7 +1378,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   }, [customIndicators]);
 
   return (
-    <div className="trading-chart-container">
+    <div className="trading-chart-container" data-chart-theme={chartStyle.theme}>
       <DrawingTools
         selectedTool={selectedTool}
         onToolSelect={handleToolSelect}
@@ -1299,6 +1422,13 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             >
               🔔 Alerts{activeAlertCount ? ` (${activeAlertCount})` : ''}
             </button>
+
+            <button
+              className="indicator-toggle style-toggle"
+              onClick={() => setShowStylePopover(!showStylePopover)}
+            >
+              🎨 Style
+            </button>
             
             {clouds.some((i) => i.kind === 'ripster' && i.enabled && isVisibleOn(i, chartMs) && i.clouds.some((c) => c.enabled)) && (
               <div className={`trend-indicator trend-${ripsterTrend}`}>
@@ -1309,6 +1439,14 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         </div>
       </div>
       
+      {showStylePopover && (
+        <ChartStylePopover
+          settings={chartStyle}
+          onChange={(next) => setChartStyle(next)}
+          onClose={() => setShowStylePopover(false)}
+        />
+      )}
+
       <ChartLegend items={legendItems} />
 
       {showIndicatorPanel && (
@@ -1506,6 +1644,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         showVolume={indicators.volume}
         showRSI={indicators.rsi}
         showMACD={indicators.macd}
+        theme={chartStyle.theme}
       />
       </div>
     </div>

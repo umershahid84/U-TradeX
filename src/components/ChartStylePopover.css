@@ -1,0 +1,19 @@
+.style-popover {
+  position: absolute; top: 58px; left: 10px; z-index: 17; width: 300px; max-width: calc(100% - 20px); padding: 12px;
+  background: #141938; border: 1px solid #3a3e6f; border-radius: 8px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); color: #e0e0e0;
+}
+.style-popover h4 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: #8a8fb5; }
+.style-popover h4:not(:first-child) { margin-top: 14px; }
+.style-types { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.style-types button {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; background: #1a1e3f;
+  border: 1px solid #2a2e4f; border-radius: 6px; color: #c0c4e0; font-size: 11px; cursor: pointer;
+}
+.style-types button:hover { border-color: #3a3e6f; }
+.style-types button.active { border-color: #2962ff; background: rgba(41, 98, 255, 0.18); color: #fff; }
+.style-themes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.style-themes button { padding: 9px; border-radius: 6px; border: 2px solid #2a2e4f; font-size: 13px; font-weight: 600; cursor: pointer; }
+.style-themes .dark { background: #0a0e27; color: #e0e0e0; }
+.style-themes .light { background: #ffffff; color: #131722; }
+.style-themes button.active { border-color: #2962ff; }
+@media (max-width: 900px) { .style-popover { position: relative; top: auto; left: auto; margin: 0 8px 8px; width: auto; } }

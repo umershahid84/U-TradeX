@@ -371,3 +371,22 @@
 .cloud-instance-head em { font-style: normal; font-size: 10px; color: #8a8fb5; background: #1a1e3f; border-radius: 8px; padding: 0 6px; }
 .cloud-icon-btn { background: none; border: none; color: #8a8fb5; cursor: pointer; font-size: 13px; padding: 2px 4px; border-radius: 3px; }
 .cloud-icon-btn:hover { color: #fff; background: #2a2e4f; }
+
+/* ---- light chart background ---- */
+.trading-chart-container[data-chart-theme='light'] .chart-legend { color: #434651; text-shadow: 0 0 4px #fff, 0 0 4px #fff; }
+.trading-chart-container[data-chart-theme='light'] .legend-name { color: #131722; }
+.trading-chart-container[data-chart-theme='light'] .legend-params { color: #2962ff; }
+.trading-chart-container[data-chart-theme='light'] .chart-legend li:hover { background: rgba(241, 243, 248, 0.95); }
+.trading-chart-container[data-chart-theme='light'] .legend-actions button { color: #434651; }
+.trading-chart-container[data-chart-theme='light'] .legend-actions button:hover { background: #e0e3eb; color: #131722; }
+.trading-chart-container[data-chart-theme='light'] .legend-collapse { color: #6a6d78; }
+.trading-chart-container[data-chart-theme='light'] .session-legend { color: #6a6d78; }
+.trading-chart-container[data-chart-theme='light'] .auto-badge { background: #f5f7fb; border-top-color: #d1d4dc; color: #434651; }
+.trading-chart-container[data-chart-theme='light'] .ab-title { color: #6a6d78; }
+.trading-chart-container[data-chart-theme='light'] .ab-headline { color: #131722; }
+.trading-chart-container[data-chart-theme='light'] .ab-pill.none { background: #e8ebf2; color: #6a6d78; }
+.trading-chart-container[data-chart-theme='light'] .panel-container { background: #fff; border-color: #e0e3eb; }
+.trading-chart-container[data-chart-theme='light'] .panel-header { background: #f1f3f8; color: #131722; border-bottom-color: #e0e3eb; }
+.trading-chart-container[data-chart-theme='light'] .drawing-rail { background: #f1f3f8; border-right-color: #d1d4dc; }
+.trading-chart-container[data-chart-theme='light'] .rail-btn { color: #131722; }
+.trading-chart-container[data-chart-theme='light'] .rail-btn:hover { background: #e0e3eb; border-color: #c4c7d0; }

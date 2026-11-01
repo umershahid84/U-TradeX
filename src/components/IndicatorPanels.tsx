@@ -9,6 +9,7 @@ import {
   LineSeries
 } from 'lightweight-charts';
 import { ChartData } from '../types';
+import { ChartTheme, THEME_COLORS } from '../utils/chartStyle';
 import { calculateRSISeries, calculateMACDSeries } from '../utils/indicators';
 import './IndicatorPanels.css';
 
@@ -17,6 +18,7 @@ interface IndicatorPanelsProps {
   showVolume: boolean;
   showRSI: boolean;
   showMACD: boolean;
+  theme?: ChartTheme;
 }
 
 // Remove a chart exactly once. The effect cleanup and the next effect run can both try to remove
@@ -37,7 +39,9 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
   showVolume,
   showRSI,
   showMACD,
+  theme = 'dark',
 }) => {
+  const pal = THEME_COLORS[theme];
   const volumeContainerRef = useRef<HTMLDivElement>(null);
   const rsiContainerRef = useRef<HTMLDivElement>(null);
   const macdContainerRef = useRef<HTMLDivElement>(null);
@@ -57,22 +61,22 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
       // Create volume chart
       const chart = createChart(volumeContainerRef.current, {
         layout: {
-          background: { color: '#0a0e27' },
-          textColor: '#e0e0e0',
+          background: { color: pal.bg },
+          textColor: pal.text,
         },
         grid: {
-          vertLines: { color: '#1a1e3f' },
-          horzLines: { color: '#1a1e3f' },
+          vertLines: { color: pal.grid },
+          horzLines: { color: pal.grid },
         },
         width: volumeContainerRef.current.clientWidth,
         height: 120,
         timeScale: {
           timeVisible: true,
           secondsVisible: false,
-          borderColor: '#2a2e4f',
+          borderColor: pal.border,
         },
         rightPriceScale: {
-          borderColor: '#2a2e4f',
+          borderColor: pal.border,
         },
       });
 
@@ -116,7 +120,7 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
       console.error('Error creating volume panel:', error);
       disposeChart(volumeChartRef);
     }
-  }, [data, showVolume]);
+  }, [data, showVolume, theme]);
 
   // RSI Panel
   useEffect(() => {
@@ -129,22 +133,22 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
       // Create RSI chart
       const chart = createChart(rsiContainerRef.current, {
         layout: {
-          background: { color: '#0a0e27' },
-          textColor: '#e0e0e0',
+          background: { color: pal.bg },
+          textColor: pal.text,
         },
         grid: {
-          vertLines: { color: '#1a1e3f' },
-          horzLines: { color: '#1a1e3f' },
+          vertLines: { color: pal.grid },
+          horzLines: { color: pal.grid },
         },
         width: rsiContainerRef.current.clientWidth,
         height: 120,
         timeScale: {
           timeVisible: true,
           secondsVisible: false,
-          borderColor: '#2a2e4f',
+          borderColor: pal.border,
         },
         rightPriceScale: {
-          borderColor: '#2a2e4f',
+          borderColor: pal.border,
           scaleMargins: {
             top: 0.1,
             bottom: 0.1,
@@ -220,7 +224,7 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
       console.error('Error creating RSI panel:', error);
       disposeChart(rsiChartRef);
     }
-  }, [data, showRSI]);
+  }, [data, showRSI, theme]);
 
   // MACD Panel
   useEffect(() => {
@@ -233,22 +237,22 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
       // Create MACD chart
       const chart = createChart(macdContainerRef.current, {
         layout: {
-          background: { color: '#0a0e27' },
-          textColor: '#e0e0e0',
+          background: { color: pal.bg },
+          textColor: pal.text,
         },
         grid: {
-          vertLines: { color: '#1a1e3f' },
-          horzLines: { color: '#1a1e3f' },
+          vertLines: { color: pal.grid },
+          horzLines: { color: pal.grid },
         },
         width: macdContainerRef.current.clientWidth,
         height: 120,
         timeScale: {
           timeVisible: true,
           secondsVisible: false,
-          borderColor: '#2a2e4f',
+          borderColor: pal.border,
         },
         rightPriceScale: {
-          borderColor: '#2a2e4f',
+          borderColor: pal.border,
         },
       });
 
@@ -322,7 +326,7 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
       console.error('Error creating MACD panel:', error);
       disposeChart(macdChartRef);
     }
-  }, [data, showMACD]);
+  }, [data, showMACD, theme]);
 
   return (
     <div className="indicator-panels">
