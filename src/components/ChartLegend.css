@@ -24,3 +24,6 @@
   .chart-legend li { background: rgba(20, 25, 56, 0.6); }
   .legend-actions { display: inline-flex; }
 }
+
+.legend-collapse { font-size: 11px; padding: 1px 6px; border-radius: 4px; }
+.chart-legend li.hidden .legend-name, .chart-legend li.hidden .legend-params { text-decoration: line-through; text-decoration-color: rgba(138,143,181,0.6); }

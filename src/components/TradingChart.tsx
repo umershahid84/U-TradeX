@@ -64,6 +64,18 @@ interface IndicatorState {
   volume: boolean;
 }
 
+const DEFAULT_INDICATORS: IndicatorState = {
+    sma20: false,
+    sma50: false,
+    sma100: false,
+    sma200: false,
+    vwap: false,
+    rsi: false,
+    macd: false,
+    bb: false,
+    volume: true,
+};
+
 interface DrawingObject {
   id: string;
   type: DrawingTool;
@@ -161,17 +173,47 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     }
   });
   const [customStatuses, setCustomStatuses] = useState<Record<string, CustomIndicatorStatus>>({});
-  const [indicators, setIndicators] = useState<IndicatorState>({
-    sma20: false,
-    sma50: false,
-    sma100: false,
-    sma200: false,
-    vwap: false,
-    rsi: false,
-    macd: false,
-    bb: false,
-    volume: true,
+  // Built-in indicators selected in the menu; remembered across reloads
+  const [indicators, setIndicators] = useState<IndicatorState>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('indicatorSelection') ?? 'null');
+      if (saved && typeof saved === 'object') return { ...DEFAULT_INDICATORS, ...saved };
+    } catch {
+      /* use defaults */
+    }
+    return DEFAULT_INDICATORS;
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('indicatorSelection', JSON.stringify(indicators));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [indicators]);
+
+  // Indicators hidden from the chart for now but still selected and configured (the arrows and eyes in
+  // the legend). Ids: a cloud instance id, 'builtin-<key>', 'auto-chart' or 'custom-<id>'.
+  const [hiddenIds, setHiddenIds] = useState<string[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('hiddenIndicators') ?? '[]');
+      return Array.isArray(saved) ? saved.filter((x) => typeof x === 'string') : [];
+    } catch {
+      return [];
+    }
+  });
+  const isHidden = (id: string) => hiddenIds.includes(id);
+  const visibleIndicators: IndicatorState = Object.fromEntries(
+    (Object.keys(indicators) as (keyof IndicatorState)[]).map((k) => [k, indicators[k] && !hiddenIds.includes(`builtin-${k}`)])
+  ) as unknown as IndicatorState;
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('hiddenIndicators', JSON.stringify(hiddenIds));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [hiddenIds]);
 
   // Update dataRef whenever data changes
   useEffect(() => {
@@ -649,7 +691,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const warmTf: CloudTf | null = CLOUD_TFS.find((o) => o.value !== 'chart' && o.ms === chartMs)?.value ?? null;
 
   const neededTfs = clouds
-    .filter((inst) => inst.enabled && isVisibleOn(inst, chartMs) && inst.clouds.some((c) => c.enabled))
+    .filter((inst) => inst.enabled && !hiddenIds.includes(inst.id) && isVisibleOn(inst, chartMs) && inst.clouds.some((c) => c.enabled))
     .map((inst) => (instanceTf(inst) === 'chart' && warmTf ? warmTf : instanceTf(inst)))
     .filter((tf) => tf !== 'chart')
     .filter((tf, i, all) => all.indexOf(tf) === i)
@@ -747,7 +789,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       };
 
       clouds.forEach((group) => {
-        if (!group.enabled || !isVisibleOn(group, chartMs)) return;
+        if (!group.enabled || !isVisibleOn(group, chartMs) || isHidden(group.id)) return;
         const maFor = makeMaFor(data, group);
         const tf = instanceTf(group);
         group.clouds.forEach((cl, idx) => {
@@ -788,7 +830,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       });
 
       // Add SMA 20
-      if (indicators.sma20) {
+      if (visibleIndicators.sma20) {
         const sma20 = calculateSMA(closes, 20);
         const sma20Series = chartRef.current.addSeries(LineSeries, {
           color: '#FFC107',
@@ -802,7 +844,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       }
 
       // Add SMA 50
-      if (indicators.sma50) {
+      if (visibleIndicators.sma50) {
         const sma50 = calculateSMA(closes, 50);
         const sma50Series = chartRef.current.addSeries(LineSeries, {
           color: '#FF9800',
@@ -816,7 +858,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       }
 
       // Add SMA 100
-      if (indicators.sma100) {
+      if (visibleIndicators.sma100) {
         const sma100 = calculateSMA(closes, 100);
         const sma100Series = chartRef.current.addSeries(LineSeries, {
           color: '#FF5722',
@@ -830,7 +872,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       }
 
       // Add SMA 200
-      if (indicators.sma200) {
+      if (visibleIndicators.sma200) {
         const sma200 = calculateSMA(closes, 200);
         const sma200Series = chartRef.current.addSeries(LineSeries, {
           color: '#F44336',
@@ -844,7 +886,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       }
 
       // Add VWAP
-      if (indicators.vwap) {
+      if (visibleIndicators.vwap) {
         const vwapData = calculateVWAP(data);
         const vwapSeries = chartRef.current.addSeries(LineSeries, {
           color: '#9C27B0',
@@ -860,7 +902,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       }
 
       // Add Bollinger Bands
-      if (indicators.bb) {
+      if (visibleIndicators.bb) {
         const bb = calculateBollingerBands(closes, 20, 2);
         
         const bbUpperSeries = chartRef.current.addSeries(LineSeries, {
@@ -894,12 +936,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         indicatorSeriesRef.current.set('bbLower', bbLowerSeries);
       }
     }
-  }, [data, indicators, clouds, htfBars, chartMs]);
+  }, [data, visibleIndicators.sma20, visibleIndicators.sma50, visibleIndicators.sma100, visibleIndicators.sma200, visibleIndicators.vwap, visibleIndicators.bb, clouds, hiddenIds, htfBars, chartMs]);
 
   // Ripster trend from the first visible Ripster EMA Clouds indicator: bullish when price is above
   // every cloud average and each short average is above its long one, bearish for the mirror image
   useEffect(() => {
-    const group = clouds.find((i) => i.kind === 'ripster' && i.enabled && isVisibleOn(i, chartMs));
+    const group = clouds.find((i) => i.kind === 'ripster' && i.enabled && !hiddenIds.includes(i.id) && isVisibleOn(i, chartMs));
     const active = group?.clouds.filter((c) => c.enabled) ?? [];
     if (!group || !data.length || active.length === 0) return;
 
@@ -916,7 +958,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     if (price > Math.max(...all) && avgs.every((e) => e.short > e.long)) setRipsterTrend('bullish');
     else if (price < Math.min(...all) && avgs.every((e) => e.short < e.long)) setRipsterTrend('bearish');
     else setRipsterTrend('neutral');
-  }, [data, clouds, htfBars, chartMs]);
+  }, [data, clouds, hiddenIds, htfBars, chartMs]);
 
   useEffect(() => {
     saveCloudInstances(clouds);
@@ -1145,11 +1187,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   }, [menu]);
 
   // Auto charting: analyse the bars on screen and draw levels, trendlines and patterns
-  const autoResult = useMemo(() => (autoChart.enabled ? analyzeChart(data) : null), [data, autoChart.enabled]);
+  const autoShown = autoChart.enabled && !hiddenIds.includes('auto-chart');
+  const autoResult = useMemo(() => (autoShown ? analyzeChart(data) : null), [data, autoShown]);
 
   useEffect(() => {
-    autoChartRef.current?.update(autoResult, data, autoChart);
-  }, [autoResult, data, autoChart]);
+    autoChartRef.current?.update(autoResult, data, { ...autoChart, enabled: autoShown });
+  }, [autoResult, data, autoChart, autoShown]);
 
   useEffect(() => {
     try {
@@ -1179,6 +1222,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   }, [alertArmed]);
 
   // Indicators on the chart, listed top-left like TradingView's legend
+  const toggleHidden = (id: string) => setHiddenIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   const legendItems: LegendItem[] = [];
   clouds.forEach((inst) => {
     const on = inst.clouds.filter((c) => c.enabled);
@@ -1194,8 +1238,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         inst.offset ? String(inst.offset) : '',
       ].filter(Boolean).join(' '),
       color: on[0]?.bull,
-      hidden: !inst.enabled,
-      onToggle: () => updateCloud(inst.id, { ...inst, enabled: !inst.enabled }),
+      hidden: !inst.enabled || isHidden(inst.id),
+      onToggle: () => toggleHidden(inst.id),
       onSettings: () => setCloudDialog(inst.id),
       onRemove: () => setClouds((prev) => prev.filter((c) => c.id !== inst.id)),
     });
@@ -1218,6 +1262,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       name: b.name,
       params: b.params,
       color: b.color,
+      hidden: isHidden(`builtin-${b.key}`),
+      onToggle: () => toggleHidden(`builtin-${b.key}`),
       onRemove: () => setIndicators((prev) => ({ ...prev, [b.key]: false })),
     });
   });
@@ -1227,6 +1273,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       name: 'Auto Chart',
       params: [autoChart.levels && 'levels', autoChart.trendlines && 'trendlines', autoChart.patterns && 'patterns'].filter(Boolean).join(' '),
       color: '#FFB300',
+      hidden: isHidden('auto-chart'),
+      onToggle: () => toggleHidden('auto-chart'),
       onRemove: () => setAutoChart((a) => ({ ...a, enabled: false })),
     });
   }
@@ -1236,8 +1284,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       name: ci.name,
       params: ci.language === 'pine' ? 'Pine' : 'JS',
       color: ci.color,
-      hidden: !ci.enabled,
-      onToggle: () => handleUpdateCustomIndicator(ci.id, { enabled: !ci.enabled }),
+      hidden: !ci.enabled || isHidden(`custom-${ci.id}`),
+      onToggle: () => toggleHidden(`custom-${ci.id}`),
       onSettings: () => setShowCustomPanel(true),
       onRemove: () => handleRemoveCustomIndicator(ci.id),
     });
@@ -1365,9 +1413,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   useEffect(() => {
     const manager = customManagerRef.current;
     if (!manager || !data.length) return;
-    const statuses = manager.sync(customIndicators, data);
+    const statuses = manager.sync(
+      customIndicators.map((ci) => ({ ...ci, enabled: ci.enabled && !hiddenIds.includes(`custom-${ci.id}`) })),
+      data
+    );
     setCustomStatuses((prev) => (JSON.stringify(prev) === JSON.stringify(statuses) ? prev : statuses));
-  }, [data, customIndicators]);
+  }, [data, customIndicators, hiddenIds]);
 
   useEffect(() => {
     try {
@@ -1430,7 +1481,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               🎨 Style
             </button>
             
-            {clouds.some((i) => i.kind === 'ripster' && i.enabled && isVisibleOn(i, chartMs) && i.clouds.some((c) => c.enabled)) && (
+            {clouds.some((i) => i.kind === 'ripster' && i.enabled && !isHidden(i.id) && isVisibleOn(i, chartMs) && i.clouds.some((c) => c.enabled)) && (
               <div className={`trend-indicator trend-${ripsterTrend}`}>
                 Ripster Trend: {ripsterTrend.toUpperCase()}
               </div>
@@ -1447,7 +1498,15 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         />
       )}
 
-      <ChartLegend items={legendItems} />
+      <ChartLegend
+        items={legendItems}
+        allHidden={legendItems.length > 0 && legendItems.every((i) => i.hidden)}
+        onToggleAll={() => {
+          const ids = legendItems.map((i) => i.id);
+          const allHidden = legendItems.every((i) => i.hidden);
+          setHiddenIds((prev) => (allHidden ? prev.filter((x) => !ids.includes(x)) : [...new Set([...prev, ...ids])]));
+        }}
+      />
 
       {showIndicatorPanel && (
         <div className="indicator-panel" ref={indicatorPanelRef}>
@@ -1628,7 +1687,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       
       <div ref={chartContainerRef} className={`chart ${alertArmed ? 'alert-cursor' : ''}`} />
 
-      {autoChart.enabled && (
+      {autoShown && (
         <AutoChartBadge result={autoResult} barCount={data.length} timeframe={timeframe} />
       )}
 
@@ -1641,9 +1700,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       
       <IndicatorPanels 
         data={data}
-        showVolume={indicators.volume}
-        showRSI={indicators.rsi}
-        showMACD={indicators.macd}
+        showVolume={visibleIndicators.volume}
+        showRSI={visibleIndicators.rsi}
+        showMACD={visibleIndicators.macd}
         theme={chartStyle.theme}
       />
       </div>

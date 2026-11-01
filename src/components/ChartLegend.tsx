@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import './ChartLegend.css';
 
 export interface LegendItem {
@@ -16,36 +16,30 @@ export interface LegendItem {
 
 interface Props {
   items: LegendItem[];
+  /** Every indicator is hidden from the chart */
+  allHidden: boolean;
+  /** Hide all indicators from the chart, or show them again */
+  onToggleAll: () => void;
 }
 
-/** Indicators on the chart, listed top-left with their settings. Hover a row for hide, settings and remove. */
-export const ChartLegend: React.FC<Props> = ({ items }) => {
-  const [collapsed, setCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem('legendCollapsed') === 'true';
-    } catch {
-      return false;
-    }
-  });
-
+/**
+ * Indicators on the chart, listed top-left with their settings. The arrow hides every indicator
+ * from the chart while keeping it selected; hover a row for hide, settings and remove.
+ */
+export const ChartLegend: React.FC<Props> = ({ items, allHidden, onToggleAll }) => {
   if (items.length === 0) return null;
-
-  const toggle = () => {
-    const next = !collapsed;
-    setCollapsed(next);
-    try {
-      localStorage.setItem('legendCollapsed', String(next));
-    } catch {
-      /* storage unavailable */
-    }
-  };
 
   return (
     <div className="chart-legend">
-      <button type="button" className="legend-collapse" onClick={toggle} title={collapsed ? 'Show indicators' : 'Hide the list'}>
-        {collapsed ? `▸ ${items.length} indicator${items.length > 1 ? 's' : ''}` : '▾'}
+      <button
+        type="button"
+        className="legend-collapse"
+        onClick={onToggleAll}
+        title={allHidden ? 'Show all indicators on the chart' : 'Hide all indicators from the chart (they stay selected)'}
+      >
+        {allHidden ? `▼ ${items.length} indicator${items.length > 1 ? 's' : ''} hidden. Show` : '▲ Hide indicators'}
       </button>
-      {!collapsed && (
+      {!allHidden && (
         <ul>
           {items.map((it) => (
             <li key={it.id} className={it.hidden ? 'hidden' : ''}>
