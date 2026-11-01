@@ -56,3 +56,15 @@
   .csd select, .csd input[type='number'] { font-size: 16px; }
   .csd-style-row { flex-wrap: wrap; }
 }
+
+.csd-check-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 13px; color: #e0e0e0; }
+.csd-extra-row { display: grid; grid-template-columns: 70px 64px 1fr 22px; gap: 8px; align-items: center; padding: 4px 0; font-size: 13px; }
+.csd-extra-row.off { opacity: 0.55; }
+.csd-mini-check { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #a0a4c8; }
+.csd-lbl.wide { min-width: 120px; }
+.csd-style-row { flex-wrap: wrap; }
+.csd-row { grid-template-columns: 200px 1fr; }
+@media (max-width: 900px) {
+  .csd-row { grid-template-columns: 1fr; gap: 4px; }
+  .csd-extra-row { grid-template-columns: 56px 56px 1fr 22px; }
+}

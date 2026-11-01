@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CLOUD_TFS, MaType, PRICE_SOURCES, PriceSource } from '../../utils/htfEma';
+import { CLOUD_TFS, CloudTf, MaType, PRICE_SOURCES, PriceSource } from '../../utils/htfEma';
 import {
   Cloud, CloudGroup, CloudKey, CLOUD_TITLES, DEFAULT_CLOUDS, MAX_CLOUDS, cloneGroup, newCloud,
 } from './cloudConfig';
@@ -24,15 +24,24 @@ const VIS_LABELS: { key: keyof CloudGroup['visibility']; label: string }[] = [
   { key: 'months', label: 'Months' },
 ];
 
-const num = (v: string, min: number, max: number, fallback: number) => {
+const int = (v: string, min: number, max: number, fallback: number) => {
   const n = parseInt(v, 10);
   return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
 };
 
-/** Settings for a cloud indicator, laid out like TradingView's: Inputs, Style and Visibility tabs */
+/** The first five clouds are the scripts' own; clouds added beyond them are an extra */
+const SCRIPT_CLOUDS: Record<CloudKey, number> = { ripster: 5, mtf: 2 };
+
+/**
+ * Settings for a cloud indicator, laid out like TradingView's dialog (Inputs, Style, Visibility)
+ * and using the same labels and order as the Ripster scripts. The Inputs the scripts declare but
+ * never use are left out: "Offset" and the alert switches in Ripster EMA Clouds, and "Leading
+ * Period" in Ripster MTF Clouds.
+ */
 export const CloudSettingsDialog: React.FC<Props> = ({ cloudKey, group, chartMs, onApply, onClose }) => {
   const [tab, setTab] = useState<Tab>('inputs');
   const [draft, setDraft] = useState<CloudGroup>(() => cloneGroup(group));
+  const isMtf = cloudKey === 'mtf';
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -44,6 +53,38 @@ export const CloudSettingsDialog: React.FC<Props> = ({ cloudKey, group, chartMs,
 
   const setCloud = (i: number, patch: Partial<Cloud>) =>
     setDraft((d) => ({ ...d, clouds: d.clouds.map((c, j) => (j === i ? { ...c, ...patch } : c)) }));
+
+  const lenLabel = (i: number, which: 'Short' | 'Long') => (isMtf ? `EMA ${i + 1} ${which} Length` : `${which} EMA${i + 1} Length`);
+  const cloudName = (i: number) => (isMtf ? `EMA ${i + 1}` : `EMA${i + 1}`);
+
+  const tfOptions = (
+    <>
+      {CLOUD_TFS.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}{o.value !== 'chart' && o.ms < chartMs ? ' (finer than chart)' : ''}
+        </option>
+      ))}
+    </>
+  );
+
+  // "Resolution": one timeframe for every cloud, like the MTF script's single input
+  const tfs = draft.clouds.map((c) => c.tf);
+  const commonTf: CloudTf | '' = tfs.every((t) => t === tfs[0]) ? tfs[0] : '';
+
+  const allLines = draft.clouds.length > 0 && draft.clouds.every((c) => c.lines);
+
+  const colorRow = (label: string, value: string, onChange: (v: string) => void) => (
+    <>
+      <span className="csd-lbl">{label}</span>
+      <input type="color" value={value} onChange={(e) => onChange(e.target.value)} aria-label={`${label} colour`} />
+    </>
+  );
+
+  const widthSelect = (value: number, onChange: (w: Cloud['shortWidth']) => void) => (
+    <select value={value} onChange={(e) => onChange(+e.target.value as Cloud['shortWidth'])} aria-label="Line width">
+      {[1, 2, 3, 4].map((w) => <option key={w} value={w}>{w}px</option>)}
+    </select>
+  );
 
   return (
     <div className="csd-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -64,55 +105,108 @@ export const CloudSettingsDialog: React.FC<Props> = ({ cloudKey, group, chartMs,
         <div className="csd-body">
           {tab === 'inputs' && (
             <>
-              <div className="csd-row">
-                <label>MA type</label>
-                <select value={draft.maType} onChange={(e) => setDraft({ ...draft, maType: e.target.value as MaType })}>
-                  <option value="EMA">EMA</option>
-                  <option value="SMA">SMA</option>
-                </select>
-              </div>
+              {!isMtf && (
+                <div className="csd-row">
+                  <label>MA Type</label>
+                  <select value={draft.maType} onChange={(e) => setDraft({ ...draft, maType: e.target.value as MaType })}>
+                    <option value="EMA">EMA</option>
+                    <option value="SMA">SMA</option>
+                  </select>
+                </div>
+              )}
+
+              {draft.clouds.map((c, i) => (
+                <React.Fragment key={i}>
+                  <div className="csd-row">
+                    <label>{lenLabel(i, 'Short')}</label>
+                    <input type="number" min={1} max={999} value={c.short} onChange={(e) => setCloud(i, { short: int(e.target.value, 1, 999, c.short) })} />
+                  </div>
+                  <div className="csd-row">
+                    <label>{lenLabel(i, 'Long')}</label>
+                    <input type="number" min={1} max={999} value={c.long} onChange={(e) => setCloud(i, { long: int(e.target.value, 1, 999, c.long) })} />
+                  </div>
+                </React.Fragment>
+              ))}
+
+              {isMtf && (
+                <div className="csd-row">
+                  <label>Resolution</label>
+                  <select
+                    value={commonTf}
+                    onChange={(e) => {
+                      const tf = e.target.value as CloudTf;
+                      setDraft((d) => ({ ...d, clouds: d.clouds.map((c) => ({ ...c, tf })) }));
+                    }}
+                  >
+                    {commonTf === '' && <option value="">Mixed (set per cloud below)</option>}
+                    {tfOptions}
+                  </select>
+                </div>
+              )}
+
               <div className="csd-row">
                 <label>Source</label>
                 <select value={draft.source} onChange={(e) => setDraft({ ...draft, source: e.target.value as PriceSource })}>
                   {PRICE_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
               </div>
-              <div className="csd-row">
-                <label>Offset</label>
-                <input
-                  type="number" min={-100} max={100} value={draft.offset}
-                  onChange={(e) => setDraft({ ...draft, offset: num(e.target.value, -100, 100, 0) })}
-                />
-              </div>
 
-              <div className="csd-section">Clouds</div>
-              <div className="csd-cloud-head">
-                <span /><span>Show</span><span>Short</span><span>Long</span><span>Timeframe</span><span />
-              </div>
+              {isMtf && (
+                <div className="csd-row">
+                  <label>Offset</label>
+                  <input type="number" min={-500} max={500} value={draft.offset} onChange={(e) => setDraft({ ...draft, offset: int(e.target.value, -500, 500, 0) })} />
+                </div>
+              )}
+
+              {!isMtf && (
+                <>
+                  <label className="csd-check-row">
+                    <input
+                      type="checkbox"
+                      checked={allLines}
+                      onChange={(e) => setDraft((d) => ({ ...d, clouds: d.clouds.map((c) => ({ ...c, lines: e.target.checked })) }))}
+                    />
+                    Display EMA Line
+                  </label>
+                  {draft.clouds.map((c, i) => (
+                    <label key={i} className="csd-check-row">
+                      <input type="checkbox" checked={c.enabled} onChange={() => setCloud(i, { enabled: !c.enabled })} />
+                      Show EMA Cloud-{i + 1}
+                    </label>
+                  ))}
+                  <div className="csd-row">
+                    <label>Leading Period For EMA Cloud</label>
+                    <input type="number" min={0} max={500} value={draft.offset} onChange={(e) => setDraft({ ...draft, offset: int(e.target.value, 0, 500, 0) })} />
+                  </div>
+                </>
+              )}
+
+              <div className="csd-section">Extras (not in the original script)</div>
               {draft.clouds.map((c, i) => (
-                <div key={i} className={`csd-cloud-row ${c.enabled ? '' : 'off'}`}>
-                  <span className="csd-n">Cloud {i + 1}</span>
-                  <input type="checkbox" checked={c.enabled} onChange={() => setCloud(i, { enabled: !c.enabled })} aria-label={`Show cloud ${i + 1}`} />
-                  <input type="number" min={1} max={999} value={c.short} onChange={(e) => setCloud(i, { short: num(e.target.value, 1, 999, c.short) })} aria-label="Short length" />
-                  <input type="number" min={1} max={999} value={c.long} onChange={(e) => setCloud(i, { long: num(e.target.value, 1, 999, c.long) })} aria-label="Long length" />
-                  <select value={c.tf} onChange={(e) => setCloud(i, { tf: e.target.value as Cloud['tf'] })} aria-label="Timeframe">
-                    {CLOUD_TFS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}{o.value !== 'chart' && o.ms < chartMs ? ' (finer than chart)' : ''}
-                      </option>
-                    ))}
+                <div key={i} className={`csd-extra-row ${c.enabled ? '' : 'off'}`}>
+                  <span className="csd-n">{isMtf ? `EMA ${i + 1}` : `Cloud-${i + 1}`}</span>
+                  {isMtf ? (
+                    <label className="csd-mini-check" title="Show this cloud">
+                      <input type="checkbox" checked={c.enabled} onChange={() => setCloud(i, { enabled: !c.enabled })} /> Show
+                    </label>
+                  ) : <span />}
+                  <select value={c.tf} onChange={(e) => setCloud(i, { tf: e.target.value as CloudTf })} aria-label={`${cloudName(i)} timeframe`}>
+                    {tfOptions}
                   </select>
-                  <button type="button" className="csd-remove" onClick={() => setDraft((d) => ({ ...d, clouds: d.clouds.filter((_, j) => j !== i) }))} title="Remove cloud">✖</button>
+                  {i >= SCRIPT_CLOUDS[cloudKey] ? (
+                    <button type="button" className="csd-remove" onClick={() => setDraft((d) => ({ ...d, clouds: d.clouds.filter((_, j) => j !== i) }))} title="Remove cloud">✖</button>
+                  ) : <span />}
                 </div>
               ))}
               {draft.clouds.length < MAX_CLOUDS && (
-                <button type="button" className="csd-add" onClick={() => setDraft((d) => ({ ...d, clouds: [...d.clouds, newCloud(d.clouds)] }))}>
-                  + Add cloud
+                <button type="button" className="csd-add" onClick={() => setDraft((d) => ({ ...d, clouds: [...d.clouds, newCloud(cloudKey, d.clouds)] }))}>
+                  + Add {isMtf ? 'MTF cloud' : 'cloud'}
                 </button>
               )}
               <p className="csd-note">
-                Each cloud takes its two averages from the candles of its own timeframe, so one chart can mix, for example,
-                5/12 on the chart's candles with 34/50 on hourly and 72/89 on daily candles.
+                {isMtf
+                  ? 'Add more clouds to watch several resolutions at once, each with its own lengths and timeframe, like adding the indicator to the chart several times.'
+                  : 'Each cloud can take its averages from the candles of its own timeframe instead of the chart’s, so one chart can mix, for example, 5/12 on the chart’s candles with 34/50 on hourly ones.'}
               </p>
             </>
           )}
@@ -121,36 +215,62 @@ export const CloudSettingsDialog: React.FC<Props> = ({ cloudKey, group, chartMs,
             <>
               {draft.clouds.map((c, i) => (
                 <div key={i} className={`csd-style-card ${c.enabled ? '' : 'off'}`}>
-                  <div className="csd-style-title">Cloud {i + 1} · {c.short}/{c.long}</div>
+                  <div className="csd-style-title">{isMtf ? `EMA ${i + 1}` : `EMA Cloud-${i + 1}`} · {c.short}/{c.long}</div>
 
                   <div className="csd-style-row">
                     <label className="csd-check">
-                      <input type="checkbox" checked={c.fill} onChange={() => setCloud(i, { fill: !c.fill })} /> Cloud
+                      <input type="checkbox" checked={c.fill} onChange={() => setCloud(i, { fill: !c.fill })} /> {isMtf ? `EMA ${i + 1} Cloud` : `MA Cloud${i + 1}`}
                     </label>
-                    <span className="csd-lbl">Bullish</span>
-                    <input type="color" value={c.bull} onChange={(e) => setCloud(i, { bull: e.target.value })} aria-label="Bullish colour" />
-                    <input type="range" min={0} max={100} value={c.bullOpacity} onChange={(e) => setCloud(i, { bullOpacity: +e.target.value })} aria-label="Bullish opacity" />
-                    <span className="csd-pct">{c.bullOpacity}%</span>
+                    {isMtf ? (
+                      <>
+                        <input type="color" value={c.bull} onChange={(e) => setCloud(i, { bull: e.target.value, bear: e.target.value })} aria-label="Cloud colour" />
+                        <input type="range" min={0} max={100} value={c.bullOpacity} onChange={(e) => setCloud(i, { bullOpacity: +e.target.value, bearOpacity: +e.target.value })} aria-label="Cloud opacity" />
+                        <span className="csd-pct">{c.bullOpacity}%</span>
+                      </>
+                    ) : (
+                      <>
+                        {colorRow('Short ≥ Long', c.bull, (v) => setCloud(i, { bull: v }))}
+                        <input type="range" min={0} max={100} value={c.bullOpacity} onChange={(e) => setCloud(i, { bullOpacity: +e.target.value })} aria-label="Opacity when short is above long" />
+                        <span className="csd-pct">{c.bullOpacity}%</span>
+                      </>
+                    )}
+                  </div>
+                  {!isMtf && (
+                    <div className="csd-style-row">
+                      <span className="csd-spacer" />
+                      {colorRow('Short < Long', c.bear, (v) => setCloud(i, { bear: v }))}
+                      <input type="range" min={0} max={100} value={c.bearOpacity} onChange={(e) => setCloud(i, { bearOpacity: +e.target.value })} aria-label="Opacity when short is below long" />
+                      <span className="csd-pct">{c.bearOpacity}%</span>
+                    </div>
+                  )}
+
+                  <div className="csd-style-row">
+                    <label className="csd-check">
+                      <input type="checkbox" checked={c.lines} onChange={() => setCloud(i, { lines: !c.lines })} /> Lines
+                    </label>
+                    <span className="csd-lbl wide">{isMtf ? `EMA ${i + 1} Short` : `Short Leading EMA${i + 1}`}</span>
+                    {isMtf ? (
+                      <input type="color" value={c.shortUp} onChange={(e) => setCloud(i, { shortUp: e.target.value, shortDown: e.target.value })} aria-label="Short line colour" />
+                    ) : (
+                      <>
+                        {colorRow('Rising', c.shortUp, (v) => setCloud(i, { shortUp: v }))}
+                        {colorRow('Falling', c.shortDown, (v) => setCloud(i, { shortDown: v }))}
+                      </>
+                    )}
+                    {widthSelect(c.shortWidth, (w) => setCloud(i, { shortWidth: w }))}
                   </div>
                   <div className="csd-style-row">
                     <span className="csd-spacer" />
-                    <span className="csd-lbl">Bearish</span>
-                    <input type="color" value={c.bear} onChange={(e) => setCloud(i, { bear: e.target.value })} aria-label="Bearish colour" />
-                    <input type="range" min={0} max={100} value={c.bearOpacity} onChange={(e) => setCloud(i, { bearOpacity: +e.target.value })} aria-label="Bearish opacity" />
-                    <span className="csd-pct">{c.bearOpacity}%</span>
-                  </div>
-
-                  <div className="csd-style-row">
-                    <label className="csd-check">
-                      <input type="checkbox" checked={c.lines} onChange={() => setCloud(i, { lines: !c.lines })} /> EMA lines
-                    </label>
-                    <span className="csd-lbl">Short</span>
-                    <input type="color" value={c.shortColor} onChange={(e) => setCloud(i, { shortColor: e.target.value })} aria-label="Short line colour" />
-                    <span className="csd-lbl">Long</span>
-                    <input type="color" value={c.longColor} onChange={(e) => setCloud(i, { longColor: e.target.value })} aria-label="Long line colour" />
-                    <select value={c.lineWidth} onChange={(e) => setCloud(i, { lineWidth: +e.target.value as Cloud['lineWidth'] })} aria-label="Line width">
-                      {[1, 2, 3, 4].map((w) => <option key={w} value={w}>{w}px</option>)}
-                    </select>
+                    <span className="csd-lbl wide">{isMtf ? `EMA ${i + 1} Long` : `Long Leading EMA${i + 1}`}</span>
+                    {isMtf ? (
+                      <input type="color" value={c.longUp} onChange={(e) => setCloud(i, { longUp: e.target.value, longDown: e.target.value })} aria-label="Long line colour" />
+                    ) : (
+                      <>
+                        {colorRow('Rising', c.longUp, (v) => setCloud(i, { longUp: v }))}
+                        {colorRow('Falling', c.longDown, (v) => setCloud(i, { longDown: v }))}
+                      </>
+                    )}
+                    {widthSelect(c.longWidth, (w) => setCloud(i, { longWidth: w }))}
                   </div>
                 </div>
               ))}

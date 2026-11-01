@@ -631,17 +631,27 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             addCloud(`${key}-cloud-${idx}`, short, long, hexToRgba(cl.bull, cl.bullOpacity), hexToRgba(cl.bear, cl.bearOpacity));
           }
           if (cl.lines && chartRef.current) {
-            [[cl.short, short, cl.shortColor], [cl.long, long, cl.longColor]].forEach(([period, values, color]) => {
+            const label = (period: number) =>
+              cl.tf === 'chart' ? `${group.maType} ${period}` : `${group.maType} ${period} ${tfOption(cl.tf).short}`;
+            // Like the Pine scripts: each point is coloured by whether the average rose or fell on that bar
+            [
+              { period: cl.short, values: short, up: cl.shortUp, down: cl.shortDown, width: cl.shortWidth },
+              { period: cl.long, values: long, up: cl.longUp, down: cl.longDown, width: cl.longWidth },
+            ].forEach(({ period, values, up, down, width }) => {
               const line = chartRef.current!.addSeries(LineSeries, {
-                color: color as string,
-                lineWidth: cl.lineWidth,
-                title: cl.tf === 'chart' ? `${group.maType} ${period}` : `${group.maType} ${period} ${tfOption(cl.tf).short}`,
+                color: up,
+                lineWidth: width,
+                title: label(period),
                 priceLineVisible: false,
                 lastValueVisible: false,
               });
               line.setData(
-                (values as number[])
-                  .map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+                values
+                  .map((value, i) => ({
+                    time: (data[i].time / 1000) as Time,
+                    value,
+                    color: i > 0 && value >= values[i - 1] ? up : down,
+                  }))
                   .filter((pt) => Number.isFinite(pt.value)) // higher-timeframe averages start later or are still loading
               );
               indicatorSeriesRef.current.set(`${key}-line-${idx}-${period}`, line);
