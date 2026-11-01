@@ -6,6 +6,8 @@ export type CloudTf = 'chart' | '1m' | '2m' | '5m' | '10m' | '15m' | '30m' | '1h
 export interface CloudTfOption {
   value: CloudTf;
   label: string;
+  /** Compact label for tight spaces */
+  short: string;
   /** Bar length in ms (0 for 'chart') */
   ms: number;
   /** Yahoo interval and how much history to load so long EMAs have time to settle */
@@ -17,17 +19,17 @@ export interface CloudTfOption {
 
 const MIN = 60_000;
 export const CLOUD_TFS: CloudTfOption[] = [
-  { value: 'chart', label: 'Chart timeframe', ms: 0 },
-  { value: '1m', label: '1 min', ms: MIN, interval: '1m', range: '5d' },
-  { value: '2m', label: '2 min', ms: 2 * MIN, interval: '2m', range: '5d' },
-  { value: '5m', label: '5 min', ms: 5 * MIN, interval: '5m', range: '5d' },
+  { value: 'chart', label: 'Chart timeframe', short: 'Chart', ms: 0 },
+  { value: '1m', label: '1 min', short: '1m', ms: MIN, interval: '1m', range: '5d' },
+  { value: '2m', label: '2 min', short: '2m', ms: 2 * MIN, interval: '2m', range: '5d' },
+  { value: '5m', label: '5 min', short: '5m', ms: 5 * MIN, interval: '5m', range: '5d' },
   // Yahoo has no 10-minute candles: build them from 5-minute ones
-  { value: '10m', label: '10 min', ms: 10 * MIN, interval: '5m', range: '5d', aggregate: true },
-  { value: '15m', label: '15 min', ms: 15 * MIN, interval: '15m', range: '1mo' },
-  { value: '30m', label: '30 min', ms: 30 * MIN, interval: '30m', range: '1mo' },
-  { value: '1h', label: '1 hour', ms: 60 * MIN, interval: '1h', range: '3mo' },
-  { value: '1d', label: 'Daily', ms: 24 * 60 * MIN, interval: '1d', range: '2y' },
-  { value: '1wk', label: 'Weekly', ms: 7 * 24 * 60 * MIN, interval: '1wk', range: '5y' },
+  { value: '10m', label: '10 min', short: '10m', ms: 10 * MIN, interval: '5m', range: '5d', aggregate: true },
+  { value: '15m', label: '15 min', short: '15m', ms: 15 * MIN, interval: '15m', range: '1mo' },
+  { value: '30m', label: '30 min', short: '30m', ms: 30 * MIN, interval: '30m', range: '1mo' },
+  { value: '1h', label: '1 hour', short: '1h', ms: 60 * MIN, interval: '1h', range: '3mo' },
+  { value: '1d', label: 'Daily', short: 'D', ms: 24 * 60 * MIN, interval: '1d', range: '2y' },
+  { value: '1wk', label: 'Weekly', short: 'W', ms: 7 * 24 * 60 * MIN, interval: '1wk', range: '5y' },
 ];
 
 export const tfOption = (tf: CloudTf): CloudTfOption => CLOUD_TFS.find((o) => o.value === tf) ?? CLOUD_TFS[0];
