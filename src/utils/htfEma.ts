@@ -1,7 +1,7 @@
 import { ChartData } from '../types';
 import { calculateEMAFromFirst } from './indicators';
 
-export type CloudTf = 'chart' | '1m' | '5m' | '15m' | '30m' | '1h' | '1d' | '1wk';
+export type CloudTf = 'chart' | '1m' | '2m' | '5m' | '10m' | '15m' | '30m' | '1h' | '1d' | '1wk';
 
 export interface CloudTfOption {
   value: CloudTf;
@@ -11,13 +11,18 @@ export interface CloudTfOption {
   /** Yahoo interval and how much history to load so long EMAs have time to settle */
   interval?: string;
   range?: string;
+  /** Yahoo has no such interval, so the fetched bars are merged into buckets of `ms` */
+  aggregate?: boolean;
 }
 
 const MIN = 60_000;
 export const CLOUD_TFS: CloudTfOption[] = [
   { value: 'chart', label: 'Chart timeframe', ms: 0 },
   { value: '1m', label: '1 min', ms: MIN, interval: '1m', range: '5d' },
+  { value: '2m', label: '2 min', ms: 2 * MIN, interval: '2m', range: '5d' },
   { value: '5m', label: '5 min', ms: 5 * MIN, interval: '5m', range: '5d' },
+  // Yahoo has no 10-minute candles: build them from 5-minute ones
+  { value: '10m', label: '10 min', ms: 10 * MIN, interval: '5m', range: '5d', aggregate: true },
   { value: '15m', label: '15 min', ms: 15 * MIN, interval: '15m', range: '1mo' },
   { value: '30m', label: '30 min', ms: 30 * MIN, interval: '30m', range: '1mo' },
   { value: '1h', label: '1 hour', ms: 60 * MIN, interval: '1h', range: '3mo' },
@@ -58,6 +63,24 @@ export const alignHtfEma = (chart: ChartData[], htf: ChartData[], htfMs: number,
     while (k + 1 < htf.length && htf[k + 1].time <= chart[i].time) k++;
     if (htf[k].time > chart[i].time) continue; // chart bar is before any higher-timeframe data
     out[i] = k === htf.length - 1 ? ema[k] : k > 0 ? ema[k - 1] : NaN;
+  }
+  return out;
+};
+
+/** Merge finer bars into bars of `ms`, aligned to clock boundaries (e.g. 5m bars into 10m bars) */
+export const aggregateBars = (bars: ChartData[], ms: number): ChartData[] => {
+  const out: ChartData[] = [];
+  for (const b of bars) {
+    const start = Math.floor(b.time / ms) * ms;
+    const last = out[out.length - 1];
+    if (last && last.time === start) {
+      last.high = Math.max(last.high, b.high);
+      last.low = Math.min(last.low, b.low);
+      last.close = b.close;
+      last.volume += b.volume;
+    } else {
+      out.push({ ...b, time: start });
+    }
   }
   return out;
 };

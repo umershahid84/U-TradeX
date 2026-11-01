@@ -16,7 +16,7 @@ import { AutoChartManager, AutoChartOptions } from './autoChartManager';
 import { AutoChartBadge } from './AutoChartBadge';
 import { analyzeChart } from '../utils/autoChart';
 import { calculateEMAFromFirst, calculateSMA, calculateVWAP, calculateBollingerBands } from '../utils/indicators';
-import { CLOUD_TFS, CloudTf, alignHtfEma, chartIntervalMs, tfOption } from '../utils/htfEma';
+import { CLOUD_TFS, CloudTf, aggregateBars, alignHtfEma, chartIntervalMs, tfOption } from '../utils/htfEma';
 import { RealMarketDataService } from '../services/realMarketData';
 import { DrawingTools, DrawingTool } from './DrawingTools';
 import { IndicatorPanels } from './IndicatorPanels';
@@ -611,7 +611,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           const opt = tfOption(tf as CloudTf);
           if (!opt.interval) return;
           try {
-            const bars = await market.fetchChartData(symbol, opt.interval, opt.range ?? '1mo', includeAfterHours);
+            const raw = await market.fetchChartData(symbol, opt.interval, opt.range ?? '1mo', includeAfterHours);
+            const bars = opt.aggregate ? aggregateBars(raw, opt.ms) : raw;
             if (!cancelled) setHtfBars((prev) => ({ ...prev, [tf]: bars }));
           } catch {
             /* keep whatever we had; retry on the next refresh */
@@ -907,9 +908,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             title="Which candles the EMAs are calculated on"
           >
             {CLOUD_TFS.map((o) => (
-              // a timeframe shorter than the chart's own bars would add nothing, so it is not offered
-              <option key={o.value} value={o.value} disabled={o.value !== 'chart' && o.ms < chartMs}>
-                {o.label}
+              <option key={o.value} value={o.value}>
+                {o.label}{o.value !== 'chart' && o.ms < chartMs ? ' (finer than chart)' : ''}
               </option>
             ))}
           </select>
