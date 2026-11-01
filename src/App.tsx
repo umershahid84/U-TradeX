@@ -16,7 +16,7 @@ import { usePriceAlerts } from './hooks/usePriceAlerts';
 import { Toasts } from './components/Toasts';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RealMarketDataService, QuoteDetails } from './services/realMarketData';
-import { aggregateBars } from './utils/htfEma';
+import { aggregate4h, aggregateBars } from './utils/htfEma';
 import { Session, SESSION_COLOR, SESSION_LABEL, sessionAt } from './utils/marketSessions';
 import {
   calculateFearGreed,
@@ -105,6 +105,7 @@ const MIN_RANGE_FOR_INTERVAL: Record<string, string> = {
   '15m': '5d',
   '30m': '1mo',
   '1h': '1mo',
+  '4h': '3mo',
   '1d': '6mo',
   '1wk': '2y',
   '1mo': '10y',
@@ -123,7 +124,7 @@ const RANGE_LABEL: Record<string, string> = {
 };
 
 const INTERVAL_NAME: Record<string, string> = {
-  '15m': '15-minute', '30m': '30-minute', '1h': 'hourly', '1d': 'daily', '1wk': 'weekly', '1mo': 'monthly', '3mo': 'quarterly',
+  '15m': '15-minute', '30m': '30-minute', '1h': 'hourly', '4h': '4-hour', '1d': 'daily', '1wk': 'weekly', '1mo': 'monthly', '3mo': 'quarterly',
 };
 
 const TAB_IDS: SidebarTab[] = ['watchlist', 'trade', 'options', 'sentiment'];
@@ -207,7 +208,7 @@ function App() {
       '15m': '15m',
       '30m': '30m',
       '1h': '1h',
-      '4h': '1d',
+      '4h': '1h', // Yahoo has no 4-hour candles; built from hourly ones below
       'D': '1d',
       'W': '1wk',
       'M': '1mo',
@@ -263,16 +264,16 @@ function App() {
       setFearGreedData(null); // don't show the previous symbol's reading while loading
       const yahooInterval = getYahooInterval(timeframe);
       const requestedRange = getYahooRange(timeRange);
-      const yahooRange = effectiveRange(requestedRange, yahooInterval);
+      const yahooRange = effectiveRange(requestedRange, timeframe === '4h' ? '4h' : yahooInterval);
       setRangeNote(
         yahooRange !== requestedRange
-          ? `Showing ${RANGE_LABEL[yahooRange] ?? yahooRange} of ${INTERVAL_NAME[yahooInterval] ?? yahooInterval} candles`
+          ? `Showing ${RANGE_LABEL[yahooRange] ?? yahooRange} of ${INTERVAL_NAME[timeframe === '4h' ? '4h' : yahooInterval] ?? yahooInterval} candles`
           : ''
       );
       
       try {
         const raw = await marketData.fetchChartData(symbol, yahooInterval, yahooRange, includeAfterHours);
-        const data = timeframe === '10m' ? aggregateBars(raw, 10 * 60 * 1000) : raw;
+        const data = timeframe === '10m' ? aggregateBars(raw, 10 * 60 * 1000) : timeframe === '4h' ? aggregate4h(raw) : raw;
         setChartData(data);
         
         if (data.length > 0) {
@@ -304,7 +305,8 @@ function App() {
         const lastBar = newData[newData.length - 1];
 
         // Start a new candle once the current bar's interval has elapsed
-        const barMs = timeframe === '10m' ? 10 * 60 * 1000 : intradayIntervalMs(getYahooInterval(timeframe));
+        // 4-hour bars follow the trading session, not the clock, so they only update; they don't roll
+        const barMs = timeframe === '4h' ? 0 : timeframe === '10m' ? 10 * 60 * 1000 : intradayIntervalMs(getYahooInterval(timeframe));
         if (lastBar && barMs && Date.now() >= lastBar.time + barMs && price !== lastBar.close) {
           const barTime = Math.floor(Date.now() / barMs) * barMs;
           if (barTime > lastBar.time) {

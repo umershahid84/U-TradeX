@@ -351,3 +351,14 @@
 .cloud-pair .pair-vis label { font-size: 11px; color: #9a9ec0; gap: 5px; }
 .cloud-all { display: flex; flex-direction: column; gap: 6px; padding-left: 0; }
 .cloud-all.off { opacity: 0.45; }
+
+.cloud-settings-btn {
+  align-self: flex-start; background: #1a1e3f; border: 1px solid #3a3e6f; color: #e0e0e0; border-radius: 4px;
+  padding: 4px 10px; font-size: 12px; cursor: pointer;
+}
+.cloud-settings-btn:hover { border-color: #2962ff; color: #fff; }
+.cloud-summary { list-style: none; margin: 2px 0 0; padding: 0; display: grid; gap: 3px; font-size: 11px; color: #b0b4d0; }
+.cloud-summary li { display: flex; align-items: center; gap: 6px; }
+.cloud-summary i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.cloud-summary em { font-style: normal; font-size: 10px; color: #8a8fb5; background: #1a1e3f; border-radius: 8px; padding: 0 6px; }
+.cloud-summary .none { color: #6a6e90; }
