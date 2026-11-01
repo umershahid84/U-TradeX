@@ -1,22 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { CLOUD_TFS, CloudTf, MaType, PRICE_SOURCES, PriceSource } from '../../utils/htfEma';
-import {
-  Cloud, CloudGroup, CloudKey, CLOUD_TITLES, DEFAULT_CLOUDS, MAX_CLOUDS, cloneGroup, newCloud,
-} from './cloudConfig';
+import { Cloud, CloudInstance, DEFAULT_CLOUDS, CLOUD_TITLES } from './cloudConfig';
 import './CloudSettingsDialog.css';
 
 interface Props {
-  cloudKey: CloudKey;
-  group: CloudGroup;
+  instance: CloudInstance;
   /** Bar length of the chart in ms; marks timeframes finer than it */
   chartMs: number;
-  onApply: (group: CloudGroup) => void;
+  onApply: (instance: CloudInstance) => void;
   onClose: () => void;
 }
 
 type Tab = 'inputs' | 'style' | 'visibility';
 
-const VIS_LABELS: { key: keyof CloudGroup['visibility']; label: string }[] = [
+const VIS_LABELS: { key: keyof CloudInstance['visibility']; label: string }[] = [
   { key: 'minutes', label: 'Minutes' },
   { key: 'hours', label: 'Hours' },
   { key: 'days', label: 'Days' },
@@ -29,18 +26,16 @@ const int = (v: string, min: number, max: number, fallback: number) => {
   return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
 };
 
-/** The first five clouds are the scripts' own; clouds added beyond them are an extra */
-const SCRIPT_CLOUDS: Record<CloudKey, number> = { ripster: 5, mtf: 2 };
-
 /**
  * Settings for a cloud indicator, laid out like TradingView's dialog (Inputs, Style, Visibility)
  * and using the same labels and order as the Ripster scripts. The Inputs the scripts declare but
  * never use are left out: "Offset" and the alert switches in Ripster EMA Clouds, and "Leading
  * Period" in Ripster MTF Clouds.
  */
-export const CloudSettingsDialog: React.FC<Props> = ({ cloudKey, group, chartMs, onApply, onClose }) => {
+export const CloudSettingsDialog: React.FC<Props> = ({ instance, chartMs, onApply, onClose }) => {
   const [tab, setTab] = useState<Tab>('inputs');
-  const [draft, setDraft] = useState<CloudGroup>(() => cloneGroup(group));
+  const [draft, setDraft] = useState<CloudInstance>(() => JSON.parse(JSON.stringify(instance)));
+  const cloudKey = instance.kind;
   const isMtf = cloudKey === 'mtf';
 
   useEffect(() => {
@@ -55,8 +50,6 @@ export const CloudSettingsDialog: React.FC<Props> = ({ cloudKey, group, chartMs,
     setDraft((d) => ({ ...d, clouds: d.clouds.map((c, j) => (j === i ? { ...c, ...patch } : c)) }));
 
   const lenLabel = (i: number, which: 'Short' | 'Long') => (isMtf ? `EMA ${i + 1} ${which} Length` : `${which} EMA${i + 1} Length`);
-  const cloudName = (i: number) => (isMtf ? `EMA ${i + 1}` : `EMA${i + 1}`);
-
   const tfOptions = (
     <>
       {CLOUD_TFS.map((o) => (
@@ -66,10 +59,6 @@ export const CloudSettingsDialog: React.FC<Props> = ({ cloudKey, group, chartMs,
       ))}
     </>
   );
-
-  // "Resolution": one timeframe for every cloud, like the MTF script's single input
-  const tfs = draft.clouds.map((c) => c.tf);
-  const commonTf: CloudTf | '' = tfs.every((t) => t === tfs[0]) ? tfs[0] : '';
 
   const allLines = draft.clouds.length > 0 && draft.clouds.every((c) => c.lines);
 
@@ -131,14 +120,7 @@ export const CloudSettingsDialog: React.FC<Props> = ({ cloudKey, group, chartMs,
               {isMtf && (
                 <div className="csd-row">
                   <label>Resolution</label>
-                  <select
-                    value={commonTf}
-                    onChange={(e) => {
-                      const tf = e.target.value as CloudTf;
-                      setDraft((d) => ({ ...d, clouds: d.clouds.map((c) => ({ ...c, tf })) }));
-                    }}
-                  >
-                    {commonTf === '' && <option value="">Mixed (set per cloud below)</option>}
+                  <select value={draft.resolution} onChange={(e) => setDraft({ ...draft, resolution: e.target.value as CloudTf })}>
                     {tfOptions}
                   </select>
                 </div>
@@ -181,33 +163,6 @@ export const CloudSettingsDialog: React.FC<Props> = ({ cloudKey, group, chartMs,
                 </>
               )}
 
-              <div className="csd-section">Extras (not in the original script)</div>
-              {draft.clouds.map((c, i) => (
-                <div key={i} className={`csd-extra-row ${c.enabled ? '' : 'off'}`}>
-                  <span className="csd-n">{isMtf ? `EMA ${i + 1}` : `Cloud-${i + 1}`}</span>
-                  {isMtf ? (
-                    <label className="csd-mini-check" title="Show this cloud">
-                      <input type="checkbox" checked={c.enabled} onChange={() => setCloud(i, { enabled: !c.enabled })} /> Show
-                    </label>
-                  ) : <span />}
-                  <select value={c.tf} onChange={(e) => setCloud(i, { tf: e.target.value as CloudTf })} aria-label={`${cloudName(i)} timeframe`}>
-                    {tfOptions}
-                  </select>
-                  {i >= SCRIPT_CLOUDS[cloudKey] ? (
-                    <button type="button" className="csd-remove" onClick={() => setDraft((d) => ({ ...d, clouds: d.clouds.filter((_, j) => j !== i) }))} title="Remove cloud">✖</button>
-                  ) : <span />}
-                </div>
-              ))}
-              {draft.clouds.length < MAX_CLOUDS && (
-                <button type="button" className="csd-add" onClick={() => setDraft((d) => ({ ...d, clouds: [...d.clouds, newCloud(cloudKey, d.clouds)] }))}>
-                  + Add {isMtf ? 'MTF cloud' : 'cloud'}
-                </button>
-              )}
-              <p className="csd-note">
-                {isMtf
-                  ? 'Add more clouds to watch several resolutions at once, each with its own lengths and timeframe, like adding the indicator to the chart several times.'
-                  : 'Each cloud can take its averages from the candles of its own timeframe instead of the chart’s, so one chart can mix, for example, 5/12 on the chart’s candles with 34/50 on hourly ones.'}
-              </p>
             </>
           )}
 
@@ -295,7 +250,7 @@ export const CloudSettingsDialog: React.FC<Props> = ({ cloudKey, group, chartMs,
         </div>
 
         <div className="csd-foot">
-          <button type="button" className="csd-defaults" onClick={() => setDraft((d) => ({ ...cloneGroup(DEFAULT_CLOUDS[cloudKey]), enabled: d.enabled }))}>
+          <button type="button" className="csd-defaults" onClick={() => setDraft((d) => ({ ...JSON.parse(JSON.stringify(DEFAULT_CLOUDS[cloudKey])), id: d.id, kind: d.kind, enabled: d.enabled }))}>
             Defaults
           </button>
           <span className="csd-spacer-grow" />

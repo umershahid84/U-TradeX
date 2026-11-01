@@ -79,11 +79,56 @@ export const shiftSeries = (values: number[], offset: number): number[] => {
   return values.map((_, i) => (i - offset >= 0 && i - offset < values.length ? values[i - offset] : NaN));
 };
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const nyParts = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+});
+
+// New York's UTC offset (ms, negative) at an instant
+const nyOffset = (ms: number): number => {
+  const p: Record<string, number> = {};
+  nyParts.formatToParts(new Date(ms)).forEach((x) => { if (x.type !== 'literal') p[x.type] = +x.value; });
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute) - Math.floor(ms / 60000) * 60000;
+};
+
+/** UTC ms of a New York wall-clock time on a 'YYYY-MM-DD' date */
+const nyWallToUtc = (date: string, hh: number, mm: number): number => {
+  const [y, m, d] = date.split('-').map(Number);
+  const guess = Date.UTC(y, m - 1, d, hh, mm);
+  const first = guess - nyOffset(guess);
+  return guess - nyOffset(first);
+};
+
+const nyDate = (ms: number) => new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+
 /**
- * Moving average computed on higher-timeframe bars, lined up with the chart's bars (the way
- * TradingView's request.security works). A chart bar takes the average of the last *completed*
- * higher-timeframe bar, so history never peeks ahead; the bar that is still open uses a developing
- * value that includes the latest price. Chart bars before the first higher-timeframe bar get NaN.
+ * When a higher-timeframe bar closes. Intraday bars end `htfMs` after they start (or when the next
+ * bar starts, if sooner). Daily and weekly bars close with the regular session: 16:00 New York time
+ * on the bar's day, or on its Friday for weekly bars.
+ */
+const htfBarEnd = (htf: ChartData[], k: number, htfMs: number): number => {
+  const bar = htf[k];
+  const next = htf[k + 1];
+  if (htfMs < DAY_MS) return Math.min(bar.time + htfMs, next ? next.time : Infinity);
+
+  let day = nyDate(bar.time);
+  if (htfMs >= 7 * DAY_MS) {
+    const weekday = new Date(`${day}T12:00:00Z`).getUTCDay();
+    const toFriday = (5 - weekday + 7) % 7;
+    day = new Date(new Date(`${day}T12:00:00Z`).getTime() + toFriday * DAY_MS).toISOString().slice(0, 10);
+  }
+  const end = nyWallToUtc(day, 16, 0);
+  return next ? Math.min(end, next.time) : end;
+};
+
+/**
+ * Moving average computed on higher-timeframe bars, lined up with the chart's bars the way
+ * TradingView's request.security does it with lookahead off: a higher-timeframe bar's value only
+ * becomes available on the chart bar where that bar closes, so every chart bar shows the last
+ * *completed* higher-timeframe bar. The newest chart bar is the exception: while the higher-timeframe
+ * bar is still open it shows a developing value that includes the latest price (the repainting
+ * live bar). Chart bars before the first completed higher-timeframe bar get NaN.
  */
 export const alignHtfMa = (
   chart: ChartData[],
@@ -96,25 +141,30 @@ export const alignHtfMa = (
   const out: number[] = chart.map(() => NaN);
   if (!htf.length || !chart.length) return out;
 
-  // while the last higher-timeframe bar is still forming, fold the chart's live price into it
-  const bars = htf.slice();
-  const lastBar = bars[bars.length - 1];
-  const lastChart = chart[chart.length - 1];
-  if (lastChart.time >= lastBar.time && lastChart.time < lastBar.time + htfMs) {
-    bars[bars.length - 1] = {
-      ...lastBar,
-      close: lastChart.close,
-      high: Math.max(lastBar.high, lastChart.close),
-      low: Math.min(lastBar.low, lastChart.close),
-    };
-  }
-  const ma = movingAverage(bars.map((b) => sourceValue(b, source)), period, type);
+  const chartMs = chartIntervalMs(chart);
+  const ma = movingAverage(htf.map((b) => sourceValue(b, source)), period, type);
+  const ends = htf.map((_, k) => htfBarEnd(htf, k, htfMs));
 
-  let k = 0; // index of the higher-timeframe bar containing the current chart bar
+  let completed = 0; // higher-timeframe bars closed by the end of the current chart bar
   for (let i = 0; i < chart.length; i++) {
-    while (k + 1 < htf.length && htf[k + 1].time <= chart[i].time) k++;
-    if (htf[k].time > chart[i].time) continue; // chart bar is before any higher-timeframe data
-    out[i] = k === htf.length - 1 ? ma[k] : k > 0 ? ma[k - 1] : NaN;
+    const closeTime = chart[i].time + chartMs;
+    while (completed < htf.length && ends[completed] <= closeTime) completed++;
+    if (completed > 0) out[i] = ma[completed - 1];
+  }
+
+  // developing value for the live bar while the last higher-timeframe bar is still open
+  const last = chart.length - 1;
+  const lastBar = htf[htf.length - 1];
+  if (completed < htf.length && chart[last].time >= lastBar.time) {
+    const developing = htf.slice();
+    developing[developing.length - 1] = {
+      ...lastBar,
+      close: chart[last].close,
+      high: Math.max(lastBar.high, chart[last].close),
+      low: Math.min(lastBar.low, chart[last].close),
+    };
+    const values = movingAverage(developing.map((b) => sourceValue(b, source)), period, type);
+    out[last] = values[values.length - 1];
   }
   return out;
 };

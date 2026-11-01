@@ -362,3 +362,12 @@
 .cloud-summary i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
 .cloud-summary em { font-style: normal; font-size: 10px; color: #8a8fb5; background: #1a1e3f; border-radius: 8px; padding: 0 6px; }
 .cloud-summary .none { color: #6a6e90; }
+
+.cloud-add-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.cloud-instance { border: 1px solid #2a2e4f; border-radius: 6px; padding: 6px 8px; display: flex; flex-direction: column; gap: 3px; }
+.cloud-instance.off { opacity: 0.6; }
+.cloud-instance-head { display: flex; align-items: center; gap: 6px; }
+.cloud-instance-head label { flex: 1; display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.cloud-instance-head em { font-style: normal; font-size: 10px; color: #8a8fb5; background: #1a1e3f; border-radius: 8px; padding: 0 6px; }
+.cloud-icon-btn { background: none; border: none; color: #8a8fb5; cursor: pointer; font-size: 13px; padding: 2px 4px; border-radius: 3px; }
+.cloud-icon-btn:hover { color: #fff; background: #2a2e4f; }

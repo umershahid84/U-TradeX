@@ -14,11 +14,12 @@ import { ChartData, TimeFrame, CustomIndicator, CustomIndicatorStatus, PriceAler
 import { AlertsPanel } from './AlertsPanel';
 import { AutoChartManager, AutoChartOptions } from './autoChartManager';
 import { AutoChartBadge } from './AutoChartBadge';
+import { ChartLegend, LegendItem } from './ChartLegend';
 import { analyzeChart } from '../utils/autoChart';
 import { calculateSMA, calculateVWAP, calculateBollingerBands } from '../utils/indicators';
 import { CloudTf, alignHtfMa, buildTimeframeBars, chartIntervalMs, movingAverage, shiftSeries, sourceValue, tfOption } from '../utils/htfEma';
 import {
-  CloudConfig, CloudGroup, CloudKey, CLOUD_TITLES, hexToRgba, isVisibleOn, loadCloudConfig, saveCloudConfig,
+  CloudInstance, hexToRgba, instanceTf, instanceTitle, isVisibleOn, loadCloudInstances, newInstance, saveCloudInstances,
 } from './emaClouds/cloudConfig';
 import { CloudSettingsDialog } from './emaClouds/CloudSettingsDialog';
 import { RealMarketDataService } from '../services/realMarketData';
@@ -103,9 +104,10 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   // Only the selector menu: indicators stay on the chart when the menu is closed
   const [showIndicatorPanel, setShowIndicatorPanel] = useState(false);
-  const [clouds, setClouds] = useState<CloudConfig>(loadCloudConfig);
+  // Every Ripster cloud indicator on the chart; the same one can be added any number of times
+  const [clouds, setClouds] = useState<CloudInstance[]>(loadCloudInstances);
   // Which cloud indicator's settings dialog is open
-  const [cloudDialog, setCloudDialog] = useState<CloudKey | null>(null);
+  const [cloudDialog, setCloudDialog] = useState<string | null>(null);
   // Higher-timeframe bars for clouds whose timeframe differs from the chart's, keyed by timeframe
   const [htfBars, setHtfBars] = useState<Partial<Record<CloudTf, ChartData[]>>>({});
   const [htfLoading, setHtfLoading] = useState(false);
@@ -526,9 +528,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   // Load bars for every timeframe a visible cloud uses, and keep them fresh
   const chartMs = chartIntervalMs(data);
 
-  const neededTfs = (['ripster', 'mtf'] as CloudKey[])
-    .filter((k) => clouds[k].enabled && isVisibleOn(clouds[k], chartMs))
-    .flatMap((k) => clouds[k].clouds.filter((c) => c.enabled).map((c) => c.tf))
+  const neededTfs = clouds
+    .filter((inst) => inst.enabled && isVisibleOn(inst, chartMs) && inst.clouds.some((c) => c.enabled))
+    .map((inst) => instanceTf(inst))
     .filter((tf) => tf !== 'chart')
     .filter((tf, i, all) => all.indexOf(tf) === i)
     .sort()
@@ -569,9 +571,11 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
   // A cloud's average on its own timeframe (EMA or SMA of the chosen source), lined up with the chart's
   // bars and shifted by the indicator's offset
-  const makeMaFor = (chartData: ChartData[], group: CloudGroup) => {
+  const makeMaFor = (chartData: ChartData[], group: CloudInstance) => {
+    const groupTf = instanceTf(group);
     const cache = new Map<string, number[]>();
-    return (tf: CloudTf, period: number): number[] => {
+    return (period: number): number[] => {
+      const tf = groupTf;
       const key = `${tf}:${period}`;
       let v = cache.get(key);
       if (!v) {
@@ -619,20 +623,20 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         indicatorSeriesRef.current.set(key, cloud);
       };
 
-      (['ripster', 'mtf'] as CloudKey[]).forEach((key) => {
-        const group = clouds[key];
+      clouds.forEach((group) => {
         if (!group.enabled || !isVisibleOn(group, chartMs)) return;
         const maFor = makeMaFor(data, group);
+        const tf = instanceTf(group);
         group.clouds.forEach((cl, idx) => {
           if (!cl.enabled) return;
-          const short = maFor(cl.tf, cl.short);
-          const long = maFor(cl.tf, cl.long);
+          const short = maFor(cl.short);
+          const long = maFor(cl.long);
           if (cl.fill) {
-            addCloud(`${key}-cloud-${idx}`, short, long, hexToRgba(cl.bull, cl.bullOpacity), hexToRgba(cl.bear, cl.bearOpacity));
+            addCloud(`${group.id}-cloud-${idx}`, short, long, hexToRgba(cl.bull, cl.bullOpacity), hexToRgba(cl.bear, cl.bearOpacity));
           }
           if (cl.lines && chartRef.current) {
             const label = (period: number) =>
-              cl.tf === 'chart' ? `${group.maType} ${period}` : `${group.maType} ${period} ${tfOption(cl.tf).short}`;
+              tf === 'chart' ? `${group.maType} ${period}` : `${group.maType} ${period} ${tfOption(tf).short}`;
             // Like the Pine scripts: each point is coloured by whether the average rose or fell on that bar
             [
               { period: cl.short, values: short, up: cl.shortUp, down: cl.shortDown, width: cl.shortWidth },
@@ -654,7 +658,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                   }))
                   .filter((pt) => Number.isFinite(pt.value)) // higher-timeframe averages start later or are still loading
               );
-              indicatorSeriesRef.current.set(`${key}-line-${idx}-${period}`, line);
+              indicatorSeriesRef.current.set(`${group.id}-line-${idx}-${period}`, line);
             });
           }
         });
@@ -769,20 +773,20 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     }
   }, [data, indicators, clouds, htfBars, chartMs]);
 
-  // Ripster trend from the enabled Ripster clouds: bullish when price is above every cloud average
-  // and each short average is above its long one, bearish for the mirror image
+  // Ripster trend from the first visible Ripster EMA Clouds indicator: bullish when price is above
+  // every cloud average and each short average is above its long one, bearish for the mirror image
   useEffect(() => {
-    const group = clouds.ripster;
-    const active = group.clouds.filter((c) => c.enabled);
-    if (!data.length || !group.enabled || active.length === 0 || !isVisibleOn(group, chartMs)) return;
+    const group = clouds.find((i) => i.kind === 'ripster' && i.enabled && isVisibleOn(i, chartMs));
+    const active = group?.clouds.filter((c) => c.enabled) ?? [];
+    if (!group || !data.length || active.length === 0) return;
 
     const price = data[data.length - 1].close;
     const maFor = makeMaFor(data, group);
-    const last = (tf: CloudTf, period: number) => {
-      const v = maFor(tf, period);
+    const last = (period: number) => {
+      const v = maFor(period);
       return v[v.length - 1];
     };
-    const avgs = active.map((c) => ({ short: last(c.tf, c.short), long: last(c.tf, c.long) }));
+    const avgs = active.map((c) => ({ short: last(c.short), long: last(c.long) }));
     const all = avgs.flatMap((e) => [e.short, e.long]);
 
     if (all.some((v) => !Number.isFinite(v))) return; // higher-timeframe data still loading
@@ -792,7 +796,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   }, [data, clouds, htfBars, chartMs]);
 
   useEffect(() => {
-    saveCloudConfig(clouds);
+    saveCloudInstances(clouds);
   }, [clouds]);
 
   // Close the indicator menu when clicking elsewhere (indicators stay on the chart)
@@ -810,40 +814,56 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     };
   }, [showIndicatorPanel]);
 
-  const updateGroup = (key: CloudKey, patch: Partial<CloudGroup>) =>
-    setClouds((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
-
-  const renderCloudGroup = (key: CloudKey) => {
-    const group = clouds[key];
-    const shown = group.clouds.filter((c) => c.enabled);
-    const hidden = group.enabled && !isVisibleOn(group, chartMs);
-    return (
-      <div className="indicator-group cloud-group">
-        <h4>{CLOUD_TITLES[key]}</h4>
-        <label>
-          <input type="checkbox" checked={group.enabled} onChange={() => updateGroup(key, { enabled: !group.enabled })} />
-          Show
-        </label>
-        <button type="button" className="cloud-settings-btn" onClick={() => { setCloudDialog(key); setShowIndicatorPanel(false); }}>
-          ⚙ Settings
-        </button>
-        <ul className="cloud-summary">
-          {shown.map((c, i) => (
-            <li key={i}>
-              <i style={{ background: hexToRgba(c.bull, 100) }} />
-              {c.short}/{c.long}
-              {c.tf !== 'chart' && <em>{tfOption(c.tf).short}</em>}
-            </li>
-          ))}
-          {shown.length === 0 && <li className="none">No clouds selected</li>}
-        </ul>
-        {hidden && <small className="cloud-tf-note">Hidden on this chart's timeframe (see Visibility)</small>}
-        {group.enabled && !hidden && group.clouds.some((c) => c.enabled && c.tf !== 'chart' && !htfBars[c.tf]) && (
-          <small className="cloud-tf-note">{htfLoading ? 'Loading candles…' : 'No data for one of the timeframes'}</small>
-        )}
-      </div>
-    );
+  const updateCloud = (id: string, next: CloudInstance) => setClouds((prev) => prev.map((c) => (c.id === id ? next : c)));
+  const addCloudInstance = (kind: 'ripster' | 'mtf') => {
+    const inst = newInstance(kind);
+    setClouds((prev) => [...prev, inst]);
+    // open its settings straight away, like adding an indicator on TradingView
+    setCloudDialog(inst.id);
+    setShowIndicatorPanel(false);
   };
+
+  const renderCloudInstances = () => (
+    <div className="indicator-group cloud-group">
+      <h4>Ripster Clouds</h4>
+      <div className="cloud-add-row">
+        <button type="button" className="cloud-settings-btn" onClick={() => addCloudInstance('ripster')}>+ EMA Clouds</button>
+        <button type="button" className="cloud-settings-btn" onClick={() => addCloudInstance('mtf')}>+ MTF Clouds</button>
+      </div>
+      {clouds.length === 0 && <small className="cloud-tf-note">Add an indicator. You can add the same one several times with different settings.</small>}
+      {clouds.map((inst) => {
+        const shown = inst.clouds.filter((c) => c.enabled);
+        const tf = instanceTf(inst);
+        const hidden = inst.enabled && !isVisibleOn(inst, chartMs);
+        return (
+          <div key={inst.id} className={`cloud-instance ${inst.enabled ? '' : 'off'}`}>
+            <div className="cloud-instance-head">
+              <label>
+                <input type="checkbox" checked={inst.enabled} onChange={() => updateCloud(inst.id, { ...inst, enabled: !inst.enabled })} />
+                <span>{instanceTitle(inst)}</span>
+                {tf !== 'chart' && <em>{tfOption(tf).short}</em>}
+              </label>
+              <button type="button" className="cloud-icon-btn" title="Settings" onClick={() => { setCloudDialog(inst.id); setShowIndicatorPanel(false); }}>⚙</button>
+              <button type="button" className="cloud-icon-btn" title="Remove" onClick={() => setClouds((prev) => prev.filter((c) => c.id !== inst.id))}>✖</button>
+            </div>
+            <ul className="cloud-summary">
+              {shown.map((c, i) => (
+                <li key={i}>
+                  <i style={{ background: hexToRgba(c.bull, 100) }} />
+                  {c.short}/{c.long}
+                </li>
+              ))}
+              {shown.length === 0 && <li className="none">No clouds selected</li>}
+            </ul>
+            {hidden && <small className="cloud-tf-note">Hidden on this timeframe (see Visibility)</small>}
+            {inst.enabled && !hidden && tf !== 'chart' && !htfBars[tf] && (
+              <small className="cloud-tf-note">{htfLoading ? 'Loading candles…' : 'No data for that resolution'}</small>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 
   // Draw the active alerts of this symbol as dashed lines on the price scale
   const activeHere = alerts.filter((a) => !a.triggeredAt && a.symbol.toUpperCase() === symbol.toUpperCase());
@@ -1035,6 +1055,71 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     return () => document.removeEventListener('keydown', onKey);
   }, [alertArmed]);
 
+  // Indicators on the chart, listed top-left like TradingView's legend
+  const legendItems: LegendItem[] = [];
+  clouds.forEach((inst) => {
+    const on = inst.clouds.filter((c) => c.enabled);
+    const tf = instanceTf(inst);
+    legendItems.push({
+      id: inst.id,
+      name: instanceTitle(inst),
+      params: [
+        tf !== 'chart' ? tfOption(tf).short : '',
+        inst.maType !== 'EMA' ? inst.maType : '',
+        on.flatMap((c) => [c.short, c.long]).join(' '),
+        inst.source,
+        inst.offset ? String(inst.offset) : '',
+      ].filter(Boolean).join(' '),
+      color: on[0]?.bull,
+      hidden: !inst.enabled,
+      onToggle: () => updateCloud(inst.id, { ...inst, enabled: !inst.enabled }),
+      onSettings: () => setCloudDialog(inst.id),
+      onRemove: () => setClouds((prev) => prev.filter((c) => c.id !== inst.id)),
+    });
+  });
+  const builtIn: { key: keyof IndicatorState; name: string; params?: string; color: string }[] = [
+    { key: 'sma20', name: 'SMA', params: '20', color: '#FFC107' },
+    { key: 'sma50', name: 'SMA', params: '50', color: '#FF9800' },
+    { key: 'sma100', name: 'SMA', params: '100', color: '#FF5722' },
+    { key: 'sma200', name: 'SMA', params: '200', color: '#F44336' },
+    { key: 'vwap', name: 'VWAP', color: '#9C27B0' },
+    { key: 'bb', name: 'Bollinger Bands', params: '20 2', color: '#E91E63' },
+    { key: 'volume', name: 'Volume', color: '#26a69a' },
+    { key: 'rsi', name: 'RSI', params: '14', color: '#2196F3' },
+    { key: 'macd', name: 'MACD', params: '12 26 9', color: '#2196F3' },
+  ];
+  builtIn.forEach((b) => {
+    if (!indicators[b.key]) return;
+    legendItems.push({
+      id: `builtin-${b.key}`,
+      name: b.name,
+      params: b.params,
+      color: b.color,
+      onRemove: () => setIndicators((prev) => ({ ...prev, [b.key]: false })),
+    });
+  });
+  if (autoChart.enabled) {
+    legendItems.push({
+      id: 'auto-chart',
+      name: 'Auto Chart',
+      params: [autoChart.levels && 'levels', autoChart.trendlines && 'trendlines', autoChart.patterns && 'patterns'].filter(Boolean).join(' '),
+      color: '#FFB300',
+      onRemove: () => setAutoChart((a) => ({ ...a, enabled: false })),
+    });
+  }
+  customIndicators.forEach((ci) => {
+    legendItems.push({
+      id: `custom-${ci.id}`,
+      name: ci.name,
+      params: ci.language === 'pine' ? 'Pine' : 'JS',
+      color: ci.color,
+      hidden: !ci.enabled,
+      onToggle: () => handleUpdateCustomIndicator(ci.id, { enabled: !ci.enabled }),
+      onSettings: () => setShowCustomPanel(true),
+      onRemove: () => handleRemoveCustomIndicator(ci.id),
+    });
+  });
+
   const activeAlertCount = alerts.filter((a) => !a.triggeredAt).length;
 
   const handleToolSelect = (tool: DrawingTool) => {
@@ -1215,7 +1300,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               🔔 Alerts{activeAlertCount ? ` (${activeAlertCount})` : ''}
             </button>
             
-            {clouds.ripster.enabled && isVisibleOn(clouds.ripster, chartMs) && clouds.ripster.clouds.some((c) => c.enabled) && (
+            {clouds.some((i) => i.kind === 'ripster' && i.enabled && isVisibleOn(i, chartMs) && i.clouds.some((c) => c.enabled)) && (
               <div className={`trend-indicator trend-${ripsterTrend}`}>
                 Ripster Trend: {ripsterTrend.toUpperCase()}
               </div>
@@ -1224,12 +1309,13 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         </div>
       </div>
       
+      <ChartLegend items={legendItems} />
+
       {showIndicatorPanel && (
         <div className="indicator-panel" ref={indicatorPanelRef}>
           <button className="panel-close" onClick={() => setShowIndicatorPanel(false)} title="Close menu (indicators stay on the chart)">✕</button>
           <div className="indicator-checkboxes">
-            {renderCloudGroup('ripster')}
-            {renderCloudGroup('mtf')}
+            {renderCloudInstances()}
 
             <div className="indicator-group auto-group">
               <h4>Auto Charting</h4>
@@ -1362,12 +1448,11 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         </div>
       )}
 
-      {cloudDialog && (
+      {cloudDialog && clouds.find((c) => c.id === cloudDialog) && (
         <CloudSettingsDialog
-          cloudKey={cloudDialog}
-          group={clouds[cloudDialog]}
+          instance={clouds.find((c) => c.id === cloudDialog)!}
           chartMs={chartMs}
-          onApply={(g) => updateGroup(cloudDialog, g)}
+          onApply={(next) => updateCloud(cloudDialog, next)}
           onClose={() => setCloudDialog(null)}
         />
       )}
