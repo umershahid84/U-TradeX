@@ -16,6 +16,7 @@ import { usePriceAlerts } from './hooks/usePriceAlerts';
 import { Toasts } from './components/Toasts';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RealMarketDataService, QuoteDetails } from './services/realMarketData';
+import { aggregateBars } from './utils/htfEma';
 import { Session, SESSION_COLOR, SESSION_LABEL, sessionAt } from './utils/marketSessions';
 import {
   calculateFearGreed,
@@ -95,6 +96,36 @@ const setStorageValue = (key: string, value: string): void => {
   }
 };
 
+// Yahoo ranges, shortest to longest
+const RANGE_ORDER = ['1d', '5d', '1mo', '3mo', '6mo', 'ytd', '1y', '2y', '5y', '10y', 'max'];
+
+// The least history that gives a usable chart for each candle size: a monthly candle over a
+// one-day range would be a single bar
+const MIN_RANGE_FOR_INTERVAL: Record<string, string> = {
+  '15m': '5d',
+  '30m': '1mo',
+  '1h': '1mo',
+  '1d': '6mo',
+  '1wk': '2y',
+  '1mo': '10y',
+  '3mo': 'max',
+};
+
+const effectiveRange = (range: string, interval: string): string => {
+  const min = MIN_RANGE_FOR_INTERVAL[interval];
+  if (!min) return range;
+  return RANGE_ORDER.indexOf(range) < RANGE_ORDER.indexOf(min) ? min : range;
+};
+
+const RANGE_LABEL: Record<string, string> = {
+  '5d': '5 days', '1mo': '1 month', '3mo': '3 months', '6mo': '6 months', ytd: 'year to date',
+  '1y': '1 year', '2y': '2 years', '5y': '5 years', '10y': '10 years', max: 'all history',
+};
+
+const INTERVAL_NAME: Record<string, string> = {
+  '15m': '15-minute', '30m': '30-minute', '1h': 'hourly', '1d': 'daily', '1wk': 'weekly', '1mo': 'monthly', '3mo': 'quarterly',
+};
+
 const TAB_IDS: SidebarTab[] = ['watchlist', 'trade', 'options', 'sentiment'];
 
 const loadTab = (): SidebarTab => {
@@ -121,6 +152,8 @@ function App() {
   const [session, setSession] = useState<Session>(() => sessionAt(Date.now()));
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
   const [dataError, setDataError] = useState<string>('');
+  // Set when the chosen range was too short for the candle size and was lengthened
+  const [rangeNote, setRangeNote] = useState('');
   const isMobile = useIsMobile();
   const [tab, setTab] = useState<SidebarTab>(loadTab);
   // Phones show either the chart or one tab at a time, switched from the bottom bar
@@ -170,7 +203,7 @@ function App() {
       '1m': '1m',
       '2m': '2m',
       '5m': '5m',
-      '10m': '15m',
+      '10m': '5m', // Yahoo has no 10-minute candles; merged from 5-minute ones below
       '15m': '15m',
       '30m': '30m',
       '1h': '1h',
@@ -228,11 +261,18 @@ function App() {
       setConnectionStatus('connecting');
       setDataError('');
       setFearGreedData(null); // don't show the previous symbol's reading while loading
-      const yahooRange = getYahooRange(timeRange);
       const yahooInterval = getYahooInterval(timeframe);
+      const requestedRange = getYahooRange(timeRange);
+      const yahooRange = effectiveRange(requestedRange, yahooInterval);
+      setRangeNote(
+        yahooRange !== requestedRange
+          ? `Showing ${RANGE_LABEL[yahooRange] ?? yahooRange} of ${INTERVAL_NAME[yahooInterval] ?? yahooInterval} candles`
+          : ''
+      );
       
       try {
-        const data = await marketData.fetchChartData(symbol, yahooInterval, yahooRange, includeAfterHours);
+        const raw = await marketData.fetchChartData(symbol, yahooInterval, yahooRange, includeAfterHours);
+        const data = timeframe === '10m' ? aggregateBars(raw, 10 * 60 * 1000) : raw;
         setChartData(data);
         
         if (data.length > 0) {
@@ -264,7 +304,7 @@ function App() {
         const lastBar = newData[newData.length - 1];
 
         // Start a new candle once the current bar's interval has elapsed
-        const barMs = intradayIntervalMs(getYahooInterval(timeframe));
+        const barMs = timeframe === '10m' ? 10 * 60 * 1000 : intradayIntervalMs(getYahooInterval(timeframe));
         if (lastBar && barMs && Date.now() >= lastBar.time + barMs && price !== lastBar.close) {
           const barTime = Math.floor(Date.now() / barMs) * barMs;
           if (barTime > lastBar.time) {
@@ -531,6 +571,11 @@ function App() {
                   <i style={{ background: SESSION_COLOR[session] }} />
                   {SESSION_LABEL[session]}
                 </span>
+                {rangeNote && (
+                  <span className="range-note" title="The range you picked is too short for this candle size, so it was lengthened">
+                    {rangeNote}
+                  </span>
+                )}
               </div>
               <SessionMoves quote={quoteDetails} />
               <div className="bid-ask-display">
