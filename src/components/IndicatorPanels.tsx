@@ -19,6 +19,19 @@ interface IndicatorPanelsProps {
   showMACD: boolean;
 }
 
+// Remove a chart exactly once. The effect cleanup and the next effect run can both try to remove
+// the same chart; removing a disposed lightweight-charts instance throws and blanks the page.
+const disposeChart = (ref: React.MutableRefObject<IChartApi | null>) => {
+  const chart = ref.current;
+  ref.current = null;
+  if (!chart) return;
+  try {
+    chart.remove();
+  } catch {
+    /* already disposed */
+  }
+};
+
 export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
   data,
   showVolume,
@@ -36,10 +49,7 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
   // Volume Panel
   useEffect(() => {
     if (!showVolume || !volumeContainerRef.current || !data.length) {
-      if (volumeChartRef.current) {
-        volumeChartRef.current.remove();
-        volumeChartRef.current = null;
-      }
+      disposeChart(volumeChartRef);
       return;
     }
 
@@ -100,24 +110,18 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
 
       return () => {
         window.removeEventListener('resize', handleResize);
-        chart.remove();
+        disposeChart(volumeChartRef);
       };
     } catch (error) {
       console.error('Error creating volume panel:', error);
-      if (volumeChartRef.current) {
-        volumeChartRef.current.remove();
-        volumeChartRef.current = null;
-      }
+      disposeChart(volumeChartRef);
     }
   }, [data, showVolume]);
 
   // RSI Panel
   useEffect(() => {
     if (!showRSI || !rsiContainerRef.current || !data.length || data.length < 15) {
-      if (rsiChartRef.current) {
-        rsiChartRef.current.remove();
-        rsiChartRef.current = null;
-      }
+      disposeChart(rsiChartRef);
       return;
     }
 
@@ -210,24 +214,18 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
 
       return () => {
         window.removeEventListener('resize', handleResize);
-        chart.remove();
+        disposeChart(rsiChartRef);
       };
     } catch (error) {
       console.error('Error creating RSI panel:', error);
-      if (rsiChartRef.current) {
-        rsiChartRef.current.remove();
-        rsiChartRef.current = null;
-      }
+      disposeChart(rsiChartRef);
     }
   }, [data, showRSI]);
 
   // MACD Panel
   useEffect(() => {
     if (!showMACD || !macdContainerRef.current || !data.length || data.length < 26) {
-      if (macdChartRef.current) {
-        macdChartRef.current.remove();
-        macdChartRef.current = null;
-      }
+      disposeChart(macdChartRef);
       return;
     }
 
@@ -318,14 +316,11 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
 
       return () => {
         window.removeEventListener('resize', handleResize);
-        chart.remove();
+        disposeChart(macdChartRef);
       };
     } catch (error) {
       console.error('Error creating MACD panel:', error);
-      if (macdChartRef.current) {
-        macdChartRef.current.remove();
-        macdChartRef.current = null;
-      }
+      disposeChart(macdChartRef);
     }
   }, [data, showMACD]);
 

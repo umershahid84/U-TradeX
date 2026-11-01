@@ -327,3 +327,12 @@
 }
 .chart-context-menu button:hover { background: #2962ff; }
 .chart-context-menu .menu-hint { padding: 2px 12px 6px; font-size: 10px; color: #6a6e90; }
+
+.cloud-tf { flex-direction: column; align-items: flex-start !important; gap: 3px !important; }
+.cloud-tf span { font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: #8a8fb5; }
+.cloud-tf select {
+  width: 100%; padding: 4px 6px; background: #0f1330; border: 1px solid #3a3e6f; border-radius: 4px;
+  color: #e0e0e0; font-size: 12px;
+}
+.cloud-tf-note { font-size: 10px; color: #8a8fb5; }
+@media (max-width: 900px) { .cloud-tf select { font-size: 16px; } }

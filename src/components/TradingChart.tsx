@@ -16,6 +16,8 @@ import { AutoChartManager, AutoChartOptions } from './autoChartManager';
 import { AutoChartBadge } from './AutoChartBadge';
 import { analyzeChart } from '../utils/autoChart';
 import { calculateEMAFromFirst, calculateSMA, calculateVWAP, calculateBollingerBands } from '../utils/indicators';
+import { CLOUD_TFS, CloudTf, alignHtfEma, chartIntervalMs, tfOption } from '../utils/htfEma';
+import { RealMarketDataService } from '../services/realMarketData';
 import { DrawingTools, DrawingTool } from './DrawingTools';
 import { IndicatorPanels } from './IndicatorPanels';
 import { CustomIndicatorPanel } from './CustomIndicatorPanel';
@@ -30,6 +32,7 @@ interface TradingChartProps {
   timeframe: TimeFrame;
   data: ChartData[];
   onPriceUpdate?: (price: number) => void;
+  includeAfterHours: boolean;
   alerts: PriceAlert[];
   onAddAlert: (price: number) => void;
   onMoveAlert: (id: string, price: number) => void;
@@ -47,6 +50,8 @@ interface CloudPair {
 interface CloudGroup {
   enabled: boolean;
   showLines: boolean;
+  /** Timeframe the EMAs are computed on; 'chart' follows the chart */
+  tf: CloudTf;
   pairs: CloudPair[];
 }
 
@@ -59,6 +64,7 @@ const DEFAULT_CLOUDS: CloudConfig = {
   ripster: {
     enabled: false,
     showLines: false,
+    tf: 'chart',
     pairs: [
       { enabled: true, fast: 8, slow: 9 },
       { enabled: true, fast: 5, slow: 12 },
@@ -67,6 +73,7 @@ const DEFAULT_CLOUDS: CloudConfig = {
   mtf: {
     enabled: false,
     showLines: false,
+    tf: 'chart',
     pairs: [
       { enabled: true, fast: 34, slow: 50 },
       { enabled: true, fast: 72, slow: 89 },
@@ -92,7 +99,13 @@ const MAX_CLOUD_PAIRS = 5;
 const loadClouds = (): CloudConfig => {
   try {
     const saved = JSON.parse(localStorage.getItem('cloudConfig') ?? 'null');
-    if (saved?.ripster?.pairs && saved?.mtf?.pairs) return saved;
+    if (saved?.ripster?.pairs && saved?.mtf?.pairs) {
+      // older saves have no timeframe
+      (['ripster', 'mtf'] as CloudKey[]).forEach((k) => {
+        if (!CLOUD_TFS.some((o) => o.value === saved[k].tf)) saved[k].tf = 'chart';
+      });
+      return saved;
+    }
   } catch {
     /* fall through to defaults */
   }
@@ -125,6 +138,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   timeframe,
   data,
   onPriceUpdate,
+  includeAfterHours,
   alerts,
   onAddAlert,
   onMoveAlert,
@@ -157,6 +171,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   // Only the selector menu: indicators stay on the chart when the menu is closed
   const [showIndicatorPanel, setShowIndicatorPanel] = useState(false);
   const [clouds, setClouds] = useState<CloudConfig>(loadClouds);
+  // Higher-timeframe bars for clouds whose timeframe differs from the chart's, keyed by timeframe
+  const [htfBars, setHtfBars] = useState<Partial<Record<CloudTf, ChartData[]>>>({});
+  const [htfLoading, setHtfLoading] = useState(false);
   const indicatorPanelRef = useRef<HTMLDivElement>(null);
   const [showFibonacci, setShowFibonacci] = useState(false);
   const [selectedTool, setSelectedTool] = useState<DrawingTool>('none');
@@ -571,6 +588,67 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     }
   }, [symbol, data.length]);
 
+  // Load bars for every timeframe a visible cloud uses, and keep them fresh
+  const neededTfs = (['ripster', 'mtf'] as CloudKey[])
+    .filter((k) => clouds[k].enabled && clouds[k].tf !== 'chart')
+    .map((k) => clouds[k].tf)
+    .filter((tf, i, all) => all.indexOf(tf) === i)
+    .sort()
+    .join(',');
+
+  useEffect(() => {
+    setHtfBars({});
+  }, [symbol, includeAfterHours]);
+
+  useEffect(() => {
+    if (!neededTfs) return;
+    let cancelled = false;
+    const market = RealMarketDataService.getInstance();
+    const load = async (initial: boolean) => {
+      if (initial) setHtfLoading(true);
+      await Promise.all(
+        neededTfs.split(',').map(async (tf) => {
+          const opt = tfOption(tf as CloudTf);
+          if (!opt.interval) return;
+          try {
+            const bars = await market.fetchChartData(symbol, opt.interval, opt.range ?? '1mo', includeAfterHours);
+            if (!cancelled) setHtfBars((prev) => ({ ...prev, [tf]: bars }));
+          } catch {
+            /* keep whatever we had; retry on the next refresh */
+          }
+        })
+      );
+      if (!cancelled && initial) setHtfLoading(false);
+    };
+    void load(true);
+    const id = setInterval(() => void load(false), 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [neededTfs, symbol, includeAfterHours]);
+
+  // EMA of a cloud group, on the group's own timeframe, lined up with the chart's bars
+  const makeEmaFor = (key: CloudKey, chartData: ChartData[]) => {
+    const tf = clouds[key].tf;
+    const cache = new Map<number, number[]>();
+    return (period: number): number[] => {
+      let v = cache.get(period);
+      if (!v) {
+        if (tf === 'chart') {
+          v = calculateEMAFromFirst(chartData.map((d) => d.close), period);
+        } else {
+          const bars = htfBars[tf];
+          const opt = tfOption(tf);
+          // not loaded yet: draw nothing rather than the wrong timeframe
+          v = bars ? alignHtfEma(chartData, bars, opt.ms, period) : chartData.map(() => NaN);
+        }
+        cache.set(period, v);
+      }
+      return v;
+    };
+  };
+
   // Separate effect for managing indicators
   useEffect(() => {
     if (!chartRef.current || !data.length) return;
@@ -584,12 +662,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     // Add indicators based on selection
     {
       const closes = data.map(d => d.close);
-      const emaCache = new Map<number, number[]>();
-      const emaOf = (period: number) => {
-        let v = emaCache.get(period);
-        if (!v) { v = calculateEMAFromFirst(closes, period); emaCache.set(period, v); }
-        return v;
-      };
+      const emaForGroup = { ripster: makeEmaFor('ripster', data), mtf: makeEmaFor('mtf', data) };
 
       // Shades the area between two EMAs: green while the fast EMA is above the slow one, red below
       const addCloud = (key: string, fast: number[], slow: number[], bull: string, bear: string) => {
@@ -613,8 +686,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         group.pairs.forEach((pair, idx) => {
           if (!pair.enabled) return;
           const colors = CLOUD_PALETTE[key][idx % CLOUD_PALETTE[key].length];
-          const fast = emaOf(pair.fast);
-          const slow = emaOf(pair.slow);
+          const fast = emaForGroup[key](pair.fast);
+          const slow = emaForGroup[key](pair.slow);
           addCloud(`${key}-cloud-${idx}`, fast, slow, colors.bull, colors.bear);
           if (group.showLines && chartRef.current) {
             [[pair.fast, fast], [pair.slow, slow]].forEach(([period, values]) => {
@@ -626,7 +699,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                 lastValueVisible: false,
               });
               line.setData(
-                (values as number[]).map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+                (values as number[])
+                  .map((value, i) => ({ time: (data[i].time / 1000) as Time, value }))
+                  .filter((pt) => Number.isFinite(pt.value)) // higher-timeframe EMAs start later or are still loading
               );
               indicatorSeriesRef.current.set(`${key}-line-${idx}-${period}`, line);
             });
@@ -741,7 +816,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         indicatorSeriesRef.current.set('bbLower', bbLowerSeries);
       }
     }
-  }, [data, indicators, clouds]);
+  }, [data, indicators, clouds, htfBars]);
 
   // Ripster trend from the enabled Ripster clouds: bullish when price is above every cloud EMA
   // and each fast EMA is above its slow EMA, bearish for the mirror image
@@ -752,17 +827,19 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
     const closes = data.map(d => d.close);
     const price = closes[closes.length - 1];
+    const emaFor = makeEmaFor('ripster', data);
     const last = (period: number) => {
-      const v = calculateEMAFromFirst(closes, period);
+      const v = emaFor(period);
       return v[v.length - 1];
     };
     const emas = pairs.map((p) => ({ fast: last(p.fast), slow: last(p.slow) }));
     const allEmas = emas.flatMap((e) => [e.fast, e.slow]);
 
+    if (allEmas.some((v) => !Number.isFinite(v))) return; // higher-timeframe data still loading
     if (price > Math.max(...allEmas) && emas.every((e) => e.fast > e.slow)) setRipsterTrend('bullish');
     else if (price < Math.min(...allEmas) && emas.every((e) => e.fast < e.slow)) setRipsterTrend('bearish');
     else setRipsterTrend('neutral');
-  }, [data, clouds]);
+  }, [data, clouds, htfBars]);
 
   useEffect(() => {
     try {
@@ -807,6 +884,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const removePair = (key: CloudKey, idx: number) =>
     setClouds((prev) => ({ ...prev, [key]: { ...prev[key], pairs: prev[key].pairs.filter((_, i) => i !== idx) } }));
 
+  const chartMs = chartIntervalMs(data);
+
   const renderCloudGroup = (key: CloudKey, title: string) => {
     const group = clouds[key];
     return (
@@ -820,6 +899,26 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           <input type="checkbox" checked={group.showLines} onChange={() => updateGroup(key, { showLines: !group.showLines })} />
           Show EMA lines
         </label>
+        <label className="cloud-tf">
+          <span>EMA timeframe</span>
+          <select
+            value={group.tf}
+            onChange={(e) => updateGroup(key, { tf: e.target.value as CloudTf })}
+            title="Which candles the EMAs are calculated on"
+          >
+            {CLOUD_TFS.map((o) => (
+              // a timeframe shorter than the chart's own bars would add nothing, so it is not offered
+              <option key={o.value} value={o.value} disabled={o.value !== 'chart' && o.ms < chartMs}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {group.enabled && group.tf !== 'chart' && (
+          <small className="cloud-tf-note">
+            {htfBars[group.tf] ? `EMAs from ${tfOption(group.tf).label.toLowerCase()} candles` : htfLoading ? 'Loading candles…' : 'No data for that timeframe'}
+          </small>
+        )}
         {group.pairs.map((pair, idx) => (
           <div key={idx} className={`cloud-pair ${group.enabled && pair.enabled ? '' : 'off'}`}>
             <input

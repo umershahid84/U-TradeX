@@ -14,6 +14,7 @@ import { OptionsPanel } from './components/OptionsPanel';
 import { usePaperTrading } from './hooks/usePaperTrading';
 import { usePriceAlerts } from './hooks/usePriceAlerts';
 import { Toasts } from './components/Toasts';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { RealMarketDataService, QuoteDetails } from './services/realMarketData';
 import { Session, SESSION_COLOR, SESSION_LABEL, sessionAt } from './utils/marketSessions';
 import {
@@ -562,11 +563,13 @@ function App() {
               </div>
             </div>
 
+            <ErrorBoundary label="the chart" resetKey={symbol} settingsKeys={['cloudConfig', 'autoChart', 'customIndicators']}>
             <TradingChart
               symbol={symbol}
               timeframe={timeframe}
               data={chartData}
               onPriceUpdate={setCurrentPrice}
+              includeAfterHours={includeAfterHours}
               alerts={alerts}
               onAddAlert={(price) => addAlert(symbol, price, currentPrice)}
               onMoveAlert={(id, price) => moveAlert(id, price, currentPrice)}
@@ -574,6 +577,7 @@ function App() {
               onClearTriggeredAlerts={clearTriggered}
               onSelectSymbol={handleSymbolChange}
             />
+            </ErrorBoundary>
           </div>
 
           <PositionsStrip
@@ -589,7 +593,9 @@ function App() {
         {(rightVisible || (isMobile && mobileView !== 'chart')) && (
           <div className="right-sidebar">
             {!isMobile && <SidebarTabs active={tab} onChange={selectTab} onCollapse={toggleRightSidebar} />}
-            <div className="sidebar-content">{tabContent}</div>
+            <div className="sidebar-content">
+              <ErrorBoundary label="this panel" resetKey={`${symbol}-${activeTab}`}>{tabContent}</ErrorBoundary>
+            </div>
             {!isMobile && <QuickTrade symbol={symbol} currentPrice={currentPrice} onPlaceOrder={placeOrder} />}
           </div>
         )}
