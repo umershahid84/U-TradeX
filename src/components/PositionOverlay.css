@@ -1,0 +1,21 @@
+.pos-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
+.pos-pill {
+  position: absolute; right: 118px; transform: translateY(-50%); display: flex; align-items: center; gap: 2px;
+  background: #1b2040; border: 1px solid #3a3f66; border-radius: 4px; font-size: 11px; color: #e0e0e0;
+  pointer-events: auto; box-shadow: 0 2px 8px rgba(0,0,0,.4); overflow: hidden;
+}
+.pos-pill > span { padding: 3px 7px; white-space: nowrap; font-weight: 600; }
+.pos-pill button {
+  background: transparent; border: none; border-left: 1px solid #3a3f66; color: #c8cbe8; padding: 3px 7px;
+  font-size: 11px; cursor: pointer; white-space: nowrap;
+}
+.pos-pill button:hover { background: #2962ff; color: #fff; }
+.pos-pill .close:hover { background: #ef5350; }
+.pos-pill.entry { border-color: #4C9AFF; }
+.pos-side.long { color: #26a69a; } .pos-side.short { color: #ef5350; }
+.pos-pnl.up { color: #26a69a; } .pos-pnl.down { color: #ef5350; }
+.pos-pill.tp { border-color: #26a69a; } .pos-pill.tp > span { color: #26a69a; }
+.pos-pill.sl { border-color: #ef5350; } .pos-pill.sl > span { color: #ef5350; }
+[data-chart-theme="light"] .pos-pill { background: #fff; color: #222; border-color: #c9ccd8; }
+[data-chart-theme="light"] .pos-pill button { color: #333; border-left-color: #c9ccd8; }
+@media (max-width: 900px) { .pos-pill { right: 90px; font-size: 10px; } .pos-pill button { padding: 5px 6px; } }

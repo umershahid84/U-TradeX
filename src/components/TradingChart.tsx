@@ -14,6 +14,7 @@ import {
 } from 'lightweight-charts';
 import { ChartData, TimeFrame, CustomIndicator, CustomIndicatorStatus, PriceAlert, Position, TakeProfitStopLoss } from '../types';
 import { AlertsPanel } from './AlertsPanel';
+import { PositionOverlay } from './PositionOverlay';
 import { AutoChartManager, AutoChartOptions } from './autoChartManager';
 import { AutoChartBadge } from './AutoChartBadge';
 import { ChartLegend, LegendItem } from './ChartLegend';
@@ -52,6 +53,8 @@ interface TradingChartProps {
   position?: Position;
   tpsl?: TakeProfitStopLoss;
   onSetLevel: (kind: 'takeProfit' | 'stopLoss', price?: number) => void;
+  onClosePosition: (quantity: number) => void;
+  onReversePosition: () => void;
   onAddAlert: (price: number) => void;
   onMoveAlert: (id: string, price: number) => void;
   onRemoveAlert: (id: string) => void;
@@ -102,6 +105,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   position,
   tpsl,
   onSetLevel,
+  onClosePosition,
+  onReversePosition,
   onAddAlert,
   onMoveAlert,
   onRemoveAlert,
@@ -1837,6 +1842,16 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       )}
       
       <div ref={chartContainerRef} className={`chart ${alertArmed ? 'alert-cursor' : ''}`} />
+      <PositionOverlay
+        chartRef={chartRef}
+        seriesRef={candleSeriesRef}
+        hostRef={chartContainerRef}
+        position={position}
+        tpsl={tpsl}
+        onSetLevel={onSetLevel}
+        onClose={onClosePosition}
+        onReverse={onReversePosition}
+      />
 
       {alphaShown && alpha.dashboard && (
         <AlphaDashboard dash={alphaResult?.dashboard ?? null} decimals={(data[data.length - 1]?.close ?? 100) < 10 ? 4 : 2} />

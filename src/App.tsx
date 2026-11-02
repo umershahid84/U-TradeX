@@ -709,6 +709,17 @@ function App() {
               position={account.positions.find((p) => p.symbol === symbol)}
               tpsl={tpslSettings.get(symbol)}
               onSetLevel={(kind, price) => setLevel(symbol, kind, price)}
+              onClosePosition={(qty) => {
+                const pos = account.positions.find((p) => p.symbol === symbol);
+                if (pos) closePosition(symbol, pos.quantity < 0 ? -qty : qty, currentPrice || pos.currentPrice);
+              }}
+              onReversePosition={() => {
+                const pos = account.positions.find((p) => p.symbol === symbol);
+                if (!pos) return;
+                const px = currentPrice || pos.currentPrice;
+                updateTpsl((m) => m.delete(symbol));
+                placeOrder({ symbol, type: 'market', side: pos.quantity < 0 ? 'buy' : 'sell', quantity: Math.abs(pos.quantity) * 2, price: px });
+              }}
               onAddAlert={(price) => addAlert(symbol, price, currentPrice)}
               onMoveAlert={(id, price) => moveAlert(id, price, currentPrice)}
               onRemoveAlert={removeAlert}
