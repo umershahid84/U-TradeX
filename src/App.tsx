@@ -17,6 +17,7 @@ import { Toasts } from './components/Toasts';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RealMarketDataService, QuoteDetails } from './services/realMarketData';
 import { aggregate4h, aggregateBars } from './utils/htfEma';
+import { FuturesMove, futuresMoveSinceClose, tradesAroundTheClock } from './utils/futuresContext';
 import { Session, SESSION_COLOR, SESSION_LABEL, sessionAt } from './utils/marketSessions';
 import {
   calculateFearGreed,
@@ -151,6 +152,8 @@ function App() {
   const [includeAfterHours, setIncludeAfterHours] = useState(true);
   const [quoteDetails, setQuoteDetails] = useState<QuoteDetails | null>(null);
   const [session, setSession] = useState<Session>(() => sessionAt(Date.now()));
+  // Index futures trade almost around the clock, so they show how the market is moving while stocks have no overnight price
+  const [futures, setFutures] = useState<FuturesMove[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
   const [dataError, setDataError] = useState<string>('');
   // Set when the chosen range was too short for the candle size and was lengthened
@@ -417,6 +420,36 @@ function App() {
     };
   }, [symbol]);
 
+  // Overnight context: ES and NQ futures since the 4:00 pm close, whenever the stock itself has no live session
+  const wantFutures = session !== 'regular' && !tradesAroundTheClock(symbol);
+  useEffect(() => {
+    if (!wantFutures) {
+      setFutures([]);
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      if (document.hidden) return;
+      try {
+        const moves = await Promise.all(
+          ['ES=F', 'NQ=F'].map(async (sym) => {
+            const bars = await marketData.fetchChartData(sym, '5m', '5d', true);
+            return futuresMoveSinceClose(sym === 'ES=F' ? 'ES' : 'NQ', bars);
+          })
+        );
+        if (!cancelled) setFutures(moves.filter((m): m is FuturesMove => m !== null));
+      } catch {
+        /* context only: leave the last values */
+      }
+    };
+    void load();
+    const id = setInterval(load, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [wantFutures]);
+
   // Market-wide Fear & Greed (CNN's index), refreshed every few minutes
   useEffect(() => {
     let cancelled = false;
@@ -580,6 +613,19 @@ function App() {
                 )}
               </div>
               <SessionMoves quote={quoteDetails} />
+            {wantFutures && futures.length > 0 && (
+              <div
+                className="futures-context"
+                title="Stocks have no price between 8:00 pm and 4:00 am New York time on our data feed. Index futures trade nearly around the clock, so this shows how the market has moved since the 4:00 pm close. It is context, not this stock's price."
+              >
+                <span className="fc-label">🌙 Futures since 4 pm</span>
+                {futures.map((f) => (
+                  <span key={f.symbol} className={`fc-move ${f.change >= 0 ? 'up' : 'down'}`}>
+                    {f.symbol} {f.change >= 0 ? '+' : '-'}{Math.abs(f.change * 100).toFixed(2)}%
+                  </span>
+                ))}
+              </div>
+            )}
               <div className="bid-ask-display">
                 <div className="bid-price">
                   <span className="label">BID:</span>
