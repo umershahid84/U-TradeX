@@ -197,6 +197,7 @@ function App() {
     resetAccount,
     updatePositionPrices,
     buyOption,
+    sellOption,
   } = usePaperTrading();
 
   const { alerts, toasts, pushToast, addAlert, moveAlert, removeAlert, clearTriggered, check: checkAlerts, dismissToast } = usePriceAlerts();
@@ -736,6 +737,7 @@ function App() {
             onSelectSymbol={handleSymbolChange}
             onClosePosition={closePosition}
             onCancelOrder={cancelOrder}
+            onSellOption={sellOption}
           />
         </div>
 

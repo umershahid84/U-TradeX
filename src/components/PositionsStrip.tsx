@@ -9,6 +9,7 @@ interface PositionsStripProps {
   onSelectSymbol: (symbol: string) => void;
   onClosePosition: (symbol: string, quantity: number, price: number) => void;
   onCancelOrder: (id: string) => void;
+  onSellOption: (index: number, quantity: number) => void;
 }
 
 type Tab = 'positions' | 'options' | 'orders';
@@ -19,7 +20,7 @@ const pct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 
 /** Collapsible table of open positions, option contracts and orders along the bottom of the chart */
 export const PositionsStrip: React.FC<PositionsStripProps> = ({
-  account, open, onToggle, onSelectSymbol, onClosePosition, onCancelOrder,
+  account, open, onToggle, onSelectSymbol, onClosePosition, onCancelOrder, onSellOption,
 }) => {
   const [tab, setTab] = useState<Tab>('positions');
 
@@ -107,7 +108,7 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
             ) : (
               <table className="ps-table">
                 <thead>
-                  <tr><th>Contract</th><th>Expiry</th><th>Qty</th><th>Paid</th><th>Est. value</th><th>P&amp;L</th></tr>
+                  <tr><th>Contract</th><th>Expiry</th><th>Qty</th><th>Paid</th><th>Est. value</th><th>P&amp;L</th><th /></tr>
                 </thead>
                 <tbody>
                   {optionRows.map(({ o, cost, value, pnl }, i) => (
@@ -122,6 +123,14 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
                       <td>{money(value)}</td>
                       <td className={pnl >= 0 ? 'up' : 'down'}>
                         {signedMoney(pnl)} <small>({pct(cost > 0 ? (pnl / cost) * 100 : 0)})</small>
+                      </td>
+                      <td className="ps-sell-cell">
+                        {o.quantity > 1 && (
+                          <button type="button" className="ps-action" title="Sell one contract at its estimated value" onClick={() => onSellOption(i, 1)}>Sell 1</button>
+                        )}{' '}
+                        <button type="button" className="ps-action" title={`Sell ${o.quantity > 1 ? 'all ' + o.quantity + ' contracts' : 'the contract'} at the estimated value`} onClick={() => onSellOption(i, o.quantity)}>
+                          Sell{o.quantity > 1 ? ' all' : ''}
+                        </button>
                       </td>
                     </tr>
                   ))}

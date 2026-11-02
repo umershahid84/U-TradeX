@@ -242,6 +242,33 @@ export const usePaperTrading = () => {
     }
   }, []);
 
+  // Sell (close) some or all contracts of a held option at its current estimated value
+  const sellOption = useCallback((index: number, quantity: number) => {
+    const held = accountRef.current.options[index];
+    if (!held) {
+      alert('That option position no longer exists');
+      return;
+    }
+    if (!Number.isFinite(quantity) || quantity < 1 || quantity > held.quantity) {
+      alert(`Enter a quantity between 1 and ${held.quantity}`);
+      return;
+    }
+    const premium = held.currentPremium ?? held.premium;
+    const proceeds = premium * quantity * 100;
+    const remaining = held.quantity - quantity;
+    const prev = accountRef.current;
+    const next = recalculateAccountTotals({
+      ...prev,
+      balance: prev.balance + proceeds,
+      options:
+        remaining > 0
+          ? prev.options.map((o, i) => (i === index ? { ...o, quantity: remaining } : o))
+          : prev.options.filter((_, i) => i !== index),
+    });
+    accountRef.current = next;
+    setAccount(next);
+  }, []);
+
   return {
     account,
     placeOrder,
@@ -249,5 +276,6 @@ export const usePaperTrading = () => {
     resetAccount,
     updatePositionPrices,
     buyOption,
+    sellOption,
   };
 };
