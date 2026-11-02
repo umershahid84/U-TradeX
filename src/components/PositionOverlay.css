@@ -19,3 +19,7 @@
 [data-chart-theme="light"] .pos-pill { background: #fff; color: #222; border-color: #c9ccd8; }
 [data-chart-theme="light"] .pos-pill button { color: #333; border-left-color: #c9ccd8; }
 @media (max-width: 900px) { .pos-pill { right: 90px; font-size: 10px; } .pos-pill button { padding: 5px 6px; } }
+
+.pos-pill.draggable { cursor: ns-resize; touch-action: none; user-select: none; }
+.pos-pill.draggable > span { cursor: ns-resize; }
+.pos-pill.dragging { box-shadow: 0 0 0 2px rgba(41,98,255,.6), 0 2px 8px rgba(0,0,0,.4); }

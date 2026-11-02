@@ -23,6 +23,34 @@ const money = (v: number) => `${v >= 0 ? '+' : '-'}$${Math.abs(v).toLocaleString
 export const PositionOverlay: React.FC<Props> = ({ chartRef, seriesRef, hostRef, position, tpsl, onSetLevel, onClose, onReverse }) => {
   const [ys, setYs] = useState<{ entry?: number; tp?: number; sl?: number }>({});
   const last = useRef('');
+  const [dragging, setDragging] = useState<'takeProfit' | 'stopLoss' | null>(null);
+
+  // Grab a TP / SL pill and move it up or down; the level follows the pointer and the P&L updates live
+  const startDrag = (kind: 'takeProfit' | 'stopLoss') => (e: React.PointerEvent) => {
+    const host = hostRef.current;
+    const series = seriesRef.current;
+    if (!host || !series || (e.target as HTMLElement).closest('button')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+    setDragging(kind);
+    const move = (ev: PointerEvent) => {
+      const top = host.getBoundingClientRect().top;
+      const h = chartRef.current?.panes()[0]?.getHeight() ?? host.clientHeight;
+      const price = series.coordinateToPrice(Math.max(0, Math.min(h - 1, ev.clientY - top)));
+      if (price !== null && (price as number) > 0) onSetLevel(kind, Math.round((price as number) * 100) / 100);
+    };
+    const up = () => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+      setDragging(null);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  };
 
   // Follow the price lines as the chart scrolls and rescales
   useEffect(() => {
@@ -84,14 +112,14 @@ export const PositionOverlay: React.FC<Props> = ({ chartRef, seriesRef, hostRef,
         </div>
       )}
       {ys.tp !== undefined && tpsl?.takeProfit && (
-        <div className="pos-pill tp" style={{ top: ys.tp }}>
-          <span>TP {money(tpPnl)}</span>
+        <div className={`pos-pill tp draggable ${dragging === 'takeProfit' ? 'dragging' : ''}`} style={{ top: ys.tp }} onPointerDown={startDrag('takeProfit')} title="Drag up or down to move">
+          <span>⋮⋮ TP {money(tpPnl)}</span>
           <button type="button" className="close" title="Cancel take profit" onClick={() => onSetLevel('takeProfit', undefined)}>✕</button>
         </div>
       )}
       {ys.sl !== undefined && tpsl?.stopLoss && (
-        <div className="pos-pill sl" style={{ top: ys.sl }}>
-          <span>SL {money(slPnl)}</span>
+        <div className={`pos-pill sl draggable ${dragging === 'stopLoss' ? 'dragging' : ''}`} style={{ top: ys.sl }} onPointerDown={startDrag('stopLoss')} title="Drag up or down to move">
+          <span>⋮⋮ SL {money(slPnl)}</span>
           <button type="button" className="close" title="Cancel stop loss" onClick={() => onSetLevel('stopLoss', undefined)}>✕</button>
         </div>
       )}

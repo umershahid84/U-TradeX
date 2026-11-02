@@ -1138,7 +1138,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     const series = candleSeriesRef.current;
     if (!el || !chart || !series) return;
 
-    const HIT_PX = 7; // how close to a line counts as grabbing it
+    const HIT_PX = 10; // how close to a line counts as grabbing it
     const paneHeight = () => chart.panes()[0]?.getHeight() ?? el.clientHeight;
     const point = (e: MouseEvent | TouchEvent) => ('touches' in e ? (e.touches[0] ?? (e as TouchEvent).changedTouches[0]) : e);
 
