@@ -38,6 +38,24 @@ export interface Position {
   currentPrice: number;
   pnl: number;
   pnlPercent: number;
+  /** When the position was opened (reset if it flips direction) */
+  openedAt?: number;
+}
+
+/** One closing fill: what was closed, at what entry and exit, and the profit or loss it locked in */
+export interface ClosedTrade {
+  id: string;
+  symbol: string;
+  kind: 'stock' | 'option';
+  side: 'long' | 'short';
+  quantity: number;
+  entryPrice: number;
+  exitPrice: number;
+  pnl: number;
+  pnlPct: number | null;
+  openedAt?: number;
+  closedAt: number;
+  option?: { type: 'call' | 'put'; strike: number; expiry: string };
 }
 
 export interface OptionContract {
@@ -51,6 +69,7 @@ export interface OptionContract {
   impliedVolatility?: number;
   /** Latest estimated value per share; falls back to the purchase premium */
   currentPremium?: number;
+  openedAt?: number;
 }
 
 export interface PaperTradingAccount {
@@ -59,6 +78,8 @@ export interface PaperTradingAccount {
   positions: Position[];
   orders: Order[];
   options: OptionContract[];
+  /** History of closed positions (kept across reloads) */
+  closedTrades: ClosedTrade[];
   totalValue: number;
   pnl: number;
   pnlPercent: number;

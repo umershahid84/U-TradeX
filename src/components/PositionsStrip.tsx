@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PnLCardDialog } from './PnLCardDialog';
 import { PnLCardData } from '../utils/pnlCard';
-import { dayCard, optionCard, orderCard, positionCard } from '../utils/pnlCardData';
+import { closedTradeCard, dayCard, optionCard, orderCard, positionCard } from '../utils/pnlCardData';
 import { PaperTradingAccount, Order } from '../types';
 import './PositionsStrip.css';
 
@@ -13,9 +13,10 @@ interface PositionsStripProps {
   onClosePosition: (symbol: string, quantity: number, price: number) => void;
   onCancelOrder: (id: string) => void;
   onSellOption: (index: number, quantity: number) => void;
+  onClearHistory: () => void;
 }
 
-type Tab = 'positions' | 'options' | 'orders';
+type Tab = 'positions' | 'options' | 'closed' | 'orders';
 
 const money = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 const signedMoney = (n: number) => `${n >= 0 ? '+' : '-'}${money(Math.abs(n))}`;
@@ -23,7 +24,7 @@ const pct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 
 /** Collapsible table of open positions, option contracts and orders along the bottom of the chart */
 export const PositionsStrip: React.FC<PositionsStripProps> = ({
-  account, open, onToggle, onSelectSymbol, onClosePosition, onCancelOrder, onSellOption,
+  account, open, onToggle, onSelectSymbol, onClosePosition, onCancelOrder, onSellOption, onClearHistory,
 }) => {
   const [tab, setTab] = useState<Tab>('positions');
   const [card, setCard] = useState<PnLCardData | null>(null);
@@ -33,6 +34,10 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
     const value = (o.currentPremium ?? o.premium) * o.quantity * 100;
     return { o, cost, value, pnl: value - cost };
   });
+  const history = [...account.closedTrades].sort((a, b) => b.closedAt - a.closedAt);
+  const historyPnl = history.reduce((sum, t) => sum + t.pnl, 0);
+  const historyWins = history.filter((t) => t.pnl > 0).length;
+  const when = (ms: number) => new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   const orders: Order[] = [...account.orders].sort((a, b) => b.timestamp - a.timestamp);
   const pending = orders.filter((o) => o.status === 'pending').length;
   const stockPnl = account.positions.reduce((s, p) => s + p.pnl, 0);
@@ -41,6 +46,7 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
   const tabs: { id: Tab; label: string; count: number }[] = [
     { id: 'positions', label: 'Positions', count: account.positions.length },
     { id: 'options', label: 'Options', count: account.options.length },
+    { id: 'closed', label: 'Closed', count: account.closedTrades.length },
     { id: 'orders', label: 'Orders', count: orders.length },
   ];
 
@@ -146,6 +152,43 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
                   ))}
                 </tbody>
               </table>
+            )
+          )}
+
+          {tab === 'closed' && (
+            history.length === 0 ? (
+              <div className="ps-empty">No closed positions yet. When you close a trade it is recorded here, with a P&amp;L card you can share.</div>
+            ) : (
+              <>
+                <div className="ps-stats">
+                  <span>Realized <b className={historyPnl >= 0 ? 'up' : 'down'}>{signedMoney(historyPnl)}</b></span>
+                  <span>Win rate <b>{Math.round((historyWins / history.length) * 100)}%</b> ({historyWins}/{history.length})</span>
+                  <button type="button" className="ps-action" onClick={() => { if (window.confirm('Clear the closed-position history? This cannot be undone.')) onClearHistory(); }}>Clear history</button>
+                </div>
+                <table className="ps-table">
+                  <thead>
+                    <tr><th>Symbol</th><th>Side</th><th>Qty</th><th>Entry</th><th>Exit</th><th>P&amp;L</th><th>%</th><th>Closed</th><th /></tr>
+                  </thead>
+                  <tbody>
+                    {history.map((t) => (
+                      <tr key={t.id}>
+                        <td>
+                          <button type="button" className="ps-link" onClick={() => onSelectSymbol(t.symbol)}>{t.symbol}</button>
+                          {t.option ? ` ${t.option.type.toUpperCase()} $${t.option.strike}` : ''}
+                        </td>
+                        <td className={t.side === 'long' ? 'up' : 'down'}>{t.side.toUpperCase()}</td>
+                        <td>{t.quantity}</td>
+                        <td>{money(t.entryPrice)}</td>
+                        <td>{money(t.exitPrice)}</td>
+                        <td className={t.pnl >= 0 ? 'up' : 'down'}>{signedMoney(t.pnl)}</td>
+                        <td className={t.pnl >= 0 ? 'up' : 'down'}>{t.pnlPct === null ? '—' : pct(t.pnlPct)}</td>
+                        <td>{when(t.closedAt)}</td>
+                        <td><button type="button" className="ps-action" title="P&L card to download or share" onClick={() => setCard(closedTradeCard(t))}>📤</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
             )
           )}
 

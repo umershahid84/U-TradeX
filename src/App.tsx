@@ -198,6 +198,7 @@ function App() {
     updatePositionPrices,
     buyOption,
     sellOption,
+    clearClosedTrades,
     fillPendingOrders,
   } = usePaperTrading();
 
@@ -792,6 +793,7 @@ function App() {
             onClosePosition={closePosition}
             onCancelOrder={cancelOrder}
             onSellOption={sellOption}
+            onClearHistory={clearClosedTrades}
           />
         </div>
 

@@ -38,3 +38,10 @@
 
 .ps-daily { flex: 0 0 auto; margin: 4px 8px 4px 0; padding: 4px 10px; background: #1a1e3f; border: 1px solid #3a3e6f; color: #e0e0e0; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .ps-daily:hover { border-color: #26a69a; color: #26a69a; }
+
+.ps-stats { display: flex; align-items: center; gap: 18px; padding: 6px 12px; font-size: 12px; color: #8a8fb5; border-bottom: 1px solid #1a1e3f; }
+.ps-stats b { color: #e0e0e0; margin-left: 4px; }
+.ps-stats b.up { color: #26a69a; } .ps-stats b.down { color: #ef5350; }
+.ps-stats .ps-action { margin-left: auto; }
+
+.ps-table td.up { color: #26a69a; } .ps-table td.down { color: #ef5350; }

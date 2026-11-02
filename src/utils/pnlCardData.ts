@@ -1,4 +1,4 @@
-import { Order, OptionContract, PaperTradingAccount, Position } from '../types';
+import { ClosedTrade, Order, OptionContract, PaperTradingAccount, Position } from '../types';
 import { PnLCardData } from './pnlCard';
 
 const money = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
@@ -96,19 +96,42 @@ export const orderCard = (o: Order, positions: Position[], allOrders: Order[]): 
   };
 };
 
+const heldFor = (from: number, to: number) => {
+  const mins = Math.max(0, Math.round((to - from) / 60000));
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  return h < 24 ? `${h}h ${mins % 60}m` : `${Math.floor(h / 24)}d ${h % 24}h`;
+};
+
+export const closedTradeCard = (t: ClosedTrade): PnLCardData => ({
+  kind: 'trade',
+  headline: t.symbol,
+  tag: t.option ? `${t.option.type.toUpperCase()} $${t.option.strike} · ${t.option.expiry}` : `${t.side === 'long' ? 'LONG' : 'SHORT'} ${t.quantity}`,
+  status: 'Closed',
+  pnl: t.pnl,
+  pnlPct: t.pnlPct,
+  dateLabel: dateLabel(t.closedAt),
+  rows: [
+    { label: t.option ? 'Entry / share' : 'Entry', value: money(t.entryPrice) },
+    { label: t.option ? 'Exit / share' : 'Exit', value: money(t.exitPrice) },
+    { label: t.option ? 'Contracts' : 'Quantity', value: String(t.quantity) },
+    t.openedAt ? { label: 'Held', value: heldFor(t.openedAt, t.closedAt) } : { label: 'Closed', value: timeLabel(t.closedAt) },
+  ],
+});
+
 /** Today's result: profit locked in by closed trades plus what open positions currently show */
 export const dayCard = (account: PaperTradingAccount): PnLCardData => {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
-  const closed = account.orders.filter((o) => o.status === 'filled' && o.realizedPnl !== undefined && o.timestamp >= start.getTime());
-  const realized = closed.reduce((s, o) => s + (o.realizedPnl ?? 0), 0);
+  const closed = account.closedTrades.filter((t) => t.closedAt >= start.getTime());
+  const realized = closed.reduce((s, t) => s + t.pnl, 0);
   const open =
     account.positions.reduce((s, p) => s + p.pnl, 0) +
     account.options.reduce((s, o) => s + ((o.currentPremium ?? o.premium) - o.premium) * o.quantity * 100, 0);
   const net = realized + open;
-  const wins = closed.filter((o) => (o.realizedPnl ?? 0) > 0).length;
-  const best = closed.reduce<number | null>((m, o) => (m === null || (o.realizedPnl ?? 0) > m ? o.realizedPnl ?? 0 : m), null);
-  const worst = closed.reduce<number | null>((m, o) => (m === null || (o.realizedPnl ?? 0) < m ? o.realizedPnl ?? 0 : m), null);
+  const wins = closed.filter((t) => t.pnl > 0).length;
+  const best = closed.reduce<number | null>((m, t) => (m === null || t.pnl > m ? t.pnl : m), null);
+  const worst = closed.reduce<number | null>((m, t) => (m === null || t.pnl < m ? t.pnl : m), null);
   const base = account.totalValue - net;
   return {
     kind: 'day',

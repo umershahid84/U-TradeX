@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { PaperTradingAccount, Order, Position, OptionContract } from '../types';
+import { PaperTradingAccount, Order, Position, OptionContract, ClosedTrade } from '../types';
 import { bsPrice, yearsToExpiry } from '../utils/optionPricing';
 
 const DEFAULT_BALANCE = 100000;
@@ -11,6 +11,7 @@ const createDefaultAccount = (): PaperTradingAccount => ({
   positions: [],
   orders: [],
   options: [],
+  closedTrades: [],
   totalValue: DEFAULT_BALANCE,
   pnl: 0,
   pnlPercent: 0,
@@ -62,6 +63,27 @@ const loadSavedAccount = (): PaperTradingAccount => {
       positions: Array.isArray(parsed.positions) ? parsed.positions : base.positions,
       orders: Array.isArray(parsed.orders) ? parsed.orders : base.orders,
       options: Array.isArray(parsed.options) ? parsed.options : base.options,
+      // accounts saved before the history existed: rebuild it from the closing fills they recorded
+      closedTrades: Array.isArray(parsed.closedTrades)
+        ? parsed.closedTrades
+        : (Array.isArray(parsed.orders) ? parsed.orders : [])
+            .filter((o) => o.status === 'filled' && o.realizedPnl !== undefined && o.entryPrice !== undefined)
+            .map((o): ClosedTrade => {
+              const long = o.option ? true : o.side === 'sell';
+              return {
+                id: o.id,
+                symbol: o.symbol,
+                kind: o.option ? 'option' : 'stock',
+                side: long ? 'long' : 'short',
+                quantity: o.quantity,
+                entryPrice: o.entryPrice!,
+                exitPrice: o.price,
+                pnl: o.realizedPnl!,
+                pnlPct: o.entryPrice! > 0 ? ((o.price - o.entryPrice!) / o.entryPrice!) * 100 * (long ? 1 : -1) : null,
+                closedAt: o.timestamp,
+                option: o.option,
+              };
+            }),
     };
 
     return recalculateAccountTotals(normalized);
@@ -125,7 +147,7 @@ export const usePaperTrading = () => {
     } else if (!existing) {
       newPositions = [
         ...prev.positions,
-        { symbol: order.symbol, quantity: newQty, avgPrice: order.price, currentPrice: order.price, pnl: 0, pnlPercent: 0 },
+        { symbol: order.symbol, quantity: newQty, avgPrice: order.price, currentPrice: order.price, pnl: 0, pnlPercent: 0, openedAt: order.timestamp },
       ];
     } else {
       const sameDirection = Math.sign(held) === Math.sign(delta);
@@ -135,7 +157,9 @@ export const usePaperTrading = () => {
         : crossed
           ? order.price
           : existing.avgPrice;
-      newPositions = prev.positions.map((p) => (p.symbol === order.symbol ? { ...p, quantity: newQty, avgPrice } : p));
+      newPositions = prev.positions.map((p) =>
+        p.symbol === order.symbol ? { ...p, quantity: newQty, avgPrice, openedAt: crossed ? order.timestamp : p.openedAt ?? order.timestamp } : p
+      );
     }
 
     const next = {
@@ -143,8 +167,31 @@ export const usePaperTrading = () => {
       balance: order.side === 'buy' ? prev.balance - value : prev.balance + value,
       positions: newPositions,
       orders: [...prev.orders, { ...order, status: 'filled' as const, entryPrice, realizedPnl }],
+      closedTrades:
+        realizedPnl !== undefined && entryPrice !== undefined && existing
+          ? [
+              ...prev.closedTrades,
+              {
+                id: order.id,
+                symbol: order.symbol,
+                kind: 'stock' as const,
+                side: held > 0 ? ('long' as const) : ('short' as const),
+                quantity: Math.min(Math.abs(held), order.quantity),
+                entryPrice,
+                exitPrice: order.price,
+                pnl: realizedPnl,
+                pnlPct: entryPrice > 0 ? ((order.price - entryPrice) / entryPrice) * 100 * Math.sign(held) : null,
+                openedAt: existing.openedAt,
+                closedAt: order.timestamp,
+              },
+            ]
+          : prev.closedTrades,
     };
     return { nextAccount: recalculateAccountTotals(next) };
+  }, []);
+
+  const clearClosedTrades = useCallback(() => {
+    setAccount((prev) => ({ ...prev, closedTrades: [] }));
   }, []);
 
   const resetAccount = useCallback(() => {
@@ -242,7 +289,7 @@ export const usePaperTrading = () => {
       return recalculateAccountTotals({
         ...prev,
         balance: prev.balance - cost,
-        options: [...prev.options, option],
+        options: [...prev.options, { ...option, openedAt: option.openedAt ?? Date.now() }],
       });
     });
 
@@ -310,6 +357,23 @@ export const usePaperTrading = () => {
           option: { type: held.type, strike: held.strike, expiry: held.expiry },
         },
       ],
+      closedTrades: [
+        ...(prev.closedTrades ?? []),
+        {
+          id: `opt-${Date.now()}-${index}`,
+          symbol: held.symbol,
+          kind: 'option' as const,
+          side: 'long' as const,
+          quantity,
+          entryPrice: held.premium,
+          exitPrice: premium,
+          pnl: (premium - held.premium) * quantity * 100,
+          pnlPct: held.premium > 0 ? ((premium - held.premium) / held.premium) * 100 : null,
+          openedAt: held.openedAt,
+          closedAt: Date.now(),
+          option: { type: held.type, strike: held.strike, expiry: held.expiry },
+        },
+      ],
       options:
         remaining > 0
           ? prev.options.map((o, i) => (i === index ? { ...o, quantity: remaining } : o))
@@ -327,6 +391,7 @@ export const usePaperTrading = () => {
     updatePositionPrices,
     buyOption,
     sellOption,
+    clearClosedTrades,
     fillPendingOrders,
   };
 };
