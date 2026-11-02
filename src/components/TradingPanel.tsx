@@ -6,7 +6,7 @@ interface TradingPanelProps {
   symbol: string;
   currentPrice: number;
   balance: number;
-  onPlaceOrder: (order: Omit<Order, 'id' | 'status' | 'timestamp'>) => void;
+  onPlaceOrder: (order: Omit<Order, 'id' | 'status' | 'timestamp'>, takeProfit?: number, stopLoss?: number) => void;
 }
 
 export const TradingPanel: React.FC<TradingPanelProps> = ({
@@ -18,6 +18,8 @@ export const TradingPanel: React.FC<TradingPanelProps> = ({
   const [orderType, setOrderType] = useState<'market' | 'limit'>('market');
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [quantity, setQuantity] = useState<string>('1');
+  const [tp, setTp] = useState<string>('');
+  const [sl, setSl] = useState<string>('');
   const [limitPrice, setLimitPrice] = useState<string>(currentPrice.toFixed(2));
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -41,9 +43,11 @@ export const TradingPanel: React.FC<TradingPanelProps> = ({
       side,
       quantity: qty,
       price,
-    });
+    }, parseFloat(tp) > 0 ? parseFloat(tp) : undefined, parseFloat(sl) > 0 ? parseFloat(sl) : undefined);
 
     setQuantity('1');
+    setTp('');
+    setSl('');
   };
 
   const estimatedCost = parseFloat(quantity) * (orderType === 'market' ? currentPrice : parseFloat(limitPrice) || 0);
@@ -76,14 +80,14 @@ export const TradingPanel: React.FC<TradingPanelProps> = ({
               className={side === 'buy' ? 'buy active' : 'buy'}
               onClick={() => setSide('buy')}
             >
-              BUY
+              BUY / LONG
             </button>
             <button
               type="button"
               className={side === 'sell' ? 'sell active' : 'sell'}
               onClick={() => setSide('sell')}
             >
-              SELL
+              SELL / SHORT
             </button>
           </div>
         </div>
@@ -112,6 +116,16 @@ export const TradingPanel: React.FC<TradingPanelProps> = ({
           </div>
         )}
 
+        {orderType === 'market' && (
+          <div className="form-group">
+            <label>🎯 Take profit / 🛑 Stop loss (optional, closes the position automatically)</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input type="number" min="0" step="0.01" placeholder="Take profit" value={tp} onChange={(e) => setTp(e.target.value)} />
+              <input type="number" min="0" step="0.01" placeholder="Stop loss" value={sl} onChange={(e) => setSl(e.target.value)} />
+            </div>
+          </div>
+        )}
+
         <div className="order-summary">
           <div className="summary-row">
             <span>Current Price:</span>
@@ -132,7 +146,7 @@ export const TradingPanel: React.FC<TradingPanelProps> = ({
           className={`submit-btn ${side}`}
           disabled={side === 'buy' && estimatedCost > balance}
         >
-          Place {side.toUpperCase()} Order
+          Place {side === 'buy' ? 'BUY / LONG' : 'SELL / SHORT'} Order
         </button>
       </form>
     </div>

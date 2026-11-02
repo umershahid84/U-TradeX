@@ -14,3 +14,11 @@
 .qt-sell:hover:not(:disabled) { background: #ef5350; color: #fff; }
 .qt-buttons button:disabled { opacity: 0.45; cursor: default; }
 @media (max-width: 900px) { .qt-qty input { font-size: 16px; } }
+
+.qt-levels { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.qt-levels label { display: flex; flex-direction: column; gap: 3px; font-size: 10px; color: #8a8fb5; }
+.qt-levels input {
+  width: 100%; box-sizing: border-box; padding: 5px 6px; background: #1a1e3f; border: 1px solid #2a2e4f;
+  border-radius: 4px; color: #e0e0e0; font-size: 12px;
+}
+@media (max-width: 900px) { .qt-levels input { font-size: 16px; } }

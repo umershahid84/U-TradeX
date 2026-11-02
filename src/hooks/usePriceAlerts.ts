@@ -54,6 +54,13 @@ export const usePriceAlerts = () => {
 
   const dismissToast = useCallback((id: string) => setToasts((t) => t.filter((x) => x.id !== id)), []);
 
+  const pushToast = useCallback((title: string, body = '', symbol?: string) => {
+    const id = `m-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setToasts((t) => [...t, { id, title, body, symbol }]);
+    setTimeout(() => dismissToast(id), 12000);
+    chime();
+  }, [dismissToast]);
+
   const addAlert = useCallback((symbol: string, price: number, currentPrice: number) => {
     if (!Number.isFinite(price) || price <= 0) return false;
     const alert: PriceAlert = {
@@ -116,5 +123,5 @@ export const usePriceAlerts = () => {
     chime();
   }, [dismissToast]);
 
-  return { alerts, toasts, addAlert, moveAlert, removeAlert, clearTriggered, check, dismissToast };
+  return { alerts, toasts, pushToast, addAlert, moveAlert, removeAlert, clearTriggered, check, dismissToast };
 };

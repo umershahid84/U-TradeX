@@ -12,7 +12,7 @@ import {
   AreaSeries,
   BarSeries
 } from 'lightweight-charts';
-import { ChartData, TimeFrame, CustomIndicator, CustomIndicatorStatus, PriceAlert } from '../types';
+import { ChartData, TimeFrame, CustomIndicator, CustomIndicatorStatus, PriceAlert, Position, TakeProfitStopLoss } from '../types';
 import { AlertsPanel } from './AlertsPanel';
 import { AutoChartManager, AutoChartOptions } from './autoChartManager';
 import { AutoChartBadge } from './AutoChartBadge';
@@ -48,6 +48,10 @@ interface TradingChartProps {
   onPriceUpdate?: (price: number) => void;
   includeAfterHours: boolean;
   alerts: PriceAlert[];
+  /** Open stock position in this symbol (long > 0, short < 0), and its take-profit / stop-loss levels */
+  position?: Position;
+  tpsl?: TakeProfitStopLoss;
+  onSetLevel: (kind: 'takeProfit' | 'stopLoss', price?: number) => void;
   onAddAlert: (price: number) => void;
   onMoveAlert: (id: string, price: number) => void;
   onRemoveAlert: (id: string) => void;
@@ -95,6 +99,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   onPriceUpdate,
   includeAfterHours,
   alerts,
+  position,
+  tpsl,
+  onSetLevel,
   onAddAlert,
   onMoveAlert,
   onRemoveAlert,
@@ -174,10 +181,15 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   onAddAlertRef.current = onAddAlert;
   const alertLinesRef = useRef<{ id: string; line: IPriceLine }[]>([]);
   const activeAlertsRef = useRef<PriceAlert[]>([]);
+  // Position entry / take-profit / stop-loss lines (TP and SL can be dragged, like alerts)
+  const levelLinesRef = useRef<{ id: string; line: IPriceLine }[]>([]);
+  const levelsRef = useRef<{ id: 'takeProfit' | 'stopLoss'; price: number }[]>([]);
+  const onSetLevelRef = useRef(onSetLevel);
+  onSetLevelRef.current = onSetLevel;
   const onMoveAlertRef = useRef(onMoveAlert);
   onMoveAlertRef.current = onMoveAlert;
   // Right-click menu: add an alert at the cursor's price, or delete the alert under it
-  const [menu, setMenu] = useState<{ x: number; y: number; price: number; alertId?: string; alertPrice?: number } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; price: number; alertId?: string; alertPrice?: number; level?: 'takeProfit' | 'stopLoss' } | null>(null);
   const [customIndicators, setCustomIndicators] = useState<CustomIndicator[]>(() => {
     try {
       const saved = localStorage.getItem('customIndicators');
@@ -1066,6 +1078,54 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     }));
   }, [alerts, symbol]);
 
+  // Entry, take-profit and stop-loss lines for the open position in this symbol
+  levelsRef.current = [
+    ...(position && tpsl?.takeProfit ? [{ id: 'takeProfit' as const, price: tpsl.takeProfit }] : []),
+    ...(position && tpsl?.stopLoss ? [{ id: 'stopLoss' as const, price: tpsl.stopLoss }] : []),
+  ];
+  useEffect(() => {
+    const series = candleSeriesRef.current;
+    if (!series) return;
+    levelLinesRef.current.forEach(({ line }) => {
+      try {
+        series.removePriceLine(line);
+      } catch {
+        /* series already replaced */
+      }
+    });
+    levelLinesRef.current = [];
+    if (!position) return;
+    const short = position.quantity < 0;
+    const qty = Math.abs(position.quantity);
+    levelLinesRef.current.push({
+      id: 'entry',
+      line: series.createPriceLine({
+        price: position.avgPrice,
+        color: '#4C9AFF',
+        lineWidth: 1,
+        lineStyle: 0,
+        axisLabelVisible: true,
+        title: `${short ? 'SHORT' : 'LONG'} ${qty} @ ${position.avgPrice.toFixed(2)}`,
+      }),
+    });
+    const pl = (target: number) => {
+      const v = (short ? position.avgPrice - target : target - position.avgPrice) * qty;
+      return `${v >= 0 ? '+' : '-'}$${Math.abs(v).toFixed(0)}`;
+    };
+    if (tpsl?.takeProfit) {
+      levelLinesRef.current.push({
+        id: 'takeProfit',
+        line: series.createPriceLine({ price: tpsl.takeProfit, color: '#26a69a', lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: `🎯 TP ${pl(tpsl.takeProfit)}` }),
+      });
+    }
+    if (tpsl?.stopLoss) {
+      levelLinesRef.current.push({
+        id: 'stopLoss',
+        line: series.createPriceLine({ price: tpsl.stopLoss, color: '#ef5350', lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: `🛑 SL ${pl(tpsl.stopLoss)}` }),
+      });
+    }
+  }, [position, position?.quantity, position?.avgPrice, tpsl?.takeProfit, tpsl?.stopLoss, symbol]);
+
   // Right-click to add an alert at the cursor, and drag an alert's line up or down to move it
   useEffect(() => {
     const el = chartContainerRef.current;
@@ -1084,14 +1144,19 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     };
 
     // The active alert whose line is under the pointer (plot area only, not the price axis)
-    const alertAt = (clientX: number, clientY: number): PriceAlert | null => {
+    type Hit = { id: string; price: number; level?: 'takeProfit' | 'stopLoss' };
+    const alertAt = (clientX: number, clientY: number): Hit | null => {
       const rect = el.getBoundingClientRect();
       const x = clientX - rect.left;
       const y = clientY - rect.top;
       if (x < 0 || x > chart.timeScale().width() || y < 0 || y > paneHeight()) return null;
-      let best: PriceAlert | null = null;
+      let best: Hit | null = null;
       let bestDist = HIT_PX + 1;
-      for (const a of activeAlertsRef.current) {
+      const candidates: Hit[] = [
+        ...activeAlertsRef.current.map((a) => ({ id: a.id, price: a.price })),
+        ...levelsRef.current.map((l) => ({ id: `level:${l.id}`, price: l.price, level: l.id })),
+      ];
+      for (const a of candidates) {
         const ay = series.priceToCoordinate(a.price);
         if (ay === null) continue;
         const d = Math.abs((ay as number) - y);
@@ -1103,7 +1168,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       return best;
     };
 
-    let drag: { id: string; price: number } | null = null;
+    let drag: { id: string; price: number; level?: 'takeProfit' | 'stopLoss' } | null = null;
     let restore: { scroll: unknown; scale: unknown } | null = null;
 
     const onDown = (e: MouseEvent | TouchEvent) => {
@@ -1115,7 +1180,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       // keep the chart from panning while the line is dragged
       e.stopPropagation();
       if (e.cancelable) e.preventDefault();
-      drag = { id: hit.id, price: hit.price };
+      drag = { id: hit.id, price: hit.price, level: hit.level };
       restore = { scroll: chart.options().handleScroll, scale: chart.options().handleScale };
       chart.applyOptions({ handleScroll: false, handleScale: false });
       el.classList.add('alert-dragging');
@@ -1129,7 +1194,10 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         const price = priceAtY(pt.clientY);
         if (price !== null && price > 0) {
           drag.price = Math.round(price * 100) / 100;
-          alertLinesRef.current.find((l) => l.id === drag!.id)?.line.applyOptions({ price: drag.price });
+          const target = drag.level
+            ? levelLinesRef.current.find((l) => l.id === drag!.level)
+            : alertLinesRef.current.find((l) => l.id === drag!.id);
+          target?.line.applyOptions({ price: drag.price });
         }
         return;
       }
@@ -1146,7 +1214,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         restore = null;
       }
       el.classList.remove('alert-dragging');
-      onMoveAlertRef.current(done.id, done.price);
+      if (done.level) onSetLevelRef.current(done.level, done.price);
+      else onMoveAlertRef.current(done.id, done.price);
     };
 
     const onContext = (e: MouseEvent) => {
@@ -1158,7 +1227,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       const price = priceAtY(e.clientY);
       if (price === null || price <= 0) return;
       const hit = alertAt(e.clientX, e.clientY);
-      setMenu({ x: e.clientX, y: e.clientY, price, alertId: hit?.id, alertPrice: hit?.price });
+      setMenu({ x: e.clientX, y: e.clientY, price, alertId: hit && !hit.level ? hit.id : undefined, alertPrice: hit?.price, level: hit?.level });
     };
 
     el.addEventListener('mousedown', onDown, true);
@@ -1721,19 +1790,37 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       {menu && (
         <div
           className="chart-context-menu"
-          style={{ left: Math.min(menu.x, window.innerWidth - 230), top: Math.min(menu.y, window.innerHeight - 90) }}
+          style={{ left: Math.min(menu.x, window.innerWidth - 230), top: Math.min(menu.y, window.innerHeight - 170) }}
           onContextMenu={(e) => e.preventDefault()}
         >
-          {menu.alertId ? (
+          {menu.level ? (
+            <button type="button" onClick={() => { onSetLevel(menu.level!, undefined); setMenu(null); }}>
+              🗑️ Remove {menu.level === 'takeProfit' ? 'take profit' : 'stop loss'} (${menu.alertPrice!.toFixed(2)})
+            </button>
+          ) : menu.alertId ? (
             <button type="button" onClick={() => { onRemoveAlert(menu.alertId!); setMenu(null); }}>
               🗑️ Delete alert at ${menu.alertPrice!.toFixed(2)}
             </button>
           ) : (
-            <button type="button" onClick={() => { onAddAlert(menu.price); setMenu(null); }}>
-              🔔 Add alert at ${menu.price.toFixed(2)}
-            </button>
+            <>
+              <button type="button" onClick={() => { onAddAlert(menu.price); setMenu(null); }}>
+                🔔 Add alert at ${menu.price.toFixed(2)}
+              </button>
+              {position && (
+                <>
+                  <button type="button" onClick={() => { onSetLevel('takeProfit', Math.round(menu.price * 100) / 100); setMenu(null); }}>
+                    🎯 Take profit at ${menu.price.toFixed(2)}
+                  </button>
+                  <button type="button" onClick={() => { onSetLevel('stopLoss', Math.round(menu.price * 100) / 100); setMenu(null); }}>
+                    🛑 Stop loss at ${menu.price.toFixed(2)}
+                  </button>
+                </>
+              )}
+            </>
           )}
-          <span className="menu-hint">{menu.alertId ? 'Drag the line to move it' : `${symbol} · right-click`}</span>
+          <span className="menu-hint">
+            {menu.level || menu.alertId ? 'Drag the line to move it' : position ? `${symbol} ${position.quantity < 0 ? 'short' : 'long'} · closes automatically` : `${symbol} · right-click`}
+          </span>
         </div>
       )}
 

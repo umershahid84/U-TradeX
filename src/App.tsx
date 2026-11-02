@@ -24,7 +24,7 @@ import {
   calculateSMA,
   calculateRSI,
 } from './utils/indicators';
-import { TimeFrame, TimeRange, ChartData, FearGreedData, MarketFearGreed, TakeProfitStopLoss } from './types';
+import { TimeFrame, TimeRange, ChartData, FearGreedData, MarketFearGreed, TakeProfitStopLoss, Order } from './types';
 import './App.css';
 
 const marketData = RealMarketDataService.getInstance();
@@ -147,7 +147,30 @@ function App() {
   const [fearGreedData, setFearGreedData] = useState<FearGreedData | null>(null);
   const [marketFearGreed, setMarketFearGreed] = useState<MarketFearGreed | null>(null);
   const [marketFearGreedError, setMarketFearGreedError] = useState('');
-  const [tpslSettings, setTpslSettings] = useState<Map<string, TakeProfitStopLoss>>(new Map());
+  // Take-profit / stop-loss levels per symbol. The ref is the source of truth for the price-tick checks
+  // so a level can fire exactly once; the state drives the chart lines.
+  const tpslRef = useRef<Map<string, TakeProfitStopLoss>>(
+    (() => {
+      try {
+        const saved = JSON.parse(localStorage.getItem('tpslLevels') || '[]') as TakeProfitStopLoss[];
+        return new Map(saved.filter((t) => t && typeof t.symbol === 'string').map((t) => [t.symbol, t]));
+      } catch {
+        return new Map();
+      }
+    })()
+  );
+  const [tpslSettings, setTpslSettings] = useState<Map<string, TakeProfitStopLoss>>(() => new Map(tpslRef.current));
+  const updateTpsl = useCallback((fn: (m: Map<string, TakeProfitStopLoss>) => void) => {
+    const next = new Map(tpslRef.current);
+    fn(next);
+    tpslRef.current = next;
+    setTpslSettings(next);
+    try {
+      localStorage.setItem('tpslLevels', JSON.stringify([...next.values()]));
+    } catch {
+      /* storage unavailable */
+    }
+  }, []);
   // On by default so pre-market and after-hours trading shows on the chart
   const [includeAfterHours, setIncludeAfterHours] = useState(true);
   const [quoteDetails, setQuoteDetails] = useState<QuoteDetails | null>(null);
@@ -176,7 +199,7 @@ function App() {
     buyOption,
   } = usePaperTrading();
 
-  const { alerts, toasts, addAlert, moveAlert, removeAlert, clearTriggered, check: checkAlerts, dismissToast } = usePriceAlerts();
+  const { alerts, toasts, pushToast, addAlert, moveAlert, removeAlert, clearTriggered, check: checkAlerts, dismissToast } = usePriceAlerts();
   // The live-price subscription is created once per symbol, so reach the latest check through a ref
   const checkAlertsRef = useRef(checkAlerts);
   checkAlertsRef.current = checkAlerts;
@@ -222,47 +245,36 @@ function App() {
   };
 
   const checkTPSL = useCallback((symbol: string, price: number) => {
-    const tpsl = tpslSettings.get(symbol);
+    const tpsl = tpslRef.current.get(symbol);
     if (!tpsl) return;
 
     const position = account.positions.find((p) => p.symbol === symbol);
     if (!position) return;
 
     const short = position.quantity < 0;
-    const closeSide = short ? 'buy' : 'sell';
     const hitTP = !!tpsl.takeProfit && (short ? price <= tpsl.takeProfit : price >= tpsl.takeProfit);
     const hitSL = !!tpsl.stopLoss && (short ? price >= tpsl.stopLoss : price <= tpsl.stopLoss);
+    if (!hitTP && !hitSL) return;
 
-    if (hitTP) {
-      alert(`Take Profit triggered for ${symbol} at $${price.toFixed(2)}`);
-      placeOrder({
-        symbol,
-        type: 'market',
-        side: closeSide,
-        quantity: Math.abs(position.quantity),
-        price,
-      });
-      setTpslSettings((prev) => {
-        const next = new Map(prev);
-        next.delete(symbol);
-        return next;
-      });
-    } else if (hitSL) {
-      alert(`Stop Loss triggered for ${symbol} at $${price.toFixed(2)}`);
-      placeOrder({
-        symbol,
-        type: 'market',
-        side: closeSide,
-        quantity: Math.abs(position.quantity),
-        price,
-      });
-      setTpslSettings((prev) => {
-        const next = new Map(prev);
-        next.delete(symbol);
-        return next;
-      });
+    // Drop the levels first (synchronously) so a second price tick cannot close the position twice
+    updateTpsl((m) => m.delete(symbol));
+    pushToast(`${hitTP ? '🎯 Take profit' : '🛑 Stop loss'} hit`, `Closed ${symbol} ${short ? 'short' : 'long'} at $${price.toFixed(2)}`, symbol);
+    placeOrder({
+      symbol,
+      type: 'market',
+      side: short ? 'buy' : 'sell',
+      quantity: Math.abs(position.quantity),
+      price,
+    });
+  }, [account.positions, placeOrder, updateTpsl]);
+
+  // Levels belong to an open position: forget them once it is closed
+  useEffect(() => {
+    const open = new Set(account.positions.map((p) => p.symbol));
+    if ([...tpslRef.current.keys()].some((k) => !open.has(k))) {
+      updateTpsl((m) => [...m.keys()].forEach((k) => { if (!open.has(k)) m.delete(k); }));
     }
-  }, [account.positions, placeOrder, tpslSettings]);
+  }, [account.positions, updateTpsl]);
 
   // Load chart data when symbol or timeframe changes
   useEffect(() => {
@@ -526,8 +538,8 @@ function App() {
   }, []);
 
   const handleTPSLSet = (tpsl: TakeProfitStopLoss) => {
-    setTpslSettings((prev) => new Map(prev).set(tpsl.symbol, tpsl));
-    alert(`TP/SL set for ${tpsl.symbol}`);
+    updateTpsl((m) => m.set(tpsl.symbol, tpsl));
+    pushToast('TP/SL set', tpsl.symbol, tpsl.symbol);
   };
 
   const toggleRightSidebar = () => {
@@ -554,6 +566,31 @@ function App() {
   const openSentiment = () => (isMobile ? setMobileView('sentiment') : selectTab('sentiment'));
   const showChartOnMobile = !isMobile || mobileView === 'chart';
 
+  // Market/limit order that can carry take-profit and stop-loss levels (TradingView-style bracket)
+  const placeOrderWithLevels = (order: Omit<Order, 'id' | 'status' | 'timestamp'>, tp?: number, sl?: number) => {
+    const long = order.side === 'buy';
+    if (tp !== undefined && (long ? tp <= order.price : tp >= order.price)) {
+      alert(`Take profit must be ${long ? 'above' : 'below'} the entry price for a ${long ? 'long' : 'short'}`);
+      return;
+    }
+    if (sl !== undefined && (long ? sl >= order.price : sl <= order.price)) {
+      alert(`Stop loss must be ${long ? 'below' : 'above'} the entry price for a ${long ? 'long' : 'short'}`);
+      return;
+    }
+    placeOrder(order);
+    if (order.type === 'market' && (tp !== undefined || sl !== undefined)) {
+      updateTpsl((m) => m.set(order.symbol, { symbol: order.symbol, takeProfit: tp, stopLoss: sl }));
+    }
+  };
+
+  const setLevel = (sym: string, kind: 'takeProfit' | 'stopLoss', price?: number) =>
+    updateTpsl((m) => {
+      const cur = m.get(sym) ?? { symbol: sym };
+      const next = { ...cur, [kind]: price };
+      if (next.takeProfit === undefined && next.stopLoss === undefined) m.delete(sym);
+      else m.set(sym, next);
+    });
+
   const closePosition = (sym: string, quantity: number, price: number) =>
     placeOrder({ symbol: sym, type: 'market', side: quantity < 0 ? 'buy' : 'sell', quantity: Math.abs(quantity), price });
 
@@ -562,7 +599,7 @@ function App() {
       {activeTab === 'watchlist' && <Watchlist activeSymbol={symbol} onSelect={(s) => { handleSymbolChange(s); if (isMobile) setMobileView('chart'); }} />}
       {activeTab === 'trade' && (
         <>
-          <TradingPanel symbol={symbol} currentPrice={currentPrice} balance={account.balance} onPlaceOrder={placeOrder} />
+          <TradingPanel symbol={symbol} currentPrice={currentPrice} balance={account.balance} onPlaceOrder={placeOrderWithLevels} />
           <TPSLPanel positions={account.positions} onSet={handleTPSLSet} />
         </>
       )}
@@ -669,6 +706,9 @@ function App() {
               onPriceUpdate={setCurrentPrice}
               includeAfterHours={includeAfterHours}
               alerts={alerts}
+              position={account.positions.find((p) => p.symbol === symbol)}
+              tpsl={tpslSettings.get(symbol)}
+              onSetLevel={(kind, price) => setLevel(symbol, kind, price)}
               onAddAlert={(price) => addAlert(symbol, price, currentPrice)}
               onMoveAlert={(id, price) => moveAlert(id, price, currentPrice)}
               onRemoveAlert={removeAlert}
@@ -694,7 +734,7 @@ function App() {
             <div className="sidebar-content">
               <ErrorBoundary label="this panel" resetKey={`${symbol}-${activeTab}`}>{tabContent}</ErrorBoundary>
             </div>
-            {!isMobile && <QuickTrade symbol={symbol} currentPrice={currentPrice} onPlaceOrder={placeOrder} />}
+            {!isMobile && <QuickTrade symbol={symbol} currentPrice={currentPrice} onPlaceOrder={placeOrderWithLevels} />}
           </div>
         )}
 
