@@ -228,13 +228,18 @@ function App() {
     const position = account.positions.find((p) => p.symbol === symbol);
     if (!position) return;
 
-    if (tpsl.takeProfit && price >= tpsl.takeProfit) {
+    const short = position.quantity < 0;
+    const closeSide = short ? 'buy' : 'sell';
+    const hitTP = !!tpsl.takeProfit && (short ? price <= tpsl.takeProfit : price >= tpsl.takeProfit);
+    const hitSL = !!tpsl.stopLoss && (short ? price >= tpsl.stopLoss : price <= tpsl.stopLoss);
+
+    if (hitTP) {
       alert(`Take Profit triggered for ${symbol} at $${price.toFixed(2)}`);
       placeOrder({
         symbol,
         type: 'market',
-        side: 'sell',
-        quantity: position.quantity,
+        side: closeSide,
+        quantity: Math.abs(position.quantity),
         price,
       });
       setTpslSettings((prev) => {
@@ -242,13 +247,13 @@ function App() {
         next.delete(symbol);
         return next;
       });
-    } else if (tpsl.stopLoss && price <= tpsl.stopLoss) {
+    } else if (hitSL) {
       alert(`Stop Loss triggered for ${symbol} at $${price.toFixed(2)}`);
       placeOrder({
         symbol,
         type: 'market',
-        side: 'sell',
-        quantity: position.quantity,
+        side: closeSide,
+        quantity: Math.abs(position.quantity),
         price,
       });
       setTpslSettings((prev) => {
@@ -550,7 +555,7 @@ function App() {
   const showChartOnMobile = !isMobile || mobileView === 'chart';
 
   const closePosition = (sym: string, quantity: number, price: number) =>
-    placeOrder({ symbol: sym, type: 'market', side: 'sell', quantity, price });
+    placeOrder({ symbol: sym, type: 'market', side: quantity < 0 ? 'buy' : 'sell', quantity: Math.abs(quantity), price });
 
   const tabContent = (
     <>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { PaperTradingAccount, Order, Position, OptionContract } from '../types';
 import { bsPrice, yearsToExpiry } from '../utils/optionPricing';
 
@@ -76,6 +76,11 @@ export const usePaperTrading = () => {
     return loadSavedAccount();
   });
 
+  const accountRef = useRef(account);
+  useEffect(() => {
+    accountRef.current = account;
+  }, [account]);
+
   useEffect(() => {
     try {
       localStorage.setItem('paperTradingAccount', JSON.stringify(account));
@@ -84,68 +89,49 @@ export const usePaperTrading = () => {
     }
   }, [account]);
 
+  // Signed positions: quantity > 0 is long, < 0 is a short. Selling beyond what you own opens/extends a short.
   const executeMarketOrder = useCallback((prev: PaperTradingAccount, order: Order): { nextAccount: PaperTradingAccount; error?: string } => {
-    const cost = order.quantity * order.price;
+    const value = order.quantity * order.price;
+    const delta = order.side === 'buy' ? order.quantity : -order.quantity;
+    const existing = prev.positions.find((p) => p.symbol === order.symbol);
+    const held = existing?.quantity ?? 0;
+    const newQty = held + delta;
 
-    if (order.side === 'buy') {
-      if (cost > prev.balance) {
-        return { nextAccount: prev, error: 'Insufficient balance' };
+    if (order.side === 'buy' && value > prev.balance) {
+      return { nextAccount: prev, error: 'Insufficient balance' };
+    }
+    if (order.side === 'sell' && newQty < 0) {
+      // Opening or growing a short: keep the short exposure within available cash
+      const shortExposure = prev.positions
+        .filter((p) => p.quantity < 0 && p.symbol !== order.symbol)
+        .reduce((sum, p) => sum + Math.abs(p.quantity) * p.currentPrice, 0) + Math.abs(newQty) * order.price;
+      if (shortExposure > prev.balance + Math.max(held, 0) * order.price) {
+        return { nextAccount: prev, error: 'Not enough buying power to short that many shares' };
       }
-
-      const existingPosition = prev.positions.find((p) => p.symbol === order.symbol);
-      let newPositions: Position[];
-
-      if (existingPosition) {
-        const newQuantity = existingPosition.quantity + order.quantity;
-        const newAvgPrice =
-          (existingPosition.avgPrice * existingPosition.quantity + cost) / newQuantity;
-
-        newPositions = prev.positions.map((p) =>
-          p.symbol === order.symbol
-            ? { ...p, quantity: newQuantity, avgPrice: newAvgPrice }
-            : p
-        );
-      } else {
-        newPositions = [
-          ...prev.positions,
-          {
-            symbol: order.symbol,
-            quantity: order.quantity,
-            avgPrice: order.price,
-            currentPrice: order.price,
-            pnl: 0,
-            pnlPercent: 0,
-          },
-        ];
-      }
-
-      const next = {
-        ...prev,
-        balance: prev.balance - cost,
-        positions: newPositions,
-        orders: [...prev.orders, { ...order, status: 'filled' as const }],
-      };
-      return { nextAccount: recalculateAccountTotals(next) };
     }
 
-    const position = prev.positions.find((p) => p.symbol === order.symbol);
-    if (!position || position.quantity < order.quantity) {
-      return { nextAccount: prev, error: 'Insufficient shares' };
+    let newPositions: Position[];
+    if (newQty === 0) {
+      newPositions = prev.positions.filter((p) => p.symbol !== order.symbol);
+    } else if (!existing) {
+      newPositions = [
+        ...prev.positions,
+        { symbol: order.symbol, quantity: newQty, avgPrice: order.price, currentPrice: order.price, pnl: 0, pnlPercent: 0 },
+      ];
+    } else {
+      const sameDirection = Math.sign(held) === Math.sign(delta);
+      const crossed = Math.sign(newQty) !== Math.sign(held);
+      const avgPrice = sameDirection
+        ? (existing.avgPrice * Math.abs(held) + order.price * order.quantity) / Math.abs(newQty)
+        : crossed
+          ? order.price
+          : existing.avgPrice;
+      newPositions = prev.positions.map((p) => (p.symbol === order.symbol ? { ...p, quantity: newQty, avgPrice } : p));
     }
-
-    const newPositions = prev.positions
-      .map((p) => {
-        if (p.symbol === order.symbol) {
-          const newQuantity = p.quantity - order.quantity;
-          return newQuantity > 0 ? { ...p, quantity: newQuantity } : null;
-        }
-        return p;
-      })
-      .filter((p): p is Position => p !== null);
 
     const next = {
       ...prev,
-      balance: prev.balance + cost,
+      balance: order.side === 'buy' ? prev.balance - value : prev.balance + value,
       positions: newPositions,
       orders: [...prev.orders, { ...order, status: 'filled' as const }],
     };
@@ -174,15 +160,13 @@ export const usePaperTrading = () => {
     };
 
     if (newOrder.type === 'market') {
-      let error: string | undefined;
-      setAccount((prev) => {
-        const result = executeMarketOrder(prev, newOrder);
-        error = result.error;
-        return result.nextAccount;
-      });
-      if (error) {
-        alert(error);
+      const result = executeMarketOrder(accountRef.current, newOrder);
+      if (result.error) {
+        alert(result.error);
+        return;
       }
+      accountRef.current = result.nextAccount;
+      setAccount(result.nextAccount);
     } else {
       setAccount((prev) =>
         recalculateAccountTotals({
@@ -211,7 +195,7 @@ export const usePaperTrading = () => {
         positions: prev.positions.map((p) => {
           if (p.symbol === symbol) {
             const pnl = (currentPrice - p.avgPrice) * p.quantity;
-            const pnlPercent = ((currentPrice - p.avgPrice) / p.avgPrice) * 100;
+            const pnlPercent = ((currentPrice - p.avgPrice) / p.avgPrice) * 100 * Math.sign(p.quantity || 1);
             return { ...p, currentPrice, pnl, pnlPercent };
           }
           return p;
