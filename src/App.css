@@ -259,7 +259,8 @@
     width: 100%;
   }
 
-  .sidebar-content { overflow: visible; }
+  /* size to the content (a 0 flex-basis collapsed it and let the panels spill under the bottom bar) */
+  .sidebar-content { flex: none; overflow: visible; min-height: auto; }
 
   .sidebar-toggle-collapsed {
     display: none;
