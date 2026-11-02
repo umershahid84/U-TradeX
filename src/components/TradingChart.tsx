@@ -1544,15 +1544,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         />
       )}
 
-      <ChartLegend
-        items={legendItems}
-        allHidden={legendItems.length > 0 && legendItems.every((i) => i.hidden)}
-        onToggleAll={() => {
-          const ids = legendItems.map((i) => i.id);
-          const allHidden = legendItems.every((i) => i.hidden);
-          setHiddenIds((prev) => (allHidden ? prev.filter((x) => !ids.includes(x)) : [...new Set([...prev, ...ids])]));
-        }}
-      />
+      <ChartLegend items={legendItems} />
 
       {showIndicatorPanel && (
         <div className="indicator-panel" ref={indicatorPanelRef}>
