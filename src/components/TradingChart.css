@@ -393,3 +393,13 @@
 
 .alpha-lens { display: flex; gap: 6px; }
 .alpha-lens input { width: 54px; padding: 3px 4px; background: #0f1330; border: 1px solid #3a3e6f; border-radius: 3px; color: #e0e0e0; font-size: 12px; }
+
+/* Expanded chart: covers the whole window (also the fallback where native fullscreen is unavailable, e.g. iPhone) */
+.trading-chart-container.expanded {
+  position: fixed; inset: 0; z-index: 2000; width: 100vw; height: 100vh; height: 100dvh; max-height: none; min-height: 0;
+  background: #0a0e27;
+}
+.trading-chart-container.expanded[data-chart-theme="light"] { background: #ffffff; }
+.trading-chart-container:fullscreen { background: #0a0e27; }
+.trading-chart-container:fullscreen[data-chart-theme="light"] { background: #ffffff; }
+body.chart-expanded { overflow: hidden; }

@@ -150,6 +150,38 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const [ripsterTrend, setRipsterTrend] = useState<'bullish' | 'bearish' | 'neutral'>('neutral');
   const [showCustomPanel, setShowCustomPanel] = useState(false);
   const [showAlertsPanel, setShowAlertsPanel] = useState(false);
+  // Expand the chart to fill the screen: real fullscreen where the browser allows it, a full-window overlay otherwise
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const toggleExpanded = () => {
+    const next = !expanded;
+    setExpanded(next);
+    try {
+      if (next) void rootRef.current?.requestFullscreen?.().catch(() => undefined);
+      else if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    } catch {
+      /* overlay mode only */
+    }
+  };
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setExpanded(false);
+    };
+    // leaving native fullscreen (Esc or browser UI) collapses the overlay too
+    const onFs = () => {
+      if (!document.fullscreenElement) setExpanded(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('fullscreenchange', onFs);
+    document.body.classList.add('chart-expanded');
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('fullscreenchange', onFs);
+      document.body.classList.remove('chart-expanded');
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    };
+  }, [expanded]);
   // Chart type (candles, hollow, bars, Heikin Ashi, line, area) and light/dark background
   const [chartStyle, setChartStyle] = useState<ChartStyleSettings>(loadChartStyle);
   const [showStylePopover, setShowStylePopover] = useState(false);
@@ -1549,7 +1581,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   }, [customIndicators]);
 
   return (
-    <div className="trading-chart-container" data-chart-theme={chartStyle.theme}>
+    <div ref={rootRef} className={`trading-chart-container ${expanded ? 'expanded' : ''}`} data-chart-theme={chartStyle.theme}>
       <DrawingTools
         selectedTool={selectedTool}
         onToolSelect={handleToolSelect}
@@ -1599,6 +1631,14 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               onClick={() => setShowStylePopover(!showStylePopover)}
             >
               🎨 Style
+            </button>
+
+            <button
+              className="indicator-toggle expand-toggle"
+              onClick={toggleExpanded}
+              title={expanded ? 'Exit full screen (Esc)' : 'Expand chart to full screen'}
+            >
+              {expanded ? '⤡ Exit full screen' : '⤢ Expand'}
             </button>
             
             {clouds.some((i) => i.kind === 'ripster' && i.enabled && !isHidden(i.id) && isVisibleOn(i, chartMs) && i.clouds.some((c) => c.enabled)) && (
