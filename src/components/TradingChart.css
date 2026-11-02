@@ -403,3 +403,13 @@
 .trading-chart-container:fullscreen { background: #0a0e27; }
 .trading-chart-container:fullscreen[data-chart-theme="light"] { background: #ffffff; }
 body.chart-expanded { overflow: hidden; }
+
+.chart-expand-btn {
+  position: absolute; top: 8px; right: 78px; z-index: 7; width: 30px; height: 30px; display: flex; align-items: center;
+  justify-content: center; padding: 0; background: rgba(27,32,64,.85); color: #c8cbe8; border: 1px solid #3a3f66;
+  border-radius: 4px; cursor: pointer;
+}
+.chart-expand-btn:hover { background: #2962ff; color: #fff; border-color: #2962ff; }
+.trading-chart-container[data-chart-theme="light"] .chart-expand-btn { background: rgba(255,255,255,.9); color: #333; border-color: #c9ccd8; }
+.trading-chart-container[data-chart-theme="light"] .chart-expand-btn:hover { background: #2962ff; color: #fff; }
+@media (max-width: 900px) { .chart-expand-btn { right: 60px; width: 34px; height: 34px; } }

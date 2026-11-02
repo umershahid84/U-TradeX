@@ -1632,14 +1632,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             >
               🎨 Style
             </button>
-
-            <button
-              className="indicator-toggle expand-toggle"
-              onClick={toggleExpanded}
-              title={expanded ? 'Exit full screen (Esc)' : 'Expand chart to full screen'}
-            >
-              {expanded ? '⤡ Exit full screen' : '⤢ Expand'}
-            </button>
             
             {clouds.some((i) => i.kind === 'ripster' && i.enabled && !isHidden(i.id) && isVisibleOn(i, chartMs) && i.clouds.some((c) => c.enabled)) && (
               <div className={`trend-indicator trend-${ripsterTrend}`}>
@@ -1882,6 +1874,32 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       )}
       
       <div ref={chartContainerRef} className={`chart ${alertArmed ? 'alert-cursor' : ''}`} />
+      <button
+        type="button"
+        className="chart-expand-btn"
+        onClick={toggleExpanded}
+        title={expanded ? 'Exit full screen (Esc)' : 'Expand chart to full screen'}
+        aria-label={expanded ? 'Exit full screen' : 'Expand chart to full screen'}
+      >
+        {/* four arrows at 90°: pointing out to expand, pointing in to collapse */}
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          {expanded ? (
+            <>
+              <path d="M12 2v7M8.5 6 12 9.5 15.5 6" />
+              <path d="M12 22v-7M8.5 18 12 14.5l3.5 3.5" />
+              <path d="M2 12h7M6 8.5 9.5 12 6 15.5" />
+              <path d="M22 12h-7M18 8.5 14.5 12l3.5 3.5" />
+            </>
+          ) : (
+            <>
+              <path d="M12 12V2M8.5 5.5 12 2l3.5 3.5" />
+              <path d="M12 12v10M8.5 18.5 12 22l3.5-3.5" />
+              <path d="M12 12H2M5.5 8.5 2 12l3.5 3.5" />
+              <path d="M12 12h10M18.5 8.5 22 12l-3.5 3.5" />
+            </>
+          )}
+        </svg>
+      </button>
       <PositionOverlay
         chartRef={chartRef}
         seriesRef={candleSeriesRef}
