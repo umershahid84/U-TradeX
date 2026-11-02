@@ -110,6 +110,15 @@ export const usePaperTrading = () => {
       }
     }
 
+    // closing against an existing position locks in profit; record it on the fill (for P&L cards)
+    let entryPrice: number | undefined;
+    let realizedPnl: number | undefined;
+    if (existing && Math.sign(held) !== Math.sign(delta)) {
+      const closed = Math.min(Math.abs(held), order.quantity);
+      entryPrice = existing.avgPrice;
+      realizedPnl = (order.price - existing.avgPrice) * closed * Math.sign(held);
+    }
+
     let newPositions: Position[];
     if (newQty === 0) {
       newPositions = prev.positions.filter((p) => p.symbol !== order.symbol);
@@ -133,7 +142,7 @@ export const usePaperTrading = () => {
       ...prev,
       balance: order.side === 'buy' ? prev.balance - value : prev.balance + value,
       positions: newPositions,
-      orders: [...prev.orders, { ...order, status: 'filled' as const }],
+      orders: [...prev.orders, { ...order, status: 'filled' as const, entryPrice, realizedPnl }],
     };
     return { nextAccount: recalculateAccountTotals(next) };
   }, []);
@@ -285,6 +294,22 @@ export const usePaperTrading = () => {
     const next = recalculateAccountTotals({
       ...prev,
       balance: prev.balance + proceeds,
+      orders: [
+        ...prev.orders,
+        {
+          id: generateOrderId(),
+          symbol: held.symbol,
+          type: 'market' as const,
+          side: 'sell' as const,
+          quantity,
+          price: premium,
+          status: 'filled' as const,
+          timestamp: Date.now(),
+          entryPrice: held.premium,
+          realizedPnl: (premium - held.premium) * quantity * 100,
+          option: { type: held.type, strike: held.strike, expiry: held.expiry },
+        },
+      ],
       options:
         remaining > 0
           ? prev.options.map((o, i) => (i === index ? { ...o, quantity: remaining } : o))

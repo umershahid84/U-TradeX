@@ -18,6 +18,11 @@ export interface Order {
   takeProfit?: number;
   stopLoss?: number;
   trailing?: TrailingStop;
+  /** Set on fills that close (part of) a position: the entry it closed against and the profit locked in */
+  entryPrice?: number;
+  realizedPnl?: number;
+  /** Present when this record is the sale of an option contract (symbol is the underlying, prices are per share) */
+  option?: { type: 'call' | 'put'; strike: number; expiry: string };
 }
 
 /** A stop that follows the price: it only ever moves in the profitable direction */

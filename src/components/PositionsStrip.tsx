@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { PnLCardDialog } from './PnLCardDialog';
+import { PnLCardData } from '../utils/pnlCard';
+import { dayCard, optionCard, orderCard, positionCard } from '../utils/pnlCardData';
 import { PaperTradingAccount, Order } from '../types';
 import './PositionsStrip.css';
 
@@ -23,6 +26,7 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
   account, open, onToggle, onSelectSymbol, onClosePosition, onCancelOrder, onSellOption,
 }) => {
   const [tab, setTab] = useState<Tab>('positions');
+  const [card, setCard] = useState<PnLCardData | null>(null);
 
   const optionRows = account.options.map((o) => {
     const cost = o.premium * o.quantity * 100;
@@ -69,7 +73,11 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
             </span>
           )}
         </button>
+        <button type="button" className="ps-daily" onClick={() => setCard(dayCard(account))} title="Shareable card with today's P&L">
+          📊 Daily P&amp;L card
+        </button>
       </div>
+      {card && <PnLCardDialog data={card} onClose={() => setCard(null)} />}
 
       {open && (
         <div className="ps-body">
@@ -91,6 +99,7 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
                       <td className={p.pnl >= 0 ? 'up' : 'down'}>{signedMoney(p.pnl)}</td>
                       <td className={p.pnl >= 0 ? 'up' : 'down'}>{pct(p.pnlPercent)}</td>
                       <td>
+                        <button type="button" className="ps-action" title="P&L card to download or share" onClick={() => setCard(positionCard(p))}>📤</button>{' '}
                         <button type="button" className="ps-action" onClick={() => onClosePosition(p.symbol, p.quantity, p.currentPrice)}>
                           Close
                         </button>
@@ -125,6 +134,7 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
                         {signedMoney(pnl)} <small>({pct(cost > 0 ? (pnl / cost) * 100 : 0)})</small>
                       </td>
                       <td className="ps-sell-cell">
+                        <button type="button" className="ps-action" title="P&L card to download or share" onClick={() => setCard(optionCard(o))}>📤</button>{' '}
                         {o.quantity > 1 && (
                           <button type="button" className="ps-action" title="Sell one contract at its estimated value" onClick={() => onSellOption(i, 1)}>Sell 1</button>
                         )}{' '}
@@ -151,13 +161,16 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
                   {orders.map((o) => (
                     <tr key={o.id}>
                       <td>{new Date(o.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</td>
-                      <td><button type="button" className="ps-link" onClick={() => onSelectSymbol(o.symbol)}>{o.symbol}</button></td>
+                      <td><button type="button" className="ps-link" onClick={() => onSelectSymbol(o.symbol)}>{o.symbol}</button>{o.option ? ` ${o.option.type.toUpperCase()} $${o.option.strike}` : ''}</td>
                       <td className={o.side === 'buy' ? 'up' : 'down'}>{o.side.toUpperCase()}</td>
                       <td>{o.type}</td>
                       <td>{o.quantity}</td>
                       <td>{money(o.price)}</td>
                       <td><span className={`ps-status ${o.status}`}>{o.status}</span></td>
                       <td>
+                        {orderCard(o, account.positions, account.orders) && (
+                          <button type="button" className="ps-action" title="P&L card to download or share" onClick={() => setCard(orderCard(o, account.positions, account.orders))}>📤</button>
+                        )}{' '}
                         {o.status === 'pending' && (
                           <button type="button" className="ps-action" onClick={() => onCancelOrder(o.id)}>Cancel</button>
                         )}
