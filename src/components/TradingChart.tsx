@@ -54,6 +54,7 @@ interface TradingChartProps {
   tpsl?: TakeProfitStopLoss;
   onSetLevel: (kind: 'takeProfit' | 'stopLoss', price?: number) => void;
   onClosePosition: (quantity: number) => void;
+  onToggleTrail: () => void;
   onReversePosition: () => void;
   onAddAlert: (price: number) => void;
   onMoveAlert: (id: string, price: number) => void;
@@ -106,6 +107,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   tpsl,
   onSetLevel,
   onClosePosition,
+  onToggleTrail,
   onReversePosition,
   onAddAlert,
   onMoveAlert,
@@ -1158,7 +1160,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     if (tpsl?.stopLoss) {
       levelLinesRef.current.push({
         id: 'stopLoss',
-        line: series.createPriceLine({ price: tpsl.stopLoss, color: '#ef5350', lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: `🛑 SL ${pl(tpsl.stopLoss)}` }),
+        line: series.createPriceLine({ price: tpsl.stopLoss, color: '#ef5350', lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: `🛑 ${tpsl.trailing ? 'TRAIL ' : 'SL '}${pl(tpsl.stopLoss)}` }),
       });
     }
   }, [position, position?.quantity, position?.avgPrice, tpsl?.takeProfit, tpsl?.stopLoss, symbol]);
@@ -1908,6 +1910,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         tpsl={tpsl}
         onSetLevel={onSetLevel}
         onClose={onClosePosition}
+        onToggleTrail={onToggleTrail}
         onReverse={onReversePosition}
       />
 

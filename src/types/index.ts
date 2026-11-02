@@ -14,6 +14,16 @@ export interface Order {
   price: number;
   status: 'pending' | 'filled' | 'cancelled';
   timestamp: number;
+  /** Bracket levels carried by a limit order; they become the position's TP/SL when it fills */
+  takeProfit?: number;
+  stopLoss?: number;
+  trailing?: TrailingStop;
+}
+
+/** A stop that follows the price: it only ever moves in the profitable direction */
+export interface TrailingStop {
+  type: 'percent' | 'amount';
+  value: number;
 }
 
 export interface Position {
@@ -53,6 +63,8 @@ export interface TakeProfitStopLoss {
   symbol: string;
   takeProfit?: number;
   stopLoss?: number;
+  /** When set, stopLoss trails the price by this distance */
+  trailing?: TrailingStop;
 }
 
 export interface FearGreedData {

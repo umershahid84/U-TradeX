@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { Order } from '../types';
+import { Order, TrailingStop } from '../types';
 import './TradingPanel.css';
 
 interface TradingPanelProps {
   symbol: string;
   currentPrice: number;
   balance: number;
-  onPlaceOrder: (order: Omit<Order, 'id' | 'status' | 'timestamp'>, takeProfit?: number, stopLoss?: number) => void;
+  onPlaceOrder: (order: Omit<Order, 'id' | 'status' | 'timestamp'>, takeProfit?: number, stopLoss?: number, trailing?: TrailingStop) => void;
 }
 
 export const TradingPanel: React.FC<TradingPanelProps> = ({
@@ -20,6 +20,7 @@ export const TradingPanel: React.FC<TradingPanelProps> = ({
   const [quantity, setQuantity] = useState<string>('1');
   const [tp, setTp] = useState<string>('');
   const [sl, setSl] = useState<string>('');
+  const [trail, setTrail] = useState<string>('');
   const [limitPrice, setLimitPrice] = useState<string>(currentPrice.toFixed(2));
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -43,11 +44,13 @@ export const TradingPanel: React.FC<TradingPanelProps> = ({
       side,
       quantity: qty,
       price,
-    }, parseFloat(tp) > 0 ? parseFloat(tp) : undefined, parseFloat(sl) > 0 ? parseFloat(sl) : undefined);
+    }, parseFloat(tp) > 0 ? parseFloat(tp) : undefined, parseFloat(sl) > 0 ? parseFloat(sl) : undefined,
+      parseFloat(trail) > 0 ? { type: 'percent', value: parseFloat(trail) } : undefined);
 
     setQuantity('1');
     setTp('');
     setSl('');
+    setTrail('');
   };
 
   const estimatedCost = parseFloat(quantity) * (orderType === 'market' ? currentPrice : parseFloat(limitPrice) || 0);
@@ -116,15 +119,14 @@ export const TradingPanel: React.FC<TradingPanelProps> = ({
           </div>
         )}
 
-        {orderType === 'market' && (
-          <div className="form-group">
-            <label>🎯 Take profit / 🛑 Stop loss (optional, closes the position automatically)</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input type="number" min="0" step="0.01" placeholder="Take profit" value={tp} onChange={(e) => setTp(e.target.value)} />
-              <input type="number" min="0" step="0.01" placeholder="Stop loss" value={sl} onChange={(e) => setSl(e.target.value)} />
-            </div>
+        <div className="form-group">
+          <label>🎯 Take profit / 🛑 Stop loss / ⟲ Trailing % (optional, close the position automatically{orderType === 'limit' ? ' once the limit order fills' : ''})</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input type="number" min="0" step="0.01" placeholder="Take profit" value={tp} onChange={(e) => setTp(e.target.value)} />
+            <input type="number" min="0" step="0.01" placeholder="Stop loss" value={sl} onChange={(e) => setSl(e.target.value)} />
+            <input type="number" min="0" step="0.1" placeholder="Trail %" value={trail} onChange={(e) => setTrail(e.target.value)} />
           </div>
-        )}
+        </div>
 
         <div className="order-summary">
           <div className="summary-row">

@@ -24,7 +24,7 @@ import {
   calculateSMA,
   calculateRSI,
 } from './utils/indicators';
-import { TimeFrame, TimeRange, ChartData, FearGreedData, MarketFearGreed, TakeProfitStopLoss, Order } from './types';
+import { TimeFrame, TimeRange, ChartData, FearGreedData, MarketFearGreed, TakeProfitStopLoss, Order, TrailingStop } from './types';
 import './App.css';
 
 const marketData = RealMarketDataService.getInstance();
@@ -198,6 +198,7 @@ function App() {
     updatePositionPrices,
     buyOption,
     sellOption,
+    fillPendingOrders,
   } = usePaperTrading();
 
   const { alerts, toasts, pushToast, addAlert, moveAlert, removeAlert, clearTriggered, check: checkAlerts, dismissToast } = usePriceAlerts();
@@ -246,13 +247,25 @@ function App() {
   };
 
   const checkTPSL = useCallback((symbol: string, price: number) => {
-    const tpsl = tpslRef.current.get(symbol);
+    let tpsl = tpslRef.current.get(symbol);
     if (!tpsl) return;
 
     const position = account.positions.find((p) => p.symbol === symbol);
     if (!position) return;
 
     const short = position.quantity < 0;
+
+    // Trailing stop: pull the stop along behind the price, never back the other way
+    if (tpsl.trailing) {
+      const dist = tpsl.trailing.type === 'percent' ? (price * tpsl.trailing.value) / 100 : tpsl.trailing.value;
+      const candidate = Math.round((short ? price + dist : price - dist) * 100) / 100;
+      const cur = tpsl.stopLoss;
+      if (cur === undefined || (short ? candidate < cur : candidate > cur)) {
+        const trailed = { ...tpsl, stopLoss: candidate };
+        updateTpsl((m) => m.set(symbol, trailed));
+        tpsl = trailed;
+      }
+    }
     const hitTP = !!tpsl.takeProfit && (short ? price <= tpsl.takeProfit : price >= tpsl.takeProfit);
     const hitSL = !!tpsl.stopLoss && (short ? price >= tpsl.stopLoss : price <= tpsl.stopLoss);
     if (!hitTP && !hitSL) return;
@@ -268,6 +281,19 @@ function App() {
       price,
     });
   }, [account.positions, placeOrder, updateTpsl]);
+
+  // Every price tick: fill limit orders that were reached (arming their TP/SL / trailing stop), then check the exits
+  const onTick = useCallback((sym: string, price: number) => {
+    fillPendingOrders(sym, price).forEach((o) => {
+      pushToast(`Limit ${o.side} filled`, `${o.quantity} ${o.symbol} @ $${o.price.toFixed(2)}`, o.symbol);
+      if (o.takeProfit !== undefined || o.stopLoss !== undefined || o.trailing) {
+        updateTpsl((m) =>
+          m.set(o.symbol, { symbol: o.symbol, takeProfit: o.takeProfit, stopLoss: o.stopLoss, trailing: o.trailing })
+        );
+      }
+    });
+    checkTPSL(sym, price);
+  }, [fillPendingOrders, checkTPSL, updateTpsl, pushToast]);
 
   // Levels belong to an open position: forget them once it is closed
   useEffect(() => {
@@ -359,18 +385,19 @@ function App() {
       updatePositionPrices(symbol, price);
 
       // Check TP/SL
-      checkTPSL(symbol, price);
+      onTick(symbol, price);
       checkAlertsRef.current(symbol, price);
     }, includeAfterHours);
 
     return unsubscribe;
-  }, [symbol, timeframe, updatePositionPrices, includeAfterHours, checkTPSL]);
+  }, [symbol, timeframe, updatePositionPrices, includeAfterHours, onTick]);
 
   // Subscribe to price updates for every other symbol we hold stock or options in.
   // Keyed by the symbol list (not the account objects, which change on every tick).
   const heldSymbols = [...new Set([
     ...account.positions.map((p) => p.symbol),
     ...account.options.map((o) => o.symbol),
+    ...account.orders.filter((o) => o.status === 'pending' && o.type === 'limit').map((o) => o.symbol),
   ])].filter((s) => s !== symbol).sort().join(',');
 
   useEffect(() => {
@@ -378,14 +405,14 @@ function App() {
     const unsubscribers = heldSymbols.split(',').map((held) =>
       marketData.subscribeToPrice(held, (price) => {
         updatePositionPrices(held, price);
-        checkTPSL(held, price);
+        onTick(held, price);
       })
     );
 
     return () => {
       unsubscribers.forEach(unsub => unsub());
     };
-  }, [heldSymbols, updatePositionPrices, checkTPSL]);
+  }, [heldSymbols, updatePositionPrices, onTick]);
 
   // Alerts on symbols other than the charted one: check them with a batched quote every 10s
   const otherAlertSymbols = [...new Set(
@@ -568,20 +595,46 @@ function App() {
   const showChartOnMobile = !isMobile || mobileView === 'chart';
 
   // Market/limit order that can carry take-profit and stop-loss levels (TradingView-style bracket)
-  const placeOrderWithLevels = (order: Omit<Order, 'id' | 'status' | 'timestamp'>, tp?: number, sl?: number) => {
+  const placeOrderWithLevels = (order: Omit<Order, 'id' | 'status' | 'timestamp'>, tp?: number, sl?: number, trail?: TrailingStop) => {
     const long = order.side === 'buy';
+    // A trailing stop starts at its distance from the entry and then follows the price
+    const dist = trail ? (trail.type === 'percent' ? (order.price * trail.value) / 100 : trail.value) : 0;
+    const stop = sl ?? (trail ? Math.round((long ? order.price - dist : order.price + dist) * 100) / 100 : undefined);
     if (tp !== undefined && (long ? tp <= order.price : tp >= order.price)) {
       alert(`Take profit must be ${long ? 'above' : 'below'} the entry price for a ${long ? 'long' : 'short'}`);
       return;
     }
-    if (sl !== undefined && (long ? sl >= order.price : sl <= order.price)) {
+    if (stop !== undefined && (long ? stop >= order.price : stop <= order.price)) {
       alert(`Stop loss must be ${long ? 'below' : 'above'} the entry price for a ${long ? 'long' : 'short'}`);
       return;
     }
-    placeOrder(order);
-    if (order.type === 'market' && (tp !== undefined || sl !== undefined)) {
-      updateTpsl((m) => m.set(order.symbol, { symbol: order.symbol, takeProfit: tp, stopLoss: sl }));
+    if (order.type === 'limit') {
+      // the levels ride along with the order and arm when it fills
+      placeOrder({ ...order, takeProfit: tp, stopLoss: stop, trailing: trail });
+      return;
     }
+    placeOrder(order);
+    if (tp !== undefined || stop !== undefined) {
+      updateTpsl((m) => m.set(order.symbol, { symbol: order.symbol, takeProfit: tp, stopLoss: stop, trailing: trail }));
+    }
+  };
+
+  // Turn trailing on for the open position (keeping the current stop distance) or off
+  const toggleTrail = () => {
+    const pos = account.positions.find((p) => p.symbol === symbol);
+    if (!pos) return;
+    updateTpsl((m) => {
+      const cur = m.get(symbol) ?? { symbol };
+      if (cur.trailing) {
+        m.set(symbol, { ...cur, trailing: undefined });
+        return;
+      }
+      const px = currentPrice || pos.currentPrice;
+      const gap = cur.stopLoss ? Math.abs(px - cur.stopLoss) : px * 0.01;
+      const dist = Math.max(0.01, Math.round(gap * 100) / 100);
+      const short = pos.quantity < 0;
+      m.set(symbol, { ...cur, stopLoss: cur.stopLoss ?? Math.round((short ? px + dist : px - dist) * 100) / 100, trailing: { type: 'amount', value: dist } });
+    });
   };
 
   const setLevel = (sym: string, kind: 'takeProfit' | 'stopLoss', price?: number) =>
@@ -710,6 +763,7 @@ function App() {
               position={account.positions.find((p) => p.symbol === symbol)}
               tpsl={tpslSettings.get(symbol)}
               onSetLevel={(kind, price) => setLevel(symbol, kind, price)}
+              onToggleTrail={toggleTrail}
               onClosePosition={(qty) => {
                 const pos = account.positions.find((p) => p.symbol === symbol);
                 if (pos) closePosition(symbol, pos.quantity < 0 ? -qty : qty, currentPrice || pos.currentPrice);

@@ -11,6 +11,7 @@ interface Props {
   tpsl?: TakeProfitStopLoss;
   onSetLevel: (kind: 'takeProfit' | 'stopLoss', price?: number) => void;
   onClose: (quantity: number) => void;
+  onToggleTrail: () => void;
   onReverse: () => void;
 }
 
@@ -20,7 +21,7 @@ const money = (v: number) => `${v >= 0 ? '+' : '-'}$${Math.abs(v).toLocaleString
  * TradingView-style position controls drawn on the chart next to the position's price lines:
  * a live P&L pill with close / half / reverse and add TP / SL, plus a close (✕) pill on the TP and SL lines.
  */
-export const PositionOverlay: React.FC<Props> = ({ chartRef, seriesRef, hostRef, position, tpsl, onSetLevel, onClose, onReverse }) => {
+export const PositionOverlay: React.FC<Props> = ({ chartRef, seriesRef, hostRef, position, tpsl, onSetLevel, onClose, onToggleTrail, onReverse }) => {
   const [ys, setYs] = useState<{ entry?: number; tp?: number; sl?: number }>({});
   const last = useRef('');
   const [dragging, setDragging] = useState<'takeProfit' | 'stopLoss' | null>(null);
@@ -119,7 +120,8 @@ export const PositionOverlay: React.FC<Props> = ({ chartRef, seriesRef, hostRef,
       )}
       {ys.sl !== undefined && tpsl?.stopLoss && (
         <div className={`pos-pill sl draggable ${dragging === 'stopLoss' ? 'dragging' : ''}`} style={{ top: ys.sl }} onPointerDown={startDrag('stopLoss')} title="Drag up or down to move">
-          <span>⋮⋮ SL {money(slPnl)}</span>
+          <span>⋮⋮ {tpsl.trailing ? 'TRAIL' : 'SL'} {money(slPnl)}</span>
+          <button type="button" className={tpsl.trailing ? 'on' : ''} title={tpsl.trailing ? 'Stop trailing' : 'Make this a trailing stop (follows the price)'} onClick={onToggleTrail}>⟲ Trail</button>
           <button type="button" className="close" title="Cancel stop loss" onClick={() => onSetLevel('stopLoss', undefined)}>✕</button>
         </div>
       )}

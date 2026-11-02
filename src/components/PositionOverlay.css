@@ -23,3 +23,5 @@
 .pos-pill.draggable { cursor: ns-resize; touch-action: none; user-select: none; }
 .pos-pill.draggable > span { cursor: ns-resize; }
 .pos-pill.dragging { box-shadow: 0 0 0 2px rgba(41,98,255,.6), 0 2px 8px rgba(0,0,0,.4); }
+
+.pos-pill button.on { background: #ff9800; color: #1b1b1b; }

@@ -242,6 +242,31 @@ export const usePaperTrading = () => {
     }
   }, []);
 
+  // Fill resting limit orders for a symbol once the price reaches them (buy at or below, sell at or above).
+  // Returns the orders that filled so the caller can arm their take-profit / stop-loss.
+  const fillPendingOrders = useCallback((symbol: string, price: number): Order[] => {
+    const due = accountRef.current.orders.filter(
+      (o) => o.status === 'pending' && o.type === 'limit' && o.symbol === symbol && (o.side === 'buy' ? price <= o.price : price >= o.price)
+    );
+    if (!due.length) return [];
+    const filled: Order[] = [];
+    let acc = accountRef.current;
+    for (const order of due) {
+      const without = { ...acc, orders: acc.orders.filter((o) => o.id !== order.id) };
+      const result = executeMarketOrder(without, { ...order, status: 'filled' });
+      if (result.error) {
+        // can no longer be paid for / covered: cancel it rather than leave it hanging
+        acc = { ...acc, orders: acc.orders.map((o) => (o.id === order.id ? { ...o, status: 'cancelled' as const } : o)) };
+      } else {
+        acc = result.nextAccount;
+        filled.push(order);
+      }
+    }
+    accountRef.current = acc;
+    setAccount(acc);
+    return filled;
+  }, [executeMarketOrder]);
+
   // Sell (close) some or all contracts of a held option at its current estimated value
   const sellOption = useCallback((index: number, quantity: number) => {
     const held = accountRef.current.options[index];
@@ -277,5 +302,6 @@ export const usePaperTrading = () => {
     updatePositionPrices,
     buyOption,
     sellOption,
+    fillPendingOrders,
   };
 };

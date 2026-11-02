@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Order } from '../types';
+import { Order, TrailingStop } from '../types';
 import './QuickTrade.css';
 
 interface QuickTradeProps {
   symbol: string;
   currentPrice: number;
-  onPlaceOrder: (order: Omit<Order, 'id' | 'status' | 'timestamp'>, takeProfit?: number, stopLoss?: number) => void;
+  onPlaceOrder: (order: Omit<Order, 'id' | 'status' | 'timestamp'>, takeProfit?: number, stopLoss?: number, trailing?: TrailingStop) => void;
 }
 
 /** Always-visible market buy/sell at the bottom of the sidebar. Limit orders live in the Trade tab. */
@@ -13,6 +13,7 @@ export const QuickTrade: React.FC<QuickTradeProps> = ({ symbol, currentPrice, on
   const [quantity, setQuantity] = useState('1');
   const [tp, setTp] = useState('');
   const [sl, setSl] = useState('');
+  const [trail, setTrail] = useState('');
   const qty = parseInt(quantity);
   const valid = Number.isFinite(qty) && qty > 0 && currentPrice > 0;
 
@@ -23,8 +24,10 @@ export const QuickTrade: React.FC<QuickTradeProps> = ({ symbol, currentPrice, on
     onPlaceOrder(
       { symbol, type: 'market', side, quantity: qty, price: currentPrice },
       Number.isFinite(tpv) && tpv > 0 ? tpv : undefined,
-      Number.isFinite(slv) && slv > 0 ? slv : undefined
+      Number.isFinite(slv) && slv > 0 ? slv : undefined,
+      parseFloat(trail) > 0 ? { type: 'percent', value: parseFloat(trail) } : undefined
     );
+    setTrail('');
     setTp('');
     setSl('');
   };
@@ -54,6 +57,10 @@ export const QuickTrade: React.FC<QuickTradeProps> = ({ symbol, currentPrice, on
         <label>
           🛑 Stop loss
           <input type="number" min="0" step="0.01" placeholder="optional" value={sl} onChange={(e) => setSl(e.target.value)} aria-label="Stop loss price" />
+        </label>
+        <label>
+          ⟲ Trailing stop %
+          <input type="number" min="0" step="0.1" placeholder="optional" value={trail} onChange={(e) => setTrail(e.target.value)} aria-label="Trailing stop percent" />
         </label>
       </div>
       <div className="qt-buttons">
