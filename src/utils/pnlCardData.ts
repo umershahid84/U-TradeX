@@ -18,8 +18,8 @@ export const positionCard = (p: Position): PnLCardData => {
     pnlPct: p.pnlPercent,
     dateLabel: dateLabel(),
     rows: [
-      { label: 'Entry', value: money(p.avgPrice) },
-      { label: 'Current', value: money(p.currentPrice) },
+      { label: 'Avg price', value: money(p.avgPrice) },
+      { label: 'Current price', value: money(p.currentPrice) },
       { label: 'Quantity', value: String(qty) },
       { label: 'Position value', value: money(qty * p.currentPrice), money: true },
     ],
@@ -38,8 +38,8 @@ export const optionCard = (o: OptionContract): PnLCardData => {
     pnlPct: cost > 0 ? ((value - cost) / cost) * 100 : null,
     dateLabel: dateLabel(),
     rows: [
-      { label: 'Paid / share', value: money(o.premium) },
-      { label: 'Est. value / share', value: money(o.currentPremium ?? o.premium) },
+      { label: 'Avg price / share', value: money(o.premium) },
+      { label: 'Current price / share', value: money(o.currentPremium ?? o.premium) },
       { label: 'Contracts', value: String(o.quantity) },
       { label: 'Cost', value: money(cost), money: true },
     ],
@@ -63,10 +63,11 @@ export const orderCard = (o: Order, positions: Position[], allOrders: Order[]): 
       pnlPct: pct,
       dateLabel: dateLabel(o.timestamp),
       rows: [
-        { label: 'Entry', value: money(o.entryPrice) },
-        { label: 'Exit', value: money(o.price) },
+        { label: 'Avg price', value: money(o.entryPrice) },
+        { label: 'Closed price', value: money(o.price) },
         { label: o.option ? 'Contracts' : 'Quantity', value: String(o.quantity) },
         { label: 'Closed', value: timeLabel(o.timestamp) },
+        { label: 'Realized P&L', value: signed(o.realizedPnl), money: true },
       ],
     };
   }
@@ -88,8 +89,8 @@ export const orderCard = (o: Order, positions: Position[], allOrders: Order[]): 
     pnlPct: o.price > 0 ? ((pos.currentPrice - o.price) / o.price) * 100 * dir : null,
     dateLabel: dateLabel(o.timestamp),
     rows: [
-      { label: 'Entry', value: money(o.price) },
-      { label: 'Current', value: money(pos.currentPrice) },
+      { label: 'Avg price', value: money(o.price) },
+      { label: 'Current price', value: money(pos.currentPrice) },
       { label: 'Quantity', value: String(o.quantity) },
       { label: 'Opened', value: timeLabel(o.timestamp) },
     ],
@@ -112,10 +113,11 @@ export const closedTradeCard = (t: ClosedTrade): PnLCardData => ({
   pnlPct: t.pnlPct,
   dateLabel: dateLabel(t.closedAt),
   rows: [
-    { label: t.option ? 'Entry / share' : 'Entry', value: money(t.entryPrice) },
-    { label: t.option ? 'Exit / share' : 'Exit', value: money(t.exitPrice) },
+    { label: t.option ? 'Avg price / share' : 'Avg price', value: money(t.entryPrice) },
+    { label: t.option ? 'Closed price / share' : 'Closed price', value: money(t.exitPrice) },
     { label: t.option ? 'Contracts' : 'Quantity', value: String(t.quantity) },
     t.openedAt ? { label: 'Held', value: heldFor(t.openedAt, t.closedAt) } : { label: 'Closed', value: timeLabel(t.closedAt) },
+    { label: 'Realized P&L', value: signed(t.pnl), money: true },
   ],
 });
 

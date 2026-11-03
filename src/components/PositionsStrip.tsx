@@ -93,7 +93,7 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
             ) : (
               <table className="ps-table">
                 <thead>
-                  <tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>Last</th><th>P&amp;L</th><th>%</th><th /></tr>
+                  <tr><th>Symbol</th><th>Qty</th><th>Avg price</th><th>Current price</th><th>P&amp;L</th><th>%</th><th /></tr>
                 </thead>
                 <tbody>
                   {account.positions.map((p) => (
@@ -123,7 +123,7 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
             ) : (
               <table className="ps-table">
                 <thead>
-                  <tr><th>Contract</th><th>Expiry</th><th>Qty</th><th>Paid</th><th>Est. value</th><th>P&amp;L</th><th /></tr>
+                  <tr><th>Contract</th><th>Expiry</th><th>Qty</th><th>Avg price</th><th>Current price</th><th>Paid</th><th>Est. value</th><th>P&amp;L</th><th /></tr>
                 </thead>
                 <tbody>
                   {optionRows.map(({ o, cost, value, pnl }, i) => (
@@ -134,6 +134,8 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
                       </td>
                       <td>{o.expiry}</td>
                       <td>{o.quantity}</td>
+                      <td>{money(o.premium)}</td>
+                      <td>{money(o.currentPremium ?? o.premium)}</td>
                       <td>{money(cost)}</td>
                       <td>{money(value)}</td>
                       <td className={pnl >= 0 ? 'up' : 'down'}>
@@ -167,7 +169,7 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
                 </div>
                 <table className="ps-table">
                   <thead>
-                    <tr><th>Symbol</th><th>Side</th><th>Qty</th><th>Entry</th><th>Exit</th><th>P&amp;L</th><th>%</th><th>Closed</th><th /></tr>
+                    <tr><th>Symbol</th><th>Side</th><th>Qty</th><th>Avg price</th><th>Closed price</th><th>Realized P&amp;L</th><th>%</th><th>Closed</th><th /></tr>
                   </thead>
                   <tbody>
                     {history.map((t) => (
