@@ -1,9 +1,0 @@
-name = "u-tradex"
-main = "worker/index.ts"
-compatibility_date = "2025-06-01"
-
-# The built site; only /api/* runs the Worker, everything else is served straight from dist/
-[assets]
-directory = "./dist"
-binding = "ASSETS"
-run_worker_first = ["/api/*"]
