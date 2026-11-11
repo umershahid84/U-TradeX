@@ -4,20 +4,15 @@
 
 U-TradeX is a comprehensive trading platform designed for charting and paper trading with advanced features similar to TradingView.
 
-## Important Note on Real-Time Data
+## Market Data
 
-This platform attempts to fetch **real-time market data** from Yahoo Finance API. Due to browser CORS (Cross-Origin Resource Sharing) restrictions, the API calls may be blocked in certain environments. 
+Prices, charts, options chains and the Fear & Greed index come from Yahoo Finance (via `yahoo-finance2`) and CNN. Browsers cannot call Yahoo directly, so the app has a small server-side API under `/api/*` (`api/_lib/market.ts`):
 
-**How it works:**
-1. First attempts direct API call to Yahoo Finance
-2. If blocked by CORS, attempts to use a CORS proxy (https://corsproxy.io)
-3. If both fail, falls back to realistic simulated data
+- **Vercel**: the files in `api/` run as serverless functions.
+- **Cloudflare**: `worker/index.ts` serves `/api/*` and the built site from `dist/` (see `wrangler.toml`).
+- **Local dev**: `npm run dev` serves the same handlers through Vite.
 
-**For production use:**
-- Deploy the application on a web server with a backend proxy
-- Use environment without strict CORS policies
-- Consider using a paid API service with proper CORS support
-- The application will automatically display real prices when API access is available
+If the API cannot reach Yahoo, the app keeps showing the last real price and an error; it never invents prices.
 
 ## Features
 
@@ -414,7 +409,15 @@ All your paper trading data is stored locally in your browser:
    vercel --prod
    ```
 
-#### Option 2: Netlify
+#### Option 2: Cloudflare (Workers with static assets)
+1. In the Cloudflare dashboard: Workers & Pages → Create → Import a repository, and pick this repo.
+2. Production branch `main`, build command `npm run build`, deploy command `npx wrangler deploy`.
+3. Nothing else is needed: `wrangler.toml` points at `worker/index.ts` (the `/api/*` handlers) and serves `dist/` as static assets.
+4. Check it: open `https://<your-site>/api/quote?symbol=AAPL`. A price means the API works.
+
+Local test: `npm run build && npx wrangler dev`.
+
+#### Option 3: Netlify
 1. Install Netlify CLI:
    ```bash
    npm install -g netlify-cli
@@ -425,7 +428,7 @@ All your paper trading data is stored locally in your browser:
    netlify deploy --prod --dir=dist
    ```
 
-#### Option 3: GitHub Pages
+#### Option 4: GitHub Pages
 1. Install gh-pages:
    ```bash
    npm install --save-dev gh-pages
