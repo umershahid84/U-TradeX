@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { OptionContract, ChartData } from '../types';
 import { OptionsDirectionGuide } from './OptionsDirectionGuide';
 import { OptionPnlEstimate } from './OptionPnlEstimate';
@@ -58,10 +58,15 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
   const [error, setError] = useState('');
 
   const marketData = RealMarketDataService.getInstance();
+  // reasons chain requests failed, to show instead of a generic message
+  const loadErrors = useRef<string[]>([]);
 
   const loadChain = useCallback(
     async (expiry: string): Promise<ExpiryChain | null> => {
-      const result = await marketData.fetchOptionsChain(symbol, expiry);
+      const result = await marketData.fetchOptionsChain(symbol, expiry).catch((e: unknown) => {
+        loadErrors.current.push(e instanceof Error ? e.message : String(e));
+        return [];
+      });
       if (!result.length) return null;
       return { expiry, calls: result[0].calls || [], puts: result[0].puts || [] };
     },
@@ -78,8 +83,15 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
 
     const run = async (initial: boolean) => {
       if (initial) setLoading(true);
+      loadErrors.current = [];
       try {
-        const dates = await marketData.getOptionExpirations(symbol);
+        let dates: string[];
+        try {
+          dates = await marketData.getOptionExpirations(symbol);
+        } catch (e) {
+          if (!cancelled) setError(`Could not load options for ${symbol}: ${e instanceof Error ? e.message : String(e)}`);
+          return;
+        }
         if (cancelled) return;
         if (!dates.length) {
           setError(`No options are listed for ${symbol}`);
@@ -99,7 +111,7 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
         if (cancelled) return;
         const next: Record<string, ExpiryChain> = {};
         loaded.forEach((c) => { if (c) next[c.expiry] = c; });
-        if (!Object.keys(next).length) setError('Could not load the options chain. Try again shortly.');
+        if (!Object.keys(next).length) setError(`Could not load the options chain${loadErrors.current[0] ? `: ${loadErrors.current[0]}` : '. Try again shortly.'}`);
         else setError('');
         setChains((prev) => ({ ...prev, ...next }));
       } finally {

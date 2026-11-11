@@ -1,7 +1,7 @@
 // Market data handlers shared by the Vercel serverless functions (api/*.ts), the Cloudflare Worker
 // (worker/index.ts) and the Vite dev server (see vite.config.ts). Backed by a small fetch-based Yahoo
 // client (yahoo.ts) that runs server-side, without the browser's CORS limits.
-import { yf } from './yahoo';
+import { yf, diagnose } from './yahoo';
 
 export interface ApiResult {
   status: number;
@@ -333,6 +333,7 @@ const routes: Record<string, (q: Query) => Promise<ApiResult>> = {
   quote,
   options,
   'options/expirations': optionExpirations,
+  health: async () => ({ status: 200, body: { time: new Date().toISOString(), yahoo: await diagnose() } }),
 };
 
 export async function route(path: string, query: Query): Promise<ApiResult> {

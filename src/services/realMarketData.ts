@@ -182,28 +182,19 @@ export class RealMarketDataService {
 
   // Fetch real options chain data
   async fetchOptionsChain(symbol: string, expirationDate?: string): Promise<OptionChain[]> {
-    try {
-      const params: Record<string, string> = { symbol: this.normalizeSymbol(symbol) };
-      if (expirationDate) params.date = expirationDate;
-      const data = await this.apiGet<{ chains: OptionChain[] }>('options', params);
-      return data.chains ?? [];
-    } catch (error) {
-      console.error('Error fetching options chain:', error);
-      return [];
-    }
+    // errors propagate so the options panel can show why (rather than an empty list)
+    const params: Record<string, string> = { symbol: this.normalizeSymbol(symbol) };
+    if (expirationDate) params.date = expirationDate;
+    const data = await this.apiGet<{ chains: OptionChain[] }>('options', params);
+    return data.chains ?? [];
   }
 
   // Get available expiration dates for options
   async getOptionExpirations(symbol: string): Promise<string[]> {
-    try {
-      const data = await this.apiGet<{ expirations: string[] }>('options/expirations', {
-        symbol: this.normalizeSymbol(symbol),
-      });
-      return data.expirations ?? [];
-    } catch (error) {
-      console.error('Error fetching expiration dates:', error);
-      return [];
-    }
+    const data = await this.apiGet<{ expirations: string[] }>('options/expirations', {
+      symbol: this.normalizeSymbol(symbol),
+    });
+    return data.expirations ?? [];
   }
 
   // Subscribe to real-time price updates (polling-based for free API)
