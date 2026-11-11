@@ -107,14 +107,18 @@ async function quote(q: Query): Promise<ApiResult> {
     return fail(502, `Yahoo request failed for ${symbol}: ${errMessage(e)}`);
   }
 
-  // regularMarketPrice only reflects the regular session; use the extended-hours
-  // price when the market is in (or after) that phase and the user asked for it.
+  // regularMarketPrice only reflects the regular session. With extended hours on, use whichever of the
+  // regular / pre-market / after-hours prices was traded most recently (Yahoo reports the 8 pm to 4 am gap
+  // as "PREPRE", where the latest price is still the evening's after-hours one).
+  const ms = (v: unknown) => (v instanceof Date ? v.getTime() : typeof v === 'number' ? v : typeof v === 'string' ? Date.parse(v) : 0) || 0;
   let price = r?.regularMarketPrice;
   if (prepost) {
-    if (r?.marketState === 'PRE' && r.preMarketPrice) price = r.preMarketPrice;
-    else if (['POST', 'POSTPOST', 'CLOSED'].includes(r?.marketState) && r.postMarketPrice) {
-      price = r.postMarketPrice;
+    let latest = ms(r?.regularMarketTime);
+    if (r?.preMarketPrice && ms(r?.preMarketTime) > latest) {
+      price = r.preMarketPrice;
+      latest = ms(r.preMarketTime);
     }
+    if (r?.postMarketPrice && ms(r?.postMarketTime) > latest) price = r.postMarketPrice;
   }
   if (!price || price <= 0) return fail(404, `No live price for ${symbol}`);
 

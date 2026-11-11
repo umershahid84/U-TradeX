@@ -43,8 +43,8 @@ const SessionMoves = ({ quote }: { quote: QuoteDetails | null }) => {
   // Pre-market belongs to the day ahead, after-hours to the day just finished: show only the live one
   const visible = rows.filter((r) => {
     if (r.price == null) return false;
-    if (r.key === 'pre') return quote.marketState === 'PRE' || quote.marketState === 'PREPRE';
-    if (r.key === 'post') return quote.marketState !== 'REGULAR' && quote.marketState !== 'PRE' && quote.marketState !== 'PREPRE';
+    if (r.key === 'pre') return quote.marketState === 'PRE';
+    if (r.key === 'post') return quote.marketState !== 'REGULAR' && quote.marketState !== 'PRE';
     return true;
   });
   return (
