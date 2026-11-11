@@ -10,7 +10,8 @@ import {
   CandlestickSeries,
   LineSeries,
   AreaSeries,
-  BarSeries
+  BarSeries,
+  PriceScaleMode
 } from 'lightweight-charts';
 import { ChartData, TimeFrame, CustomIndicator, CustomIndicatorStatus, PriceAlert, Position, TakeProfitStopLoss } from '../types';
 import { AlertsPanel } from './AlertsPanel';
@@ -155,6 +156,16 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   // Expand the chart to fill the screen: real fullscreen where the browser allows it, a full-window overlay otherwise
   const rootRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
+  // TradingView-style price scale buttons: A = auto-fit the price scale, L = logarithmic scale
+  const [autoScale, setAutoScale] = useState(true);
+  const [logScale, setLogScale] = useState(() => {
+    try {
+      return localStorage.getItem('logScale') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [axisBottom, setAxisBottom] = useState(0);
   const toggleExpanded = () => {
     const next = !expanded;
     setExpanded(next);
@@ -623,6 +634,43 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       series.setData(bars.map((d) => ({ time: (d.time / 1000) as Time, value: d.close })));
     }
   };
+
+  // Price scale mode (A / L buttons). Dragging the price axis switches auto-scale off, so read it back.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    chart.priceScale('right').applyOptions({
+      autoScale,
+      mode: logScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
+    });
+    try {
+      localStorage.setItem('logScale', String(logScale));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [autoScale, logScale]);
+
+  useEffect(() => {
+    const el = chartContainerRef.current;
+    if (!el) return;
+    const sync = () => {
+      const chart = chartRef.current;
+      if (chart) setAutoScale(chart.priceScale('right').options().autoScale);
+    };
+    // after the chart has handled the gesture (axis drag, wheel zoom, double-click reset)
+    const later = () => setTimeout(sync, 0);
+    const events = ['mouseup', 'touchend', 'wheel', 'dblclick'] as const;
+    events.forEach((e) => el.addEventListener(e, later, { passive: true }));
+    // keep the buttons just above the time axis, under the price scale
+    const place = () => setAxisBottom(el.offsetTop + el.clientHeight);
+    place();
+    const ro = new ResizeObserver(place);
+    ro.observe(el);
+    return () => {
+      events.forEach((e) => el.removeEventListener(e, later));
+      ro.disconnect();
+    };
+  }, []);
 
   // Apply the theme and chart type to the chart and its series
   useEffect(() => {
@@ -1902,6 +1950,28 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           )}
         </svg>
       </button>
+      {axisBottom > 0 && (
+        <div className="scale-buttons" style={{ top: axisBottom - 27 }}>
+          <button
+            type="button"
+            className={autoScale ? 'on' : ''}
+            title={autoScale ? 'Auto-fit price scale is on (click to turn off)' : 'Auto-fit the price scale to the visible candles'}
+            aria-pressed={autoScale}
+            onClick={() => setAutoScale((v) => !v)}
+          >
+            A
+          </button>
+          <button
+            type="button"
+            className={logScale ? 'on' : ''}
+            title={logScale ? 'Logarithmic scale is on (click to turn off)' : 'Logarithmic price scale'}
+            aria-pressed={logScale}
+            onClick={() => setLogScale((v) => !v)}
+          >
+            L
+          </button>
+        </div>
+      )}
       <PositionOverlay
         chartRef={chartRef}
         seriesRef={candleSeriesRef}
