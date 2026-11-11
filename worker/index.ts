@@ -12,7 +12,13 @@ export default {
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     if (request.method !== 'GET') return new Response('Method not allowed', { status: 405 });
 
-    const result = await route(url.pathname.replace(/^\/api\//, ''), Object.fromEntries(url.searchParams));
+    let result: Awaited<ReturnType<typeof route>>;
+    try {
+      result = await route(url.pathname.replace(/^\/api\//, ''), Object.fromEntries(url.searchParams));
+    } catch (e) {
+      // always answer with JSON so the app can show the real reason instead of "server unreachable"
+      result = { status: 500, body: { error: `API error: ${e instanceof Error ? e.message : String(e)}` } };
+    }
     const cache =
       result.status === 200 && result.cacheSeconds
         ? `public, max-age=${result.cacheSeconds}, s-maxage=${result.cacheSeconds}, stale-while-revalidate=${result.cacheSeconds * 2}`
