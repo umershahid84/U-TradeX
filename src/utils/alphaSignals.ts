@@ -19,7 +19,7 @@ export interface AlphaOptions {
   dashboard: boolean;
 }
 
-export const DEFAULT_ALPHA: AlphaOptions = { enabled: false, fast: 9, slow: 34, labels: true, dashboard: true };
+export const DEFAULT_ALPHA: AlphaOptions = { enabled: false, fast: 9, slow: 34, labels: true, dashboard: false };
 
 export interface AlphaLabel {
   idx: number;

@@ -7,3 +7,13 @@
 .ad-trend { font-weight: 700; }
 .ad-note { padding: 3px; font-size: 9px; color: #7a7e9f; }
 @media (max-width: 900px) { .alpha-dash { position: relative; top: auto; right: auto; width: auto; margin: 0 8px 8px; } }
+
+/* the HUD opens below its toggle button */
+.alpha-dash { top: 44px; }
+.alpha-hud-btn {
+  position: absolute; top: 8px; right: 118px; z-index: 9; height: 30px; padding: 0 10px; font-size: 12px; font-weight: 700;
+  background: rgba(27, 32, 64, .85); color: #c8cbe8; border: 1px solid #3a3f66; border-radius: 4px; cursor: pointer;
+}
+.alpha-hud-btn:hover { background: #2962ff; border-color: #2962ff; color: #fff; }
+.alpha-hud-btn.on { background: #2962ff; border-color: #2962ff; color: #fff; }
+@media (max-width: 900px) { .alpha-dash { top: auto; } .alpha-hud-btn { right: 96px; height: 34px; } }

@@ -209,7 +209,14 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const [alpha, setAlpha] = useState<AlphaOptions>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('alphaSignals') ?? 'null');
-      if (saved && typeof saved.enabled === 'boolean') return { ...DEFAULT_ALPHA, ...saved };
+      if (saved && typeof saved.enabled === 'boolean') {
+        // the HUD now starts hidden and is opened from the chart: reset it once for existing users
+        if (localStorage.getItem('alphaHudHidden') !== '1') {
+          localStorage.setItem('alphaHudHidden', '1');
+          return { ...DEFAULT_ALPHA, ...saved, dashboard: false };
+        }
+        return { ...DEFAULT_ALPHA, ...saved };
+      }
     } catch {
       /* defaults */
     }
@@ -1720,7 +1727,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               </label>
               <label className={alpha.enabled ? '' : 'sub-off'}>
                 <input type="checkbox" checked={alpha.dashboard} disabled={!alpha.enabled} onChange={() => setAlpha((a) => ({ ...a, dashboard: !a.dashboard }))} />
-                Dashboard
+                HUD (open it from the chart)
               </label>
               <label className={`cloud-tf ${alpha.enabled ? '' : 'sub-off'}`}>
                 <span>Fast / slow line</span>
@@ -1984,6 +1991,17 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         onReverse={onReversePosition}
       />
 
+      {alphaShown && (
+        <button
+          type="button"
+          className={`alpha-hud-btn ${alpha.dashboard ? 'on' : ''}`}
+          title={alpha.dashboard ? 'Hide the Alpha Signals HUD' : 'Show the Alpha Signals HUD'}
+          aria-pressed={alpha.dashboard}
+          onClick={() => setAlpha((a) => ({ ...a, dashboard: !a.dashboard }))}
+        >
+          α HUD
+        </button>
+      )}
       {alphaShown && alpha.dashboard && (
         <AlphaDashboard dash={alphaResult?.dashboard ?? null} decimals={(data[data.length - 1]?.close ?? 100) < 10 ? 4 : 2} />
       )}
