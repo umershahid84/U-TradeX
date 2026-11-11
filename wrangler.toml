@@ -1,0 +1,5 @@
+name = "u-tradex"
+pages_build_output_dir = "dist"
+compatibility_date = "2025-06-01"
+# yahoo-finance2 uses a few Node APIs
+compatibility_flags = ["nodejs_compat"]
