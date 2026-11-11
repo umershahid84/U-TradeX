@@ -1,10 +1,7 @@
-// Market data handlers shared by the Vercel serverless functions (api/*.ts) and the
-// Vite dev server (see vite.config.ts). Backed by yahoo-finance2, which performs the
-// cookie/crumb handshake Yahoo requires and works server-side without CORS limits.
-import YahooFinanceModule from 'yahoo-finance2';
-
-const YahooFinance: any = (YahooFinanceModule as any).default ?? YahooFinanceModule;
-const yf = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
+// Market data handlers shared by the Vercel serverless functions (api/*.ts), the Cloudflare Worker
+// (worker/index.ts) and the Vite dev server (see vite.config.ts). Backed by a small fetch-based Yahoo
+// client (yahoo.ts) that runs server-side, without the browser's CORS limits.
+import { yf } from './yahoo';
 
 export interface ApiResult {
   status: number;
@@ -152,7 +149,7 @@ async function quotes(q: Query): Promise<ApiResult> {
 
   let list: any[];
   try {
-    list = (await yf.quote(symbols, {}, { validateResult: false })) as any[];
+    list = (await yf.quote(symbols)) as any[];
   } catch (e) {
     return fail(502, `Yahoo request failed: ${errMessage(e)}`);
   }

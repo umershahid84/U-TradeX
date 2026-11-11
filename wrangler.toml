@@ -1,8 +1,6 @@
 name = "u-tradex"
 main = "worker/index.ts"
 compatibility_date = "2025-06-01"
-# yahoo-finance2 uses a few Node APIs
-compatibility_flags = ["nodejs_compat"]
 
 # The built site; only /api/* runs the Worker, everything else is served straight from dist/
 [assets]
