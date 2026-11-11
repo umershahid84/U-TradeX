@@ -39,12 +39,14 @@ const SessionMoves = ({ quote }: { quote: QuoteDetails | null }) => {
     { key: 'reg', label: quote.marketState === 'REGULAR' ? 'Market' : 'At close', icon: '', price: quote.regularPrice, change: quote.regularChange, pct: quote.regularChangePercent, color: SESSION_COLOR.regular },
     { key: 'pre', label: 'Pre-market', icon: '☀', price: quote.preMarketPrice, change: quote.preMarketChange, pct: quote.preMarketChangePercent, color: SESSION_COLOR.pre },
     { key: 'post', label: 'After hours', icon: '🌙', price: quote.postMarketPrice, change: quote.postMarketChange, pct: quote.postMarketChangePercent, color: SESSION_COLOR.post },
+    { key: 'night', label: 'Overnight', icon: '🌌', price: quote.overnightPrice ?? null, change: quote.overnightChange ?? null, pct: quote.overnightChangePercent ?? null, color: SESSION_COLOR.overnight },
   ];
   // Pre-market belongs to the day ahead, after-hours to the day just finished: show only the live one
   const visible = rows.filter((r) => {
     if (r.price == null) return false;
     if (r.key === 'pre') return quote.marketState === 'PRE';
     if (r.key === 'post') return quote.marketState !== 'REGULAR' && quote.marketState !== 'PRE';
+    if (r.key === 'night') return quote.marketState === 'OVERNIGHT';
     return true;
   });
   return (
@@ -745,7 +747,7 @@ function App() {
                 <div className={`connection-status ${connectionStatus}`}>
                   <span className="status-dot"></span>
                   <span className="status-text">
-                    {connectionStatus === 'connected' ? 'Live' :
+                    {connectionStatus === 'connected' ? `Live${quoteDetails?.source ? ` · ${quoteDetails.source === 'moomoo' ? 'Moomoo' : 'Yahoo'}` : ''}` :
                      connectionStatus === 'connecting' ? 'Connecting...' :
                      `Disconnected${dataError ? ` - ${dataError}` : ''}`}
                   </span>

@@ -174,7 +174,9 @@ export const Watchlist: React.FC<WatchlistProps> = ({ activeSymbol, onSelect }) 
             const up = (q?.changePercent ?? 0) >= 0;
             const ext =
               q && q.marketState !== 'REGULAR'
-                ? q.marketState.startsWith('PRE') && q.preMarketPrice !== null
+                ? q.marketState === 'OVERNIGHT' && q.overnightPrice != null
+                  ? { label: 'ON', price: q.overnightPrice, pct: q.overnightChangePercent ?? null }
+                  : q.marketState.startsWith('PRE') && q.preMarketPrice !== null
                   ? { label: 'Pre', price: q.preMarketPrice, pct: q.preMarketChangePercent }
                   : q.postMarketPrice !== null
                     ? { label: 'AH', price: q.postMarketPrice, pct: q.postMarketChangePercent }

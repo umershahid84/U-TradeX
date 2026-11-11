@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.1.2",
+    "moomoo-api": "^10.12.7208",
     "vite": "^7.3.0"
   }
 }

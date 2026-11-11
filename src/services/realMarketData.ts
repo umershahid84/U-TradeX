@@ -29,6 +29,12 @@ export interface QuoteDetails {
   postMarketPrice: number | null;
   postMarketChange: number | null;
   postMarketChangePercent: number | null;
+  /** Overnight session (8 pm to 4 am ET); only provided by the Moomoo feed */
+  overnightPrice?: number | null;
+  overnightChange?: number | null;
+  overnightChangePercent?: number | null;
+  /** Where the quote came from */
+  source?: 'moomoo' | 'yahoo';
 }
 
 export interface WatchQuote {
@@ -42,6 +48,9 @@ export interface WatchQuote {
   preMarketChangePercent: number | null;
   postMarketPrice: number | null;
   postMarketChangePercent: number | null;
+  overnightPrice?: number | null;
+  overnightChangePercent?: number | null;
+  source?: 'moomoo' | 'yahoo';
 }
 
 export interface OptionChain {
