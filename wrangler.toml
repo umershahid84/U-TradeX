@@ -1,5 +1,11 @@
 name = "u-tradex"
-pages_build_output_dir = "dist"
+main = "worker/index.ts"
 compatibility_date = "2025-06-01"
 # yahoo-finance2 uses a few Node APIs
 compatibility_flags = ["nodejs_compat"]
+
+# The built site; only /api/* runs the Worker, everything else is served straight from dist/
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+run_worker_first = ["/api/*"]
