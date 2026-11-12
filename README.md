@@ -24,7 +24,7 @@ When you run the app on your own computer (`npm run dev`) it can use your Moomoo
 Notes:
 - **No real trading, ever.** The connection can only send quote requests (connect, keep-alive, subscribe, basic quote, candles). Every trade command is refused before it is sent, and the app's orders stay paper orders. OpenD holds your login; the app never stores credentials.
 - **Moomoo only (default):** quotes, the watchlist and the live price come only from Moomoo. If Moomoo cannot serve them (OpenD stopped, no quote rights) the header says **Disconnected** with the reason instead of quietly showing delayed Yahoo prices. Set `MOOMOO_ONLY=false` to allow the Yahoo fallback.
-- **What it covers:** US stocks and ETFs, plus the S&P 500, Dow, Nasdaq and VIX indices. The latest candles on the 1m, 5m, 15m, 30m and 1h charts also come from Moomoo and are laid over Yahoo's history. Older history, options chains, futures and the Fear & Greed index still come from Yahoo/CNN.
+- **What it covers:** US stocks and ETFs, plus the S&P 500, Dow, Nasdaq and VIX indices. The latest candles on the 1m, 5m, 15m, 30m and 1h charts also come from Moomoo and are laid over Yahoo's history. **Options** (expirations, chains with bid / ask / last / volume / open interest / IV, and the live value of contracts you hold) come from Moomoo too, for US stocks and ETFs. Older candle history, futures and the Fear & Greed index still come from Yahoo/CNN.
 - **Needs quote rights:** the US quote permission on your account (LV1) and a free subscription slot per symbol and candle type (the app uses at most 60).
 - **RSA encryption:** leave OpenD's RSA encryption off; the app does not use it.
 - **Status:** open `http://localhost:3000/api/moomoo-status` to see whether OpenD is connected and why not.

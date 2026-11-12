@@ -198,6 +198,25 @@ export class RealMarketDataService {
     return data.chains ?? [];
   }
 
+  private optionQuotesSupported = true;
+
+  /** Live marks for held contracts ("SYMBOL|YYYY-MM-DD|strike|call"). Empty when the feed has no option quotes. */
+  async getOptionQuotes(contracts: string[]): Promise<{ key: string; mark: number; bid: number; ask: number; last: number }[]> {
+    if (!this.optionQuotesSupported || !contracts.length) return [];
+    try {
+      const data = await this.apiGet<{ quotes: { key: string; mark: number; bid: number; ask: number; last: number }[] }>(
+        'optionquotes',
+        { contracts: contracts.join(',') },
+        8000
+      );
+      return data.quotes ?? [];
+    } catch (error) {
+      // servers without an option quote feed (e.g. the deployed site) answer "Unknown endpoint": stop asking
+      if (error instanceof Error && /Unknown endpoint/i.test(error.message)) this.optionQuotesSupported = false;
+      return [];
+    }
+  }
+
   // Get available expiration dates for options
   async getOptionExpirations(symbol: string): Promise<string[]> {
     const data = await this.apiGet<{ expirations: string[] }>('options/expirations', {

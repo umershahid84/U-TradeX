@@ -256,15 +256,30 @@ export const usePaperTrading = () => {
           }
           return p;
         }),
-        // Re-estimate open option contracts on this underlying with Black-Scholes
+        // Re-estimate open option contracts on this underlying with Black-Scholes, unless a real quote is fresh
         options: prev.options.map((o) =>
-          o.symbol === symbol && (o.impliedVolatility ?? 0) >= 0.05
+          o.symbol === symbol && (o.impliedVolatility ?? 0) >= 0.05 && !(o.quotedAt && Date.now() - o.quotedAt < 30_000)
             ? {
                 ...o,
                 currentPremium: bsPrice(o.type, currentPrice, o.strike, o.impliedVolatility ?? 0, yearsToExpiry(o.expiry)),
               }
             : o
         ),
+      })
+    );
+  }, []);
+
+  // Real option marks (from the quote feed) replace the model estimate for the contracts they match
+  const setOptionPremiums = useCallback((updates: { key: string; mark: number }[]) => {
+    if (!updates.length) return;
+    const by = new Map(updates.map((u) => [u.key, u.mark]));
+    setAccount((prev) =>
+      recalculateAccountTotals({
+        ...prev,
+        options: prev.options.map((o) => {
+          const mark = by.get(`${o.symbol}|${o.expiry}|${o.strike}|${o.type}`);
+          return mark != null && mark > 0 ? { ...o, currentPremium: mark, quotedAt: Date.now() } : o;
+        }),
       })
     );
   }, []);
@@ -391,6 +406,7 @@ export const usePaperTrading = () => {
     updatePositionPrices,
     buyOption,
     sellOption,
+    setOptionPremiums,
     clearClosedTrades,
     fillPendingOrders,
   };

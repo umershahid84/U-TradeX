@@ -200,6 +200,7 @@ function App() {
     updatePositionPrices,
     buyOption,
     sellOption,
+    setOptionPremiums,
     clearClosedTrades,
     fillPendingOrders,
   } = usePaperTrading();
@@ -420,6 +421,23 @@ function App() {
       unsubscribers.forEach(unsub => unsub());
     };
   }, [heldSymbols, updatePositionPrices, onTick]);
+
+  // Real marks for the option contracts you hold, when the feed offers them (Moomoo); otherwise the model estimate stays
+  const heldContracts = account.options.map((o) => `${o.symbol}|${o.expiry}|${o.strike}|${o.type}`).join(',');
+  useEffect(() => {
+    if (!heldContracts) return;
+    let cancelled = false;
+    const poll = async () => {
+      const quotes = await marketData.getOptionQuotes(heldContracts.split(','));
+      if (!cancelled && quotes.length) setOptionPremiums(quotes);
+    };
+    void poll();
+    const id = setInterval(() => void poll(), 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [heldContracts, setOptionPremiums]);
 
   // Alerts on symbols other than the charted one: check them with a batched quote every 10s
   const otherAlertSymbols = [...new Set(

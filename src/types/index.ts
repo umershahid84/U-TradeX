@@ -69,6 +69,8 @@ export interface OptionContract {
   impliedVolatility?: number;
   /** Latest estimated value per share; falls back to the purchase premium */
   currentPremium?: number;
+  /** When currentPremium last came from a real quote (otherwise it is a model estimate) */
+  quotedAt?: number;
   openedAt?: number;
 }
 

@@ -21,9 +21,12 @@ export const CMD = {
   SUB: 3001,
   GET_BASIC_QOT: 3004,
   GET_KL: 3006,
+  GET_SNAPSHOT: 3203,
+  GET_OPTION_CHAIN: 3209,
+  GET_OPTION_EXPIRATION: 3224,
 } as const;
 
-// connect/keep-alive plus three market-data requests (subscribe, basic quote, candles)
+// connect/keep-alive plus market-data requests only (subscribe, quotes, candles, snapshots, option expirations and chains)
 export const ALLOWED_CMDS: ReadonlySet<number> = new Set(Object.values(CMD));
 
 export interface QuoteTransport {
@@ -34,6 +37,9 @@ export interface QuoteTransport {
   Sub(req: unknown): Promise<any>;
   GetBasicQot(req: unknown): Promise<any>;
   GetKL(req: unknown): Promise<any>;
+  GetSecuritySnapshot(req: unknown): Promise<any>;
+  GetOptionChain(req: unknown): Promise<any>;
+  GetOptionExpirationDate(req: unknown): Promise<any>;
   close(): void;
 }
 
@@ -157,6 +163,9 @@ export class TcpTransport implements QuoteTransport {
       [CMD.SUB]: 'Qot_Sub',
       [CMD.GET_BASIC_QOT]: 'Qot_GetBasicQot',
       [CMD.GET_KL]: 'Qot_GetKL',
+      [CMD.GET_SNAPSHOT]: 'Qot_GetSecuritySnapshot',
+      [CMD.GET_OPTION_CHAIN]: 'Qot_GetOptionChain',
+      [CMD.GET_OPTION_EXPIRATION]: 'Qot_GetOptionExpirationDate',
     };
     return names[cmd];
   }
@@ -202,6 +211,15 @@ export class TcpTransport implements QuoteTransport {
   }
   GetKL(req: unknown) {
     return this.rpc(CMD.GET_KL, 'Qot_GetKL', req);
+  }
+  GetSecuritySnapshot(req: unknown) {
+    return this.rpc(CMD.GET_SNAPSHOT, 'Qot_GetSecuritySnapshot', req);
+  }
+  GetOptionChain(req: unknown) {
+    return this.rpc(CMD.GET_OPTION_CHAIN, 'Qot_GetOptionChain', req);
+  }
+  GetOptionExpirationDate(req: unknown) {
+    return this.rpc(CMD.GET_OPTION_EXPIRATION, 'Qot_GetOptionExpirationDate', req);
   }
 
   close() {
@@ -265,6 +283,15 @@ export class WsTransport implements QuoteTransport {
   }
   GetKL(req: unknown) {
     return this.ws.GetKL(req);
+  }
+  GetSecuritySnapshot(req: unknown) {
+    return this.ws.GetSecuritySnapshot(req);
+  }
+  GetOptionChain(req: unknown) {
+    return this.ws.GetOptionChain(req);
+  }
+  GetOptionExpirationDate(req: unknown) {
+    return this.ws.GetOptionExpirationDate(req);
   }
   close() {
     try {
