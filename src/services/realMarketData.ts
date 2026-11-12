@@ -210,10 +210,13 @@ export class RealMarketDataService {
   subscribeToPrice(
     symbol: string,
     callback: (price: number) => void,
-    includePrePost: boolean = false
+    includePrePost: boolean = false,
+    // reports the feed going down (after 3 failures in a row) and coming back
+    onStatus?: (ok: boolean, message?: string) => void
   ): () => void {
     let isActive = true;
     let inFlight = false;
+    let failures = 0;
 
     const pollPrice = async () => {
       if (!isActive || inFlight) {
@@ -222,12 +225,16 @@ export class RealMarketDataService {
       inFlight = true;
       try {
         const price = await this.getCurrentPrice(symbol, includePrePost);
+        failures = 0;
+        if (isActive) onStatus?.(true);
         if (isActive && price > 0) {
           callback(price);
         }
       } catch (error) {
         // Keep the last real price on screen; just retry on the next tick
         console.warn(`Live price fetch failed for ${symbol}`, error);
+        failures += 1;
+        if (isActive && failures >= 3) onStatus?.(false, error instanceof Error ? error.message : String(error));
       } finally {
         inFlight = false;
       }

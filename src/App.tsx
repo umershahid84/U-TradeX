@@ -390,7 +390,11 @@ function App() {
       // Check TP/SL
       onTick(symbol, price);
       checkAlertsRef.current(symbol, price);
-    }, includeAfterHours);
+    }, includeAfterHours, (ok, message) => {
+      // a price feed that stops answering must not keep showing "Live"
+      setConnectionStatus(ok ? 'connected' : 'disconnected');
+      setDataError(ok ? '' : message ?? '');
+    });
 
     return unsubscribe;
   }, [symbol, timeframe, updatePositionPrices, includeAfterHours, onTick]);

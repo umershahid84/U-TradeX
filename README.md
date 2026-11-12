@@ -13,20 +13,22 @@ Prices, charts, options chains and the Fear & Greed index come from Yahoo Financ
 
 If the API cannot reach Yahoo, the app keeps showing the last real price and an error; it never invents prices.
 
-## Live quotes from your Moomoo account (local only, read-only)
+## Live data from your Moomoo account (local only, read-only)
 
-When you run the app on your own computer (`npm run dev`) it can use your Moomoo account for live prices, including the **overnight** session (8 pm to 4 am ET) that Yahoo does not publish. It is off by default and never part of the Vercel deployment.
+When you run the app on your own computer (`npm run dev`) it can use your Moomoo account for real-time prices, including the **overnight** session (8 pm to 4 am ET) that Yahoo does not publish and Yahoo's delayed data. It is off by default and never part of the Vercel deployment.
 
-1. Install and log in to Moomoo **OpenD** on this computer.
-2. In OpenD's settings, turn on the **WebSocket** port (default `33333`). If you set a WebSocket key there, you will need it below. The exact menu wording varies by OpenD version.
-3. Copy `.env.example` to `.env.local` and set `MOOMOO_ENABLED=true` (and `MOOMOO_PORT` / `MOOMOO_KEY` if yours differ).
-4. Run `npm run dev`. The header shows **Live · Moomoo** when quotes come from Moomoo and **Live · Yahoo** when they fall back.
+1. Install **Moomoo OpenD**, start it and log in. Nothing else needs changing in OpenD: the app uses its normal API port, `11111`.
+2. Copy `.env.example` to `.env.local` (it already has `MOOMOO_ENABLED=true` and port `11111`).
+3. Run `npm run dev`. The terminal prints a `[moomoo] live data from OpenD at 127.0.0.1:11111 via tcp` line, and the header shows **Live · Moomoo**.
 
 Notes:
-- **No real trading, ever.** The Moomoo connection can only send three quote commands (connect, subscribe, basic quote). Every trade command is refused before it is sent, and the app's orders stay paper orders. Credentials are never stored by the app: OpenD holds your login.
-- **What it covers:** US stocks and ETFs. Indices, futures, charts' history and options chains still come from Yahoo. Live prices, the pre-market / after-hours / overnight moves and the watchlist use Moomoo.
-- **Needs quote rights:** the US quote permission on your account (LV1) and a free subscription slot per symbol (the app uses at most 60). Symbols Moomoo will not serve fall back to Yahoo automatically, as does everything if OpenD is not running.
+- **No real trading, ever.** The connection can only send quote requests (connect, keep-alive, subscribe, basic quote, candles). Every trade command is refused before it is sent, and the app's orders stay paper orders. OpenD holds your login; the app never stores credentials.
+- **Moomoo only (default):** quotes, the watchlist and the live price come only from Moomoo. If Moomoo cannot serve them (OpenD stopped, no quote rights) the header says **Disconnected** with the reason instead of quietly showing delayed Yahoo prices. Set `MOOMOO_ONLY=false` to allow the Yahoo fallback.
+- **What it covers:** US stocks and ETFs, plus the S&P 500, Dow, Nasdaq and VIX indices. The latest candles on the 1m, 5m, 15m, 30m and 1h charts also come from Moomoo and are laid over Yahoo's history. Older history, options chains, futures and the Fear & Greed index still come from Yahoo/CNN.
+- **Needs quote rights:** the US quote permission on your account (LV1) and a free subscription slot per symbol and candle type (the app uses at most 60).
+- **RSA encryption:** leave OpenD's RSA encryption off; the app does not use it.
 - **Status:** open `http://localhost:3000/api/moomoo-status` to see whether OpenD is connected and why not.
+- **Using the WebSocket port instead:** set `MOOMOO_PROTOCOL=ws`, `MOOMOO_PORT=33333` (and `MOOMOO_KEY` if you set one). OpenD's WebSocket port must be enabled in its settings first.
 
 ## Features
 

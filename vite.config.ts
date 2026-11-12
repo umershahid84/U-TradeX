@@ -27,12 +27,16 @@ export default defineConfig(({ mode }) => {
   if (env.MOOMOO_ENABLED === 'true') {
     const cfg: MoomooConfig = {
       host: env.MOOMOO_HOST || '127.0.0.1',
-      port: Number(env.MOOMOO_PORT) || 33333,
+      protocol: env.MOOMOO_PROTOCOL === 'ws' ? 'ws' : 'tcp',
+      // OpenD's API port is 11111; its separate WebSocket port (default 33333) is only for MOOMOO_PROTOCOL=ws
+      port: Number(env.MOOMOO_PORT) || (env.MOOMOO_PROTOCOL === 'ws' ? 33333 : 11111),
       key: env.MOOMOO_KEY || undefined,
       ssl: env.MOOMOO_SSL === 'true',
+      // quotes only from Moomoo (no delayed Yahoo prices) unless MOOMOO_ONLY=false
+      only: env.MOOMOO_ONLY !== 'false',
     }
     moomoo = { client: new MoomooQuoteClient(cfg), cfg }
-    console.log(`[moomoo] live quotes from OpenD at ${cfg.host}:${cfg.port} (read-only)`)
+    console.log(`[moomoo] live data from OpenD at ${cfg.host}:${cfg.port} via ${cfg.protocol} (read-only${cfg.only ? ', Moomoo only' : ', Yahoo fallback'})`)
   }
   return {
     plugins: [react(), marketApi(moomoo)],
