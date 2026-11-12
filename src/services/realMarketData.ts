@@ -189,22 +189,26 @@ export class RealMarketDataService {
     return this.apiGet<MarketFearGreed>('feargreed', {}, 15000);
   }
 
+  /** Where the last options chain came from */
+  lastOptionsSource: 'moomoo' | 'yahoo' | '' = '';
+
   // Fetch real options chain data
   async fetchOptionsChain(symbol: string, expirationDate?: string): Promise<OptionChain[]> {
     // errors propagate so the options panel can show why (rather than an empty list)
     const params: Record<string, string> = { symbol: this.normalizeSymbol(symbol) };
     if (expirationDate) params.date = expirationDate;
-    const data = await this.apiGet<{ chains: OptionChain[] }>('options', params);
+    const data = await this.apiGet<{ chains: OptionChain[]; source?: string }>('options', params);
+    this.lastOptionsSource = data.source === 'moomoo' ? 'moomoo' : 'yahoo';
     return data.chains ?? [];
   }
 
   private optionQuotesSupported = true;
 
   /** Live marks for held contracts ("SYMBOL|YYYY-MM-DD|strike|call"). Empty when the feed has no option quotes. */
-  async getOptionQuotes(contracts: string[]): Promise<{ key: string; mark: number; bid: number; ask: number; last: number }[]> {
+  async getOptionQuotes(contracts: string[]): Promise<{ key: string; mark: number; bid: number; ask: number; last: number; iv?: number }[]> {
     if (!this.optionQuotesSupported || !contracts.length) return [];
     try {
-      const data = await this.apiGet<{ quotes: { key: string; mark: number; bid: number; ask: number; last: number }[] }>(
+      const data = await this.apiGet<{ quotes: { key: string; mark: number; bid: number; ask: number; last: number; iv?: number }[] }>(
         'optionquotes',
         { contracts: contracts.join(',') },
         8000

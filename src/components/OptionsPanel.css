@@ -387,3 +387,6 @@
 .pnl-table tr.current td { background: rgba(255,255,255,0.05); font-weight: 600; }
 .pnl-table small { color: #9a9ec0; }
 .pnl-note { margin-top: 8px; font-size: 10px; line-height: 1.4; color: #787b9a; }
+
+.options-source { font-size: 11px; color: #8a8fb5; margin: 2px 0 6px; }
+.options-source.live { color: #26a69a; }

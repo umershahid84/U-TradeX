@@ -56,6 +56,9 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
   const [quantity, setQuantity] = useState('1');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // where the prices come from, and when the contracts on screen were last refreshed
+  const [source, setSource] = useState<'moomoo' | 'yahoo' | ''>('');
+  const [updatedAt, setUpdatedAt] = useState(0);
 
   const marketData = RealMarketDataService.getInstance();
   // reasons chain requests failed, to show instead of a generic message
@@ -68,6 +71,8 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
         return [];
       });
       if (!result.length) return null;
+      setSource(marketData.lastOptionsSource);
+      setUpdatedAt(Date.now());
       return { expiry, calls: result[0].calls || [], puts: result[0].puts || [] };
     },
     [symbol]
@@ -153,6 +158,48 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
       .sort((a, b) => a.strike - b.strike);
   }, [chains, chainExpiry, optionType, currentPrice]);
 
+  // With a live feed, refresh the contracts on screen every few seconds (the full scan above runs once a minute)
+  const liveKeys = useMemo(() => {
+    const keys: string[] = [];
+    if (view === 'best') ranked.slice(0, 8).forEach((r) => keys.push(`${symbol}|${r.expiry}|${r.contract.strike}|${optionType}`));
+    else chainRows.forEach((c) => keys.push(`${symbol}|${chainExpiry}|${c.strike}|${optionType}`));
+    if (selected) keys.push(`${symbol}|${selected.expiry}|${selected.option.strike}|${optionType}`);
+    return [...new Set(keys)].join(',');
+  }, [view, ranked, chainRows, chainExpiry, selected, symbol, optionType]);
+
+  useEffect(() => {
+    if (source !== 'moomoo' || !liveKeys) return;
+    let cancelled = false;
+    const poll = async () => {
+      const quotes = await marketData.getOptionQuotes(liveKeys.split(','));
+      if (cancelled || !quotes.length) return;
+      const patch = (c: OptionChainData, q: (typeof quotes)[number]): OptionChainData => ({
+        ...c, bid: q.bid, ask: q.ask, lastPrice: q.last, impliedVolatility: q.iv || c.impliedVolatility,
+      });
+      setChains((prev) => {
+        const next = { ...prev };
+        for (const q of quotes) {
+          const [, expiry, strike, type] = q.key.split('|');
+          const chain = next[expiry];
+          if (!chain) continue;
+          const side = type === 'put' ? 'puts' : 'calls';
+          next[expiry] = { ...chain, [side]: chain[side].map((c) => (Math.abs(c.strike - Number(strike)) < 0.0005 ? patch(c, q) : c)) };
+        }
+        return next;
+      });
+      setSelected((sel) => {
+        const q = sel && quotes.find((x) => x.key === `${symbol}|${sel.expiry}|${sel.option.strike}|${optionType}`);
+        return sel && q ? { ...sel, option: patch(sel.option, q) } : sel;
+      });
+      setUpdatedAt(Date.now());
+    };
+    const id = setInterval(() => void poll(), 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [source, liveKeys, symbol, optionType]);
+
   const select = (expiry: string, option: OptionChainData) => setSelected({ expiry, option });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -229,6 +276,14 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
           </div>
         </div>
 
+        {source && (
+          <div className={`options-source ${source === 'moomoo' ? 'live' : ''}`}>
+            {source === 'moomoo'
+              ? `Prices: Moomoo, live${updatedAt ? ` · updated ${new Date(updatedAt).toLocaleTimeString()}` : ''}`
+              : 'Prices: Yahoo (delayed, can be minutes behind)'}
+          </div>
+        )}
+
         <div className="view-tabs">
           <button type="button" className={view === 'best' ? 'active' : ''} onClick={() => setView('best')}>
             ⭐ Best OTM
@@ -281,6 +336,7 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
                       <span>Δ {r.delta.toFixed(2)}</span>
                       <span>Spread {(r.spreadPct * 100).toFixed(0)}%</span>
                       <span>B/E {(r.breakevenMove * 100).toFixed(1)}%</span>
+                      <span>Bid ${r.contract.bid.toFixed(2)} / Ask ${r.contract.ask.toFixed(2)}</span>
                       <span>Vol {r.contract.volume.toLocaleString()}</span>
                       <span>OI {r.contract.openInterest.toLocaleString()}</span>
                     </div>
