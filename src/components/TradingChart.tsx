@@ -16,6 +16,7 @@ import {
 import { Order, ChartData, TimeFrame, CustomIndicator, CustomIndicatorStatus, PriceAlert, Position, TakeProfitStopLoss } from '../types';
 import { AlertsPanel } from './AlertsPanel';
 import { PositionOverlay } from './PositionOverlay';
+import { etTimeOptions } from '../utils/chartTime';
 import { TradePlan } from './TradePlan';
 import { AutoChartManager, AutoChartOptions } from './autoChartManager';
 import { AutoChartBadge } from './AutoChartBadge';
@@ -531,7 +532,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       },
       width: chartContainerRef.current.clientWidth,
       height: chartContainerRef.current.clientHeight,
+      localization: etTimeOptions.localization,
       timeScale: {
+        tickMarkFormatter: etTimeOptions.timeScale.tickMarkFormatter,
         timeVisible: true,
         secondsVisible: false,
         borderColor: '#2a2e4f',

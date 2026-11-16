@@ -9,6 +9,7 @@ import {
   LineSeries
 } from 'lightweight-charts';
 import { ChartData } from '../types';
+import { etTimeOptions } from '../utils/chartTime';
 import { ChartTheme, THEME_COLORS } from '../utils/chartStyle';
 import { calculateRSISeries, calculateMACDSeries } from '../utils/indicators';
 import './IndicatorPanels.css';
@@ -70,7 +71,9 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
         },
         width: volumeContainerRef.current.clientWidth,
         height: 120,
+        localization: etTimeOptions.localization,
         timeScale: {
+          tickMarkFormatter: etTimeOptions.timeScale.tickMarkFormatter,
           timeVisible: true,
           secondsVisible: false,
           borderColor: pal.border,
@@ -142,7 +145,9 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
         },
         width: rsiContainerRef.current.clientWidth,
         height: 120,
+        localization: etTimeOptions.localization,
         timeScale: {
+          tickMarkFormatter: etTimeOptions.timeScale.tickMarkFormatter,
           timeVisible: true,
           secondsVisible: false,
           borderColor: pal.border,
@@ -246,7 +251,9 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
         },
         width: macdContainerRef.current.clientWidth,
         height: 120,
+        localization: etTimeOptions.localization,
         timeScale: {
+          tickMarkFormatter: etTimeOptions.timeScale.tickMarkFormatter,
           timeVisible: true,
           secondsVisible: false,
           borderColor: pal.border,
