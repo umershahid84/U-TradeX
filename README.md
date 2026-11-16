@@ -32,6 +32,7 @@ Notes:
 
 ## Trading tools
 
+- **Gaps:** shaded zones between one session's close and the next open (Indicators menu, on by default). A gap stays on the chart, labelled with its size and how much has filled, until price trades back through the previous close; filled gaps turn grey. Choose the smallest size to show.
 - **📐 Plan (trade plan):** in the chart toolbar. Pick long or short, then drag the entry, stop and target lines. The card shows risk, reward, reward:risk and the position size that risks your chosen percent of the account, and places a paper order with the stop and target attached. Entries below the price (long) or above it (short) wait as limit orders.
 - **📡 Scanner:** pre-market, after-hours and overnight gap up / gap down, volume surges and day movers across a built-in list of liquid stocks and ETFs (`api/_lib/universe.ts`, edit it freely) plus your watchlist. Live with Moomoo (see below), delayed from Yahoo otherwise. Click a row to chart it.
 - **Late-day chip:** from 2 pm ET the header shows which way the last hour is leaning (price, volume and VWAP), and the closing read after 4 pm. It is a **proxy**, clearly labelled: it is *not* the NYSE / Nasdaq closing-auction (MOC) imbalance, which needs a paid exchange feed this app does not have.

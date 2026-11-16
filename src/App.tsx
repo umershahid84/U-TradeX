@@ -798,6 +798,7 @@ function App() {
               tpsl={tpslSettings.get(symbol)}
               onSetLevel={(kind, price) => setLevel(symbol, kind, price)}
               onToggleTrail={toggleTrail}
+              previousClose={quoteDetails?.previousClose ?? null}
               equity={account.totalValue}
               cash={account.balance}
               onPlacePlan={placeOrderWithLevels}

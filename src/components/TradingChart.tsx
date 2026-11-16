@@ -17,6 +17,8 @@ import { Order, ChartData, TimeFrame, CustomIndicator, CustomIndicatorStatus, Pr
 import { AlertsPanel } from './AlertsPanel';
 import { PositionOverlay } from './PositionOverlay';
 import { etTimeOptions } from '../utils/chartTime';
+import { findGaps } from '../utils/gaps';
+import { attachGapZones, GapZonesPrimitive } from '../plugins/gapZones';
 import { TradePlan } from './TradePlan';
 import { AutoChartManager, AutoChartOptions } from './autoChartManager';
 import { AutoChartBadge } from './AutoChartBadge';
@@ -57,6 +59,8 @@ interface TradingChartProps {
   tpsl?: TakeProfitStopLoss;
   onSetLevel: (kind: 'takeProfit' | 'stopLoss', price?: number) => void;
   onClosePosition: (quantity: number) => void;
+  /** Close before the first session in the data, used to measure that session's opening gap */
+  previousClose?: number | null;
   /** Account figures for sizing a trade plan, and where a plan sends its paper order */
   equity: number;
   cash: number;
@@ -114,6 +118,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   tpsl,
   onSetLevel,
   onClosePosition,
+  previousClose,
   equity,
   cash,
   onPlacePlan,
@@ -215,6 +220,17 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const displaySeriesRef = useRef<ISeriesApi<any> | null>(null);
   const autoChartRef = useRef<AutoChartManager | null>(null);
   const alphaRef = useRef<AlphaManager | null>(null);
+  const gapsRef = useRef<GapZonesPrimitive | null>(null);
+  // Price gaps: zones between the previous close and the next open, until price trades back through them
+  const [gapCfg, setGapCfg] = useState<{ enabled: boolean; minPct: number; showFilled: boolean }>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('gapsCfg') ?? 'null');
+      if (saved && typeof saved.enabled === 'boolean') return { enabled: saved.enabled, minPct: Number(saved.minPct) || 0.25, showFilled: saved.showFilled !== false };
+    } catch {
+      /* defaults */
+    }
+    return { enabled: true, minPct: 0.25, showFilled: true };
+  });
   // Alpha Signals: trend line, stage labels and dashboard (an original indicator)
   const [alpha, setAlpha] = useState<AlphaOptions>(() => {
     try {
@@ -576,6 +592,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     sessionBandsRef.current = attachSessionBands(candleSeries);
     autoChartRef.current = new AutoChartManager(chart, candleSeries);
     alphaRef.current = new AlphaManager(chart, candleSeries);
+    gapsRef.current = attachGapZones(candleSeries);
 
     // Add click handler for drawing tools
     chart.subscribeClick((param) => {
@@ -1384,6 +1401,23 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     autoChartRef.current?.update(autoResult, data, { ...autoChart, enabled: autoShown });
   }, [autoResult, data, autoChart, autoShown]);
 
+  // Gaps
+  const gapsShown = gapCfg.enabled && !hiddenIds.includes('gaps');
+  const gaps = useMemo(
+    () => (gapsShown ? findGaps(data, { minPct: gapCfg.minPct, prevCloseHint: previousClose }) : []),
+    [data, gapsShown, gapCfg.minPct, previousClose]
+  );
+  useEffect(() => {
+    gapsRef.current?.setGaps(gaps, gapCfg.showFilled);
+  }, [gaps, gapCfg.showFilled]);
+  useEffect(() => {
+    try {
+      localStorage.setItem('gapsCfg', JSON.stringify(gapCfg));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [gapCfg]);
+
   // Alpha Signals
   const alphaShown = alpha.enabled && !hiddenIds.includes('alpha-signals');
   const alphaResult = useMemo(
@@ -1486,6 +1520,17 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       hidden: isHidden('alpha-signals'),
       onToggle: () => toggleHidden('alpha-signals'),
       onRemove: () => setAlpha((a) => ({ ...a, enabled: false })),
+    });
+  }
+  if (gapCfg.enabled) {
+    legendItems.push({
+      id: 'gaps',
+      name: 'Gaps',
+      params: `≥${gapCfg.minPct}%`,
+      color: '#26a69a',
+      hidden: isHidden('gaps'),
+      onToggle: () => toggleHidden('gaps'),
+      onRemove: () => setGapCfg((g) => ({ ...g, enabled: false })),
     });
   }
   if (autoChart.enabled) {
@@ -1759,6 +1804,25 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                 </span>
               </label>
               <small className="auto-hint">Original trend and stage indicator</small>
+            </div>
+
+            <div className="indicator-group auto-group">
+              <h4>Gaps</h4>
+              <label>
+                <input type="checkbox" checked={gapCfg.enabled} onChange={() => setGapCfg((g) => ({ ...g, enabled: !g.enabled }))} />
+                Show price gaps
+              </label>
+              <label className={gapCfg.enabled ? '' : 'sub-off'}>
+                <input type="checkbox" checked={gapCfg.showFilled} disabled={!gapCfg.enabled} onChange={() => setGapCfg((g) => ({ ...g, showFilled: !g.showFilled }))} />
+                Include filled gaps (grey)
+              </label>
+              <label className={`cloud-tf ${gapCfg.enabled ? '' : 'sub-off'}`}>
+                <span>Smallest gap</span>
+                <select value={gapCfg.minPct} disabled={!gapCfg.enabled} onChange={(e) => setGapCfg((g) => ({ ...g, minPct: Number(e.target.value) }))}>
+                  {[0.1, 0.25, 0.5, 1, 2].map((v) => <option key={v} value={v}>{v}%</option>)}
+                </select>
+              </label>
+              <small className="auto-hint">Between a session's close and the next open. Open gaps stay until price trades back through them.</small>
             </div>
 
             <div className="indicator-group auto-group">
