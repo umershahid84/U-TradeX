@@ -16,6 +16,8 @@ import { usePriceAlerts } from './hooks/usePriceAlerts';
 import { Toasts } from './components/Toasts';
 import { LateDayChip } from './components/LateDayChip';
 import { Scanner } from './components/Scanner';
+import { BotLab } from './components/BotLab';
+import { useOrbBot } from './hooks/useOrbBot';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RealMarketDataService, QuoteDetails } from './services/realMarketData';
 import { aggregate4h, aggregateBars } from './utils/htfEma';
@@ -132,7 +134,7 @@ const INTERVAL_NAME: Record<string, string> = {
   '15m': '15-minute', '30m': '30-minute', '1h': 'hourly', '4h': '4-hour', '1d': 'daily', '1wk': 'weekly', '1mo': 'monthly', '3mo': 'quarterly',
 };
 
-const TAB_IDS: SidebarTab[] = ['watchlist', 'scanner', 'trade', 'options', 'sentiment'];
+const TAB_IDS: SidebarTab[] = ['watchlist', 'scanner', 'bots', 'trade', 'options', 'sentiment'];
 
 const loadTab = (): SidebarTab => {
   const saved = getStorageValue('sidebarTab', 'watchlist');
@@ -664,6 +666,8 @@ function App() {
     });
   };
 
+  const bot = useOrbBot({ equity: account.totalValue, cash: account.balance, positions: account.positions, pushToast, place: placeOrderWithLevels });
+
   const setLevel = (sym: string, kind: 'takeProfit' | 'stopLoss', price?: number) =>
     updateTpsl((m) => {
       const cur = m.get(sym) ?? { symbol: sym };
@@ -679,6 +683,7 @@ function App() {
     <>
       {activeTab === 'watchlist' && <Watchlist activeSymbol={symbol} onSelect={(s) => { handleSymbolChange(s); if (isMobile) setMobileView('chart'); }} />}
       {activeTab === 'scanner' && <Scanner activeSymbol={symbol} onSelect={(s) => { handleSymbolChange(s); if (isMobile) setMobileView('chart'); }} />}
+      {activeTab === 'bots' && <BotLab activeSymbol={symbol} config={bot.config} setConfig={bot.setConfig} status={bot.status} equity={account.totalValue} />}
       {activeTab === 'trade' && (
         <>
           <TradingPanel symbol={symbol} currentPrice={currentPrice} balance={account.balance} onPlaceOrder={placeOrderWithLevels} />

@@ -30,6 +30,13 @@ Notes:
 - **Status:** open `http://localhost:3000/api/moomoo-status` to see whether OpenD is connected and why not.
 - **Using the WebSocket port instead:** set `MOOMOO_PROTOCOL=ws`, `MOOMOO_PORT=33333` (and `MOOMOO_KEY` if you set one). OpenD's WebSocket port must be enabled in its settings first.
 
+## Trading tools
+
+- **📐 Plan (trade plan):** in the chart toolbar. Pick long or short, then drag the entry, stop and target lines. The card shows risk, reward, reward:risk and the position size that risks your chosen percent of the account, and places a paper order with the stop and target attached. Entries below the price (long) or above it (short) wait as limit orders.
+- **📡 Scanner:** pre-market, after-hours and overnight gap up / gap down, volume surges and day movers across a built-in list of liquid stocks and ETFs (`api/_lib/universe.ts`, edit it freely) plus your watchlist. Live with Moomoo (see below), delayed from Yahoo otherwise. Click a row to chart it.
+- **Late-day chip:** from 2 pm ET the header shows which way the last hour is leaning (price, volume and VWAP), and the closing read after 4 pm. It is a **proxy**, clearly labelled: it is *not* the NYSE / Nasdaq closing-auction (MOC) imbalance, which needs a paid exchange feed this app does not have.
+- **🤖 Bots:** an opening-range-breakout strategy you can backtest on the last ~59 days of 5-minute bars, watch live for alerts, and optionally let trade the **paper** account (once a day per symbol, ignoring stale signals). Backtests only replay the past and use simple fills; they do not predict results. An SPX 0DTE bot is not included: Moomoo's API has no index options and there is no historical options data to test it honestly.
+
 ## Features
 
 ### 📊 Advanced Charting

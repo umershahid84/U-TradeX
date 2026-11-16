@@ -1,11 +1,12 @@
 import React from 'react';
 import './SidebarTabs.css';
 
-export type SidebarTab = 'watchlist' | 'scanner' | 'trade' | 'options' | 'sentiment';
+export type SidebarTab = 'watchlist' | 'scanner' | 'bots' | 'trade' | 'options' | 'sentiment';
 
 export const TAB_META: { id: SidebarTab; label: string; icon: string }[] = [
   { id: 'watchlist', label: 'Watchlist', icon: '⭐' },
   { id: 'scanner', label: 'Scanner', icon: '📡' },
+  { id: 'bots', label: 'Bots', icon: '🤖' },
   { id: 'trade', label: 'Trade', icon: '💱' },
   { id: 'options', label: 'Options', icon: '🎯' },
   { id: 'sentiment', label: 'Sentiment', icon: '🌡️' },
