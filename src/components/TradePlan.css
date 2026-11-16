@@ -1,0 +1,34 @@
+.plan-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
+.plan-pill {
+  position: absolute; right: 118px; transform: translateY(-50%); pointer-events: auto; cursor: ns-resize; touch-action: none; user-select: none;
+  display: flex; gap: 6px; align-items: center; padding: 3px 8px; font-size: 11px; font-weight: 700; border-radius: 4px;
+  background: #1b2040; border: 1px solid #3a3f66; color: #e0e0e0; box-shadow: 0 2px 8px rgba(0,0,0,.4);
+}
+.plan-pill.entry { border-color: #4C9AFF; color: #8fc1ff; }
+.plan-pill.stop { border-color: #ef5350; color: #ef5350; }
+.plan-pill.target { border-color: #26a69a; color: #26a69a; }
+.plan-pill.dragging { box-shadow: 0 0 0 2px rgba(41,98,255,.6), 0 2px 8px rgba(0,0,0,.4); }
+.plan-card {
+  position: absolute; left: 12px; bottom: 44px; z-index: 12; width: 270px; padding: 10px 12px; background: rgba(20, 25, 56, 0.97);
+  border: 1px solid #3a3e6f; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.5); font-size: 12px; color: #c0c4e0;
+}
+.plan-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; color: #e0e0e0; }
+.plan-head button { background: none; border: none; color: #8a8fb5; cursor: pointer; font-size: 14px; padding: 0 4px; }
+.plan-side { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+.plan-side button { padding: 5px; border-radius: 4px; border: 1px solid #3a3e6f; background: #1a1e3f; color: #c0c4e0; font-weight: 700; cursor: pointer; }
+.plan-side button.on.long { background: #26a69a; border-color: #26a69a; color: #fff; }
+.plan-side button.on.short { background: #ef5350; border-color: #ef5350; color: #fff; }
+.plan-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; }
+.plan-grid label { display: flex; flex-direction: column; gap: 2px; font-size: 10px; color: #8a8fb5; text-transform: uppercase; }
+.plan-grid input { width: 100%; box-sizing: border-box; padding: 4px 6px; background: #1a1e3f; border: 1px solid #2a2e4f; border-radius: 4px; color: #e0e0e0; font-size: 12px; }
+.plan-actions { margin: 6px 0; }
+.plan-actions button { width: 100%; padding: 4px; background: transparent; border: 1px dashed #3a3e6f; border-radius: 4px; color: #8a8fb5; font-size: 11px; cursor: pointer; }
+.plan-result { padding: 6px 8px; margin-bottom: 8px; background: #1a1e3f; border-radius: 6px; }
+.plan-result > div { display: flex; justify-content: space-between; padding: 2px 0; }
+.plan-result b { color: #e0e0e0; } .plan-result b.up { color: #26a69a; } .plan-result b.down { color: #ef5350; }
+.plan-problem { padding: 6px 8px; margin-bottom: 8px; color: #ffca28; background: rgba(255,202,40,.08); border-radius: 6px; }
+.plan-note { margin-top: 4px; font-size: 10.5px; color: #8a8fb5; line-height: 1.35; }
+.plan-place { width: 100%; padding: 8px; border-radius: 4px; border: none; color: #fff; font-weight: 700; cursor: pointer; }
+.plan-place.long { background: #26a69a; } .plan-place.short { background: #ef5350; }
+.plan-place:disabled { opacity: .4; cursor: default; }
+@media (max-width: 900px) { .plan-card { width: calc(100% - 24px); bottom: 40px; } .plan-pill { right: 90px; } .plan-grid input { font-size: 16px; } }

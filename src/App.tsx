@@ -791,6 +791,9 @@ function App() {
               tpsl={tpslSettings.get(symbol)}
               onSetLevel={(kind, price) => setLevel(symbol, kind, price)}
               onToggleTrail={toggleTrail}
+              equity={account.totalValue}
+              cash={account.balance}
+              onPlacePlan={placeOrderWithLevels}
               onClosePosition={(qty) => {
                 const pos = account.positions.find((p) => p.symbol === symbol);
                 if (pos) closePosition(symbol, pos.quantity < 0 ? -qty : qty, currentPrice || pos.currentPrice);

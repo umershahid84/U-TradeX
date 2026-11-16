@@ -425,3 +425,5 @@ body.chart-expanded { overflow: hidden; }
 .trading-chart-container[data-chart-theme="light"] .scale-buttons button { background: rgba(255,255,255,.95); color: #555; border-color: #c9ccd8; }
 .trading-chart-container[data-chart-theme="light"] .scale-buttons button.on { background: #2962ff; color: #fff; border-color: #2962ff; }
 @media (max-width: 900px) { .scale-buttons button { width: 30px; height: 28px; } }
+
+.indicator-toggle.plan-on { background: #2962ff; border-color: #2962ff; color: #fff; }

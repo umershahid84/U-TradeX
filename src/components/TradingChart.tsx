@@ -13,9 +13,10 @@ import {
   BarSeries,
   PriceScaleMode
 } from 'lightweight-charts';
-import { ChartData, TimeFrame, CustomIndicator, CustomIndicatorStatus, PriceAlert, Position, TakeProfitStopLoss } from '../types';
+import { Order, ChartData, TimeFrame, CustomIndicator, CustomIndicatorStatus, PriceAlert, Position, TakeProfitStopLoss } from '../types';
 import { AlertsPanel } from './AlertsPanel';
 import { PositionOverlay } from './PositionOverlay';
+import { TradePlan } from './TradePlan';
 import { AutoChartManager, AutoChartOptions } from './autoChartManager';
 import { AutoChartBadge } from './AutoChartBadge';
 import { ChartLegend, LegendItem } from './ChartLegend';
@@ -55,6 +56,10 @@ interface TradingChartProps {
   tpsl?: TakeProfitStopLoss;
   onSetLevel: (kind: 'takeProfit' | 'stopLoss', price?: number) => void;
   onClosePosition: (quantity: number) => void;
+  /** Account figures for sizing a trade plan, and where a plan sends its paper order */
+  equity: number;
+  cash: number;
+  onPlacePlan: (order: Omit<Order, 'id' | 'status' | 'timestamp'>, takeProfit?: number, stopLoss?: number) => void;
   onToggleTrail: () => void;
   onReversePosition: () => void;
   onAddAlert: (price: number) => void;
@@ -108,6 +113,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   tpsl,
   onSetLevel,
   onClosePosition,
+  equity,
+  cash,
+  onPlacePlan,
   onToggleTrail,
   onReversePosition,
   onAddAlert,
@@ -156,6 +164,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   // Expand the chart to fill the screen: real fullscreen where the browser allows it, a full-window overlay otherwise
   const rootRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
   // TradingView-style price scale buttons: A = auto-fit the price scale, L = logarithmic scale
   const [autoScale, setAutoScale] = useState(true);
   const [logScale, setLogScale] = useState(() => {
@@ -1689,6 +1698,14 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             >
               🎨 Style
             </button>
+
+            <button
+              className={`indicator-toggle ${planOpen ? 'plan-on' : ''}`}
+              onClick={() => setPlanOpen((v) => !v)}
+              title="Plan a trade: entry, stop and target with risk-based size"
+            >
+              📐 Plan
+            </button>
             
             {clouds.some((i) => i.kind === 'ripster' && i.enabled && !isHidden(i.id) && isVisibleOn(i, chartMs) && i.clouds.some((c) => c.enabled)) && (
               <div className={`trend-indicator trend-${ripsterTrend}`}>
@@ -1978,6 +1995,21 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             L
           </button>
         </div>
+      )}
+      {planOpen && data.length > 0 && (
+        <TradePlan
+          key={symbol}
+          chartRef={chartRef}
+          seriesRef={candleSeriesRef}
+          hostRef={chartContainerRef}
+          symbol={symbol}
+          currentPrice={data[data.length - 1].close}
+          bars={data}
+          equity={equity}
+          balance={cash}
+          onPlace={onPlacePlan}
+          onClose={() => setPlanOpen(false)}
+        />
       )}
       <PositionOverlay
         chartRef={chartRef}
