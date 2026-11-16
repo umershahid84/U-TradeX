@@ -1,0 +1,21 @@
+.lateday { position: relative; }
+.lateday-chip {
+  display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 12px; border: 1px solid #3a3e6f;
+  background: #1a1e3f; color: #e0e0e0; font-size: 12px; cursor: pointer; white-space: nowrap;
+}
+.lateday-chip .ld-name { color: #8a8fb5; }
+.lateday-chip.up { border-color: #26a69a; } .lateday-chip.up b, .lateday-chip.up .ld-score { color: #26a69a; }
+.lateday-chip.down { border-color: #ef5350; } .lateday-chip.down b, .lateday-chip.down .ld-score { color: #ef5350; }
+.lateday-chip.flat b { color: #ffca28; }
+.ld-score { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ld-proxy { font-style: normal; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #ffca28; border: 1px solid rgba(255,202,40,.5); border-radius: 8px; padding: 0 5px; }
+.lateday-card {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 40; width: 300px; padding: 10px 12px; background: #141938;
+  border: 1px solid #3a3e6f; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.5); font-size: 12px; color: #c0c4e0;
+}
+.ld-warn { padding: 6px 8px; margin-bottom: 8px; background: rgba(255,202,40,.08); border: 1px solid rgba(255,202,40,.35); border-radius: 6px; color: #ffe082; line-height: 1.4; }
+.lateday-card table { width: 100%; border-collapse: collapse; }
+.lateday-card td { padding: 3px 0; } .lateday-card td:last-child { text-align: right; font-weight: 600; color: #e0e0e0; }
+.lateday-card td.up { color: #26a69a; } .lateday-card td.down { color: #ef5350; }
+.ld-note { margin-top: 6px; font-size: 11px; color: #8a8fb5; }
+@media (max-width: 900px) { .lateday-card { right: auto; left: 0; } }

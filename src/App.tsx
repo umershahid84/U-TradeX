@@ -14,6 +14,7 @@ import { OptionsPanel } from './components/OptionsPanel';
 import { usePaperTrading } from './hooks/usePaperTrading';
 import { usePriceAlerts } from './hooks/usePriceAlerts';
 import { Toasts } from './components/Toasts';
+import { LateDayChip } from './components/LateDayChip';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RealMarketDataService, QuoteDetails } from './services/realMarketData';
 import { aggregate4h, aggregateBars } from './utils/htfEma';
@@ -734,6 +735,7 @@ function App() {
                 )}
               </div>
               <SessionMoves quote={quoteDetails} />
+              <LateDayChip symbol={symbol} />
             {wantFutures && futures.length > 0 && (
               <div
                 className="futures-context"
