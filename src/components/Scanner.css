@@ -1,0 +1,23 @@
+.scanner { background: #141938; border: 1px solid #2a2e4f; border-radius: 8px; padding: 12px; }
+.scan-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.scan-head h3 { margin: 0; font-size: 15px; color: #e0e0e0; }
+.scan-head label { font-size: 11px; color: #8a8fb5; display: flex; align-items: center; gap: 4px; }
+.scan-head input { width: 52px; padding: 3px 5px; background: #1a1e3f; border: 1px solid #2a2e4f; border-radius: 4px; color: #e0e0e0; font-size: 12px; }
+.scan-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 8px; }
+.scan-tabs button { padding: 6px 2px; background: #1a1e3f; border: 1px solid #2a2e4f; border-radius: 4px; color: #8a8fb5; font-size: 11px; font-weight: 600; cursor: pointer; }
+.scan-tabs button.active { background: #2962ff; border-color: #2962ff; color: #fff; }
+.scan-source { font-size: 11px; color: #8a8fb5; margin-bottom: 6px; }
+.scan-source.live { color: #26a69a; }
+.scan-error { padding: 6px 8px; margin-bottom: 6px; font-size: 12px; color: #ef9a9a; background: rgba(239,83,80,.1); border-radius: 6px; }
+.scan-empty { padding: 14px 4px; font-size: 12px; color: #8a8fb5; }
+.scan-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.scan-table th { text-align: right; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .4px; color: #8a8fb5; padding: 4px 4px; }
+.scan-table th:first-child, .scan-table td:first-child { text-align: left; }
+.scan-table td { text-align: right; padding: 5px 4px; color: #c0c4e0; border-top: 1px solid #1a1e3f; font-variant-numeric: tabular-nums; }
+.scan-table td b { color: #e0e0e0; display: block; }
+.scan-table td small { display: block; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: #6a6e90; }
+.scan-table tbody tr { cursor: pointer; }
+.scan-table tbody tr:hover, .scan-table tbody tr.active { background: #1a1e3f; }
+.scan-table td.up { color: #26a69a; } .scan-table td.down { color: #ef5350; }
+.scan-note { margin-top: 10px; font-size: 10.5px; color: #6a6e90; line-height: 1.4; }
+@media (max-width: 900px) { .scan-head input { font-size: 16px; } .scan-table td { padding: 8px 4px; } }

@@ -15,6 +15,7 @@ import { usePaperTrading } from './hooks/usePaperTrading';
 import { usePriceAlerts } from './hooks/usePriceAlerts';
 import { Toasts } from './components/Toasts';
 import { LateDayChip } from './components/LateDayChip';
+import { Scanner } from './components/Scanner';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RealMarketDataService, QuoteDetails } from './services/realMarketData';
 import { aggregate4h, aggregateBars } from './utils/htfEma';
@@ -131,7 +132,7 @@ const INTERVAL_NAME: Record<string, string> = {
   '15m': '15-minute', '30m': '30-minute', '1h': 'hourly', '4h': '4-hour', '1d': 'daily', '1wk': 'weekly', '1mo': 'monthly', '3mo': 'quarterly',
 };
 
-const TAB_IDS: SidebarTab[] = ['watchlist', 'trade', 'options', 'sentiment'];
+const TAB_IDS: SidebarTab[] = ['watchlist', 'scanner', 'trade', 'options', 'sentiment'];
 
 const loadTab = (): SidebarTab => {
   const saved = getStorageValue('sidebarTab', 'watchlist');
@@ -677,6 +678,7 @@ function App() {
   const tabContent = (
     <>
       {activeTab === 'watchlist' && <Watchlist activeSymbol={symbol} onSelect={(s) => { handleSymbolChange(s); if (isMobile) setMobileView('chart'); }} />}
+      {activeTab === 'scanner' && <Scanner activeSymbol={symbol} onSelect={(s) => { handleSymbolChange(s); if (isMobile) setMobileView('chart'); }} />}
       {activeTab === 'trade' && (
         <>
           <TradingPanel symbol={symbol} currentPrice={currentPrice} balance={account.balance} onPlaceOrder={placeOrderWithLevels} />

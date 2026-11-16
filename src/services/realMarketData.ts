@@ -53,6 +53,19 @@ export interface WatchQuote {
   source?: 'moomoo' | 'yahoo';
 }
 
+export interface ScanRow {
+  symbol: string;
+  name: string;
+  price: number;
+  prevClose: number | null;
+  gapPct: number | null;
+  dayPct: number | null;
+  volumeRatio: number | null;
+  volume: number | null;
+  session: string;
+  source: 'yahoo' | 'moomoo';
+}
+
 export interface OptionChain {
   calls: OptionChainData[];
   puts: OptionChainData[];
@@ -200,6 +213,11 @@ export class RealMarketDataService {
     const data = await this.apiGet<{ chains: OptionChain[]; source?: string }>('options', params);
     this.lastOptionsSource = data.source === 'moomoo' ? 'moomoo' : 'yahoo';
     return data.chains ?? [];
+  }
+
+  /** Gap / movers scan over the built-in list plus `extra` symbols (your watchlist) */
+  async getScan(extra: string[]): Promise<{ rows: ScanRow[]; universe: number; source: 'moomoo' | 'yahoo' }> {
+    return this.apiGet('scan', { symbols: extra.join(',') }, 25000);
   }
 
   private optionQuotesSupported = true;

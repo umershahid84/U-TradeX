@@ -2,6 +2,7 @@
 // Vite dev server (see vite.config.ts). Backed by yahoo-finance2, which performs the
 // cookie/crumb handshake Yahoo requires and works server-side without CORS limits.
 import YahooFinanceModule from 'yahoo-finance2';
+import { SCAN_UNIVERSE } from './universe';
 
 const YahooFinance: any = (YahooFinanceModule as any).default ?? YahooFinanceModule;
 const yf = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
@@ -329,7 +330,71 @@ async function feargreed(): Promise<ApiResult> {
   }
 }
 
+// ---- Gap / movers scanner (Yahoo version; delayed). The local Moomoo feed replaces it with live snapshots. ----
+export interface ScanRow {
+  symbol: string;
+  name: string;
+  /** Latest price, including pre-market, after-hours and overnight trades where the feed has them */
+  price: number;
+  prevClose: number | null;
+  /** Gap: the open vs the previous close in the regular session, otherwise the extended-hours move vs the last regular close */
+  gapPct: number | null;
+  /** Regular-session change vs the previous close */
+  dayPct: number | null;
+  /** Volume vs normal for this time of day (null when the feed does not say) */
+  volumeRatio: number | null;
+  volume: number | null;
+  session: string;
+  source: 'yahoo' | 'moomoo';
+}
+
+async function scan(q: Query): Promise<ApiResult> {
+  const extra = (q.symbols ?? '').split(',').map((x) => x.trim().toUpperCase()).filter(Boolean);
+  const symbols = [...new Set([...SCAN_UNIVERSE, ...extra])];
+  const batches: string[][] = [];
+  for (let i = 0; i < symbols.length; i += 80) batches.push(symbols.slice(i, i + 80));
+
+  const results = await Promise.all(
+    batches.map((b) => yf.quote(b, {}, { validateResult: false }).catch(() => [] as any[]))
+  );
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const ms = (v: unknown) => (v instanceof Date ? v.getTime() : typeof v === 'number' ? v : 0);
+  const rows: ScanRow[] = [];
+  for (const r of results.flat() as any[]) {
+    const regular = n(r.regularMarketPrice);
+    if (!regular || regular <= 0) continue;
+    let price = regular;
+    let latest = ms(r.regularMarketTime);
+    let ext = false;
+    if (n(r.preMarketPrice) && ms(r.preMarketTime) > latest) { price = r.preMarketPrice; latest = ms(r.preMarketTime); ext = true; }
+    if (n(r.postMarketPrice) && ms(r.postMarketTime) > latest) { price = r.postMarketPrice; ext = true; }
+    const open = n(r.regularMarketOpen);
+    const prev = n(r.regularMarketPreviousClose);
+    const live = r.marketState === 'REGULAR';
+    const gapPct = live
+      ? (open && prev ? (open / prev - 1) * 100 : null)
+      : ext ? (price / regular - 1) * 100 : null;
+    const avgVol = n(r.averageDailyVolume3Month) ?? n(r.averageDailyVolume10Day);
+    const vol = n(r.regularMarketVolume);
+    rows.push({
+      symbol: String(r.symbol),
+      name: r.shortName ?? r.longName ?? '',
+      price,
+      prevClose: prev,
+      gapPct,
+      dayPct: n(r.regularMarketChangePercent),
+      volumeRatio: live && avgVol && vol ? vol / avgVol : null,
+      volume: vol,
+      session: String(r.marketState ?? ''),
+      source: 'yahoo',
+    });
+  }
+  if (!rows.length) return fail(502, 'Yahoo returned no quotes for the scan');
+  return { status: 200, body: { rows, universe: symbols.length, source: 'yahoo' }, cacheSeconds: 10 };
+}
+
 const routes: Record<string, (q: Query) => Promise<ApiResult>> = {
+  scan,
   feargreed,
   quotes,
   chart,

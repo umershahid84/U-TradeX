@@ -6,7 +6,8 @@
 //
 // Used only by the Vite dev server (vite.config.ts). It is not part of the Vercel build.
 import { sessionAt, Session } from '../src/utils/marketSessions';
-import type { ApiResult } from '../api/_lib/market';
+import type { ApiResult, ScanRow } from '../api/_lib/market';
+import { SCAN_UNIVERSE } from '../api/_lib/universe';
 import { QuoteTransport, TcpTransport, WsTransport, errText, ALLOWED_CMDS } from './transport';
 
 export { ALLOWED_CMDS };
@@ -336,6 +337,51 @@ export class MoomooQuoteClient {
     return out;
   }
 
+  private badCodes = new Set<string>();
+  private scanCache: { at: number; key: string; rows: Map<string, any> } | null = null;
+
+  /**
+   * Snapshots for many stock codes. A code OpenD does not know fails the whole batch, so a failing batch is split
+   * in halves until the bad code is found; bad codes are remembered and skipped next time. Capped per scan (40 requests) so a
+   * list full of dead tickers cannot exhaust OpenD's request limit.
+   */
+  async stockSnapshots(codes: string[]): Promise<Map<string, any>> {
+    const key = codes.join(',');
+    if (this.scanCache && this.scanCache.key === key && Date.now() - this.scanCache.at < 10_000) return this.scanCache.rows;
+    const t = await this.ensure();
+    const out = new Map<string, any>();
+    let calls = 0;
+    const run = async (chunk: string[]): Promise<void> => {
+      if (!chunk.length || calls >= 40) return;
+      calls++;
+      try {
+        const res = await t.GetSecuritySnapshot({ c2s: { securityList: this.securities(chunk) } });
+        for (const sn of res?.s2c?.snapshotList ?? []) out.set(String(sn.basic?.security?.code), sn);
+      } catch (e) {
+        if (chunk.length === 1) {
+          this.badCodes.add(chunk[0]);
+          this.note = `${chunk[0]}: ${errText(e)}`;
+          return;
+        }
+        // if the error names the offending code, drop just that one; otherwise split the batch in half
+        const named = chunk.find((c) => new RegExp(`(^|[^A-Z0-9.])${c.replace('.', '\\.')}([^A-Z0-9.]|$)`).test(errText(e)));
+        if (named) {
+          this.badCodes.add(named);
+          this.note = `${named}: ${errText(e)}`;
+          await run(chunk.filter((c) => c !== named));
+          return;
+        }
+        const mid = Math.ceil(chunk.length / 2);
+        await run(chunk.slice(0, mid));
+        await run(chunk.slice(mid));
+      }
+    };
+    const todo = codes.filter((c) => !this.badCodes.has(c));
+    for (let i = 0; i < todo.length; i += 50) await run(todo.slice(i, i + 50));
+    this.scanCache = { at: Date.now(), key, rows: out };
+    return out;
+  }
+
   /** One expiry's chain with live prices; strikes further than 40% from spot are left out */
   optionChain(code: string, expiry: string): Promise<{ calls: any[]; puts: any[] }> {
     const key = `${code}|${expiry}`;
@@ -513,6 +559,46 @@ export function withMoomoo(route: RouteFn, client: MoomooQuoteClient, cfg: Moomo
       } else if (only) {
         return unavailable(`options for ${query.symbol} are not available from Moomoo here`);
       }
+    }
+
+    if (p === 'scan') {
+      const extra = (query.symbols ?? '').split(',').map((x) => x.trim().toUpperCase()).filter(Boolean);
+      const symbols = [...new Set([...SCAN_UNIVERSE, ...extra])];
+      const byCode = new Map<string, string>();
+      for (const sym of symbols) {
+        const c = toMoomooCode(sym);
+        if (c && !c.startsWith('.')) byCode.set(c, sym);
+      }
+      try {
+        const snaps = await client.stockSnapshots([...byCode.keys()]);
+        const session = sessionAt(Date.now());
+        const rows: ScanRow[] = [];
+        for (const [code, sn] of snaps) {
+          const b = sn.basic;
+          const regular = num(b.curPrice);
+          if (!regular) continue;
+          const prev = num(b.lastClosePrice);
+          const open = num(b.openPrice);
+          const price = pickPrice({ curPrice: regular, preMarket: b.preMarket, afterMarket: b.afterMarket, overnight: b.overnight }, session) ?? regular;
+          const gapPct = session === 'regular' ? (open && prev ? (open / prev - 1) * 100 : null) : price !== regular ? (price / regular - 1) * 100 : null;
+          rows.push({
+            symbol: byCode.get(code) ?? code,
+            name: b.name ?? '',
+            price,
+            prevClose: prev,
+            gapPct,
+            dayPct: prev ? (regular / prev - 1) * 100 : null,
+            volumeRatio: num(b.volumeRatio),
+            volume: b.volume != null ? Number(String(b.volume)) : null,
+            session: session.toUpperCase(),
+            source: 'moomoo',
+          });
+        }
+        if (rows.length) return { status: 200, body: { rows, universe: byCode.size, source: 'moomoo' }, cacheSeconds: 10 };
+      } catch (e) {
+        client.lastError = errText(e);
+      }
+      if (only) return unavailable(client.lastError || client.note || 'no scan data');
     }
 
     if (p === 'optionquotes') {

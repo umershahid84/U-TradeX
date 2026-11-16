@@ -7,6 +7,9 @@
 .sidebar-tabs button:hover { color: #e0e0e0; background: #1a1e3f; }
 .sidebar-tabs button.active { background: #2962ff; color: #fff; }
 .tab-icon { font-size: 13px; }
+/* five tabs: labels only in the desktop bar (the phone bar keeps the icons) */
+.sidebar-tabs .tab-icon { display: none; }
+.sidebar-tabs button { min-width: 0; padding-left: 2px; padding-right: 2px; }
 .sidebar-tabs .tabs-collapse { flex: 0 0 28px; padding: 8px 0; color: #6a6e90; font-size: 11px; }
 
 /* Phones: a fixed bar along the bottom of the screen */
