@@ -163,11 +163,5 @@ export function renderPnLCard(data: PnLCardData, opts: { showAmounts: boolean; t
     ctx.fillText(r.value, cx, cy + 32);
   });
 
-  // footer
-  ctx.fillStyle = sub;
-  ctx.font = '500 16px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillText('Paper trading · simulated results', CARD_W - 64, CARD_H - 24);
-  ctx.textAlign = 'left';
   return canvas;
 }
