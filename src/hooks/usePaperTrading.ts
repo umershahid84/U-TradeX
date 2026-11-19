@@ -46,6 +46,35 @@ const recalculateAccountTotals = (account: PaperTradingAccount): PaperTradingAcc
   };
 };
 
+/**
+ * One position per contract: lots of the same underlying, type, strike and expiry are added together. The
+ * average price is weighted by contracts, so the P&L covers everything held in that contract.
+ */
+export const mergeOptionPositions = (list: OptionContract[]): OptionContract[] => {
+  const out: OptionContract[] = [];
+  for (const o of list) {
+    const i = out.findIndex((x) => x.symbol === o.symbol && x.type === o.type && x.expiry === o.expiry && Math.abs(x.strike - o.strike) < 0.0005);
+    if (i < 0) {
+      out.push({ ...o });
+      continue;
+    }
+    const a = out[i];
+    const quantity = a.quantity + o.quantity;
+    const newer = (o.quotedAt ?? 0) >= (a.quotedAt ?? 0) ? o : a;
+    const opened = [a.openedAt, o.openedAt].filter((t): t is number => typeof t === 'number');
+    out[i] = {
+      ...a,
+      quantity,
+      premium: (a.premium * a.quantity + o.premium * o.quantity) / quantity,
+      impliedVolatility: o.impliedVolatility ?? a.impliedVolatility,
+      currentPremium: newer.currentPremium ?? o.currentPremium ?? a.currentPremium,
+      quotedAt: Math.max(a.quotedAt ?? 0, o.quotedAt ?? 0) || undefined,
+      openedAt: opened.length ? Math.min(...opened) : undefined,
+    };
+  }
+  return out;
+};
+
 const loadSavedAccount = (): PaperTradingAccount => {
   try {
     const saved = localStorage.getItem('paperTradingAccount');
@@ -62,7 +91,8 @@ const loadSavedAccount = (): PaperTradingAccount => {
       initialBalance: typeof parsed.initialBalance === 'number' ? parsed.initialBalance : base.initialBalance,
       positions: Array.isArray(parsed.positions) ? parsed.positions : base.positions,
       orders: Array.isArray(parsed.orders) ? parsed.orders : base.orders,
-      options: Array.isArray(parsed.options) ? parsed.options : base.options,
+      // earlier versions kept every purchase of a contract as its own row: combine them
+      options: Array.isArray(parsed.options) ? mergeOptionPositions(parsed.options) : base.options,
       // accounts saved before the history existed: rebuild it from the closing fills they recorded
       closedTrades: Array.isArray(parsed.closedTrades)
         ? parsed.closedTrades
@@ -295,22 +325,20 @@ export const usePaperTrading = () => {
       return;
     }
 
-    let error: string | undefined;
-    setAccount((prev) => {
-      if (cost > prev.balance) {
-        error = 'Insufficient balance';
-        return prev;
-      }
-      return recalculateAccountTotals({
-        ...prev,
-        balance: prev.balance - cost,
-        options: [...prev.options, { ...option, openedAt: option.openedAt ?? Date.now() }],
-      });
-    });
-
-    if (error) {
-      alert(error);
+    // computed from the latest account so the balance check and its alert happen right away
+    const prev = accountRef.current;
+    if (cost > prev.balance) {
+      alert('Insufficient balance');
+      return;
     }
+    const next = recalculateAccountTotals({
+      ...prev,
+      balance: prev.balance - cost,
+      // buying more of a contract you already hold adds to that position and averages the price
+      options: mergeOptionPositions([...prev.options, { ...option, openedAt: option.openedAt ?? Date.now() }]),
+    });
+    accountRef.current = next;
+    setAccount(next);
   }, []);
 
   // Fill resting limit orders for a symbol once the price reaches them (buy at or below, sell at or above).
