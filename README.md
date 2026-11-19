@@ -32,6 +32,7 @@ Notes:
 
 ## Trading tools
 
+- **Stats tab (bottom strip):** win rate for today, this week, this month, this year and all time, with trades taken, trades in profit, trades in loss, profit factor and winning days, plus a history by day, week, month or year. Filter by stocks or options. Periods follow the New York calendar; a trade is one closing fill.
 - **Gaps:** shaded zones between one session's close and the next open (Indicators menu, on by default). A gap stays on the chart, labelled with its size and how much has filled, until price trades back through the previous close; filled gaps turn grey. Choose the smallest size to show.
 - **📐 Plan (trade plan):** in the chart toolbar. Pick long or short, then drag the entry, stop and target lines. The card shows risk, reward, reward:risk and the position size that risks your chosen percent of the account, and places a paper order with the stop and target attached. Entries below the price (long) or above it (short) wait as limit orders.
 - **📡 Scanner:** pre-market, after-hours and overnight gap up / gap down, volume surges and day movers across a built-in list of liquid stocks and ETFs (`api/_lib/universe.ts`, edit it freely) plus your watchlist. Live with Moomoo (see below), delayed from Yahoo otherwise. Click a row to chart it.

@@ -45,3 +45,5 @@
 .ps-stats .ps-action { margin-left: auto; }
 
 .ps-table td.up { color: #26a69a; } .ps-table td.down { color: #ef5350; }
+
+.ps-body.tall { max-height: 340px; }

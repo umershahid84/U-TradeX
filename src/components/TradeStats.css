@@ -1,0 +1,21 @@
+.trade-stats { padding: 10px 12px 12px; font-size: 12px; color: #c0c4e0; }
+.ts-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.ts-open { font-size: 11px; color: #6a6e90; }
+.ts-filter { display: flex; gap: 4px; }
+.ts-filter button { padding: 3px 10px; background: #1a1e3f; border: 1px solid #2a2e4f; border-radius: 4px; color: #8a8fb5; font-size: 11px; font-weight: 600; cursor: pointer; }
+.ts-filter button.active { background: #2962ff; border-color: #2962ff; color: #fff; }
+.ts-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 6px; margin-bottom: 10px; }
+.ts-cards > div { background: #1a1e3f; border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; }
+.ts-cards span { font-size: 10px; text-transform: uppercase; letter-spacing: .4px; color: #8a8fb5; }
+.ts-cards b { font-size: 15px; color: #e0e0e0; } .ts-cards b.up, .ts-table .up { color: #26a69a; } .ts-cards b.down, .ts-table .down { color: #ef5350; }
+.ts-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+.ts-table th { text-align: right; font-size: 10px; text-transform: uppercase; letter-spacing: .4px; color: #8a8fb5; padding: 4px 10px; font-weight: 600; }
+.ts-table td { text-align: right; padding: 5px 10px; border-top: 1px solid #1a1e3f; font-variant-numeric: tabular-nums; }
+.ts-table th:first-child, .ts-table td:first-child { text-align: left; color: #e0e0e0; }
+.ts-rate { white-space: nowrap; } .ts-rate b { display: inline-block; min-width: 40px; }
+.ts-bar { display: inline-block; width: 46px; height: 6px; background: #1a1e3f; border-radius: 3px; margin-right: 6px; vertical-align: middle; overflow: hidden; }
+.ts-bar i { display: block; height: 100%; } .ts-bar i.good { background: #26a69a; } .ts-bar i.bad { background: #ef5350; }
+.ts-history-head { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 4px; color: #e0e0e0; }
+.ts-none { text-align: center !important; color: #6a6e90; padding: 12px 0 !important; }
+.ts-note { font-size: 10.5px; color: #6a6e90; line-height: 1.45; }
+@media (max-width: 900px) { .ts-table th, .ts-table td { padding: 5px 6px; } .ts-bar { display: none; } }

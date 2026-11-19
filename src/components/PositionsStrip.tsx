@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { PnLCardDialog } from './PnLCardDialog';
+import { TradeStats } from './TradeStats';
 import { PnLCardData } from '../utils/pnlCard';
 import { closedTradeCard, dayCard, optionCard, orderCard, positionCard } from '../utils/pnlCardData';
 import { PaperTradingAccount, Order } from '../types';
@@ -16,7 +17,7 @@ interface PositionsStripProps {
   onClearHistory: () => void;
 }
 
-type Tab = 'positions' | 'options' | 'closed' | 'orders';
+type Tab = 'positions' | 'options' | 'closed' | 'stats' | 'orders';
 
 const money = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 const signedMoney = (n: number) => `${n >= 0 ? '+' : '-'}${money(Math.abs(n))}`;
@@ -47,6 +48,7 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
     { id: 'positions', label: 'Positions', count: account.positions.length },
     { id: 'options', label: 'Options', count: account.options.length },
     { id: 'closed', label: 'Closed', count: account.closedTrades.length },
+    { id: 'stats', label: 'Stats', count: account.closedTrades.length },
     { id: 'orders', label: 'Orders', count: orders.length },
   ];
 
@@ -86,7 +88,7 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
       {card && <PnLCardDialog data={card} onClose={() => setCard(null)} />}
 
       {open && (
-        <div className="ps-body">
+        <div className={`ps-body ${tab === 'stats' ? 'tall' : ''}`}>
           {tab === 'positions' && (
             account.positions.length === 0 ? (
               <div className="ps-empty">No open positions. Place a trade to see it here.</div>
@@ -156,6 +158,8 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
               </table>
             )
           )}
+
+          {tab === 'stats' && <TradeStats trades={account.closedTrades} openPositions={account.positions.length + account.options.length} />}
 
           {tab === 'closed' && (
             history.length === 0 ? (
