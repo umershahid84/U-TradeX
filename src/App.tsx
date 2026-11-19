@@ -28,6 +28,7 @@ import {
   calculateSMA,
   calculateRSI,
 } from './utils/indicators';
+import { MIN_AUTOCHART_BARS } from './utils/autoChart';
 import { TimeFrame, TimeRange, ChartData, FearGreedData, MarketFearGreed, TakeProfitStopLoss, Order, TrailingStop } from './types';
 import './App.css';
 
@@ -328,8 +329,20 @@ function App() {
       );
       
       try {
+        const toTimeframe = (bars: ChartData[]) =>
+          timeframe === '10m' ? aggregateBars(bars, 10 * 60 * 1000) : timeframe === '4h' ? aggregate4h(bars) : bars;
         const raw = await marketData.fetchChartData(symbol, yahooInterval, yahooRange, includeAfterHours);
-        const data = timeframe === '10m' ? aggregateBars(raw, 10 * 60 * 1000) : timeframe === '4h' ? aggregate4h(raw) : raw;
+        let data = toTimeframe(raw);
+        // Today alone can be only a handful of candles (early in the session, or with extended hours off), too few to
+        // read the chart or for Auto Charting (30+). Show the last five days instead, like other platforms do.
+        const intraday = !['1d', '1wk', '1mo', '3mo'].includes(yahooInterval);
+        if (intraday && yahooRange === '1d' && data.length < MIN_AUTOCHART_BARS) {
+          const more = toTimeframe(await marketData.fetchChartData(symbol, yahooInterval, '5d', includeAfterHours));
+          if (more.length > data.length) {
+            data = more;
+            setRangeNote('Showing 5 days: today has too few candles so far');
+          }
+        }
         setChartData(data);
         
         if (data.length > 0) {
