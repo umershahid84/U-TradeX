@@ -47,6 +47,15 @@ export class AutoChartManager {
     width: 1 | 2 | 3,
     title: string
   ) {
+    // the chart library needs strictly increasing times: a line that starts on the last candle would have two
+    // points on the same time, so keep one per time, and draw nothing for a line that ends up with fewer than two
+    const pts: { time: number; value: number }[] = [];
+    for (const p of [...points].sort((a, b) => a.time - b.time)) {
+      if (!Number.isFinite(p.time) || !Number.isFinite(p.value)) continue;
+      if (pts.length && pts[pts.length - 1].time === p.time) pts[pts.length - 1] = p;
+      else pts.push(p);
+    }
+    if (pts.length < 2) return;
     const s = this.chart.addSeries(LineSeries, {
       color,
       lineWidth: width,
@@ -56,8 +65,17 @@ export class AutoChartManager {
       lastValueVisible: false,
       crosshairMarkerVisible: false,
     });
-    s.setData(points.map((p) => ({ time: (p.time / 1000) as Time, value: p.value })));
-    this.series.push(s);
+    try {
+      s.setData(pts.map((p) => ({ time: (p.time / 1000) as Time, value: p.value })));
+      this.series.push(s);
+    } catch {
+      // one bad line must not take the whole chart down
+      try {
+        this.chart.removeSeries(s);
+      } catch {
+        /* already removed */
+      }
+    }
   }
 
   update(result: AutoChartResult | null, data: ChartData[], opts: AutoChartOptions) {
@@ -86,7 +104,7 @@ export class AutoChartManager {
       result.levels.forEach((l) => {
         const color = l.kind === 'support' ? GREEN : RED;
         this.line(
-          [{ time: t(l.fromIdx), value: l.price }, { time: t(lastIdx), value: l.price }],
+          [{ time: t(Math.min(l.fromIdx, lastIdx - 1)), value: l.price }, { time: t(lastIdx), value: l.price }],
           color, LineStyle.Dashed, 1, `${l.kind === 'support' ? 'S' : 'R'} ×${l.touches}`
         );
       });
@@ -108,11 +126,11 @@ export class AutoChartManager {
       const p = result.pattern;
       const top = p.type === 'double_top';
       this.line(
-        [{ time: t(p.first.idx), value: p.neckline }, { time: t(lastIdx), value: p.neckline }],
+        [{ time: t(Math.min(p.first.idx, lastIdx - 1)), value: p.neckline }, { time: t(lastIdx), value: p.neckline }],
         GOLD, LineStyle.Dashed, 2, 'Neckline'
       );
       this.line(
-        [{ time: t(p.second.idx), value: p.target }, { time: t(lastIdx), value: p.target }],
+        [{ time: t(Math.min(p.second.idx, lastIdx - 1)), value: p.target }, { time: t(lastIdx), value: p.target }],
         GOLD, LineStyle.Dotted, 1, 'Target'
       );
       const label = top ? 'Top' : 'Bottom';

@@ -109,6 +109,7 @@ const RANGE_ORDER = ['1d', '5d', '1mo', '3mo', '6mo', 'ytd', '1y', '2y', '5y', '
 // The least history that gives a usable chart for each candle size: a monthly candle over a
 // one-day range would be a single bar
 const MIN_RANGE_FOR_INTERVAL: Record<string, string> = {
+  '10m': '5d',
   '15m': '5d',
   '30m': '1mo',
   '1h': '1mo',
@@ -131,7 +132,7 @@ const RANGE_LABEL: Record<string, string> = {
 };
 
 const INTERVAL_NAME: Record<string, string> = {
-  '15m': '15-minute', '30m': '30-minute', '1h': 'hourly', '4h': '4-hour', '1d': 'daily', '1wk': 'weekly', '1mo': 'monthly', '3mo': 'quarterly',
+  '10m': '10-minute', '15m': '15-minute', '30m': '30-minute', '1h': 'hourly', '4h': '4-hour', '1d': 'daily', '1wk': 'weekly', '1mo': 'monthly', '3mo': 'quarterly',
 };
 
 const TAB_IDS: SidebarTab[] = ['watchlist', 'scanner', 'bots', 'trade', 'options', 'sentiment'];
@@ -319,10 +320,10 @@ function App() {
       setFearGreedData(null); // don't show the previous symbol's reading while loading
       const yahooInterval = getYahooInterval(timeframe);
       const requestedRange = getYahooRange(timeRange);
-      const yahooRange = effectiveRange(requestedRange, timeframe === '4h' ? '4h' : yahooInterval);
+      const yahooRange = effectiveRange(requestedRange, timeframe === '4h' ? '4h' : timeframe === '10m' ? '10m' : yahooInterval);
       setRangeNote(
         yahooRange !== requestedRange
-          ? `Showing ${RANGE_LABEL[yahooRange] ?? yahooRange} of ${INTERVAL_NAME[timeframe === '4h' ? '4h' : yahooInterval] ?? yahooInterval} candles`
+          ? `Showing ${RANGE_LABEL[yahooRange] ?? yahooRange} of ${INTERVAL_NAME[timeframe === '4h' ? '4h' : timeframe === '10m' ? '10m' : yahooInterval] ?? yahooInterval} candles`
           : ''
       );
       
