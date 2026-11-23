@@ -20,6 +20,7 @@ import { etTimeOptions } from '../utils/chartTime';
 import { findGaps } from '../utils/gaps';
 import { attachGapZones, GapZonesPrimitive } from '../plugins/gapZones';
 import { TradePlan } from './TradePlan';
+import { AutoPlan } from './AutoPlan';
 import { AutoChartManager, AutoChartOptions } from './autoChartManager';
 import { AutoChartBadge } from './AutoChartBadge';
 import { ChartLegend, LegendItem } from './ChartLegend';
@@ -171,6 +172,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const rootRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
+  const [autoPlanOpen, setAutoPlanOpen] = useState(false);
   // TradingView-style price scale buttons: A = auto-fit the price scale, L = logarithmic scale
   const [autoScale, setAutoScale] = useState(true);
   const [logScale, setLogScale] = useState(() => {
@@ -1749,10 +1751,18 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
             <button
               className={`indicator-toggle ${planOpen ? 'plan-on' : ''}`}
-              onClick={() => setPlanOpen((v) => !v)}
+              onClick={() => { setPlanOpen((v) => !v); setAutoPlanOpen(false); }}
               title="Plan a trade: entry, stop and target with risk-based size"
             >
               📐 Plan
+            </button>
+
+            <button
+              className={`indicator-toggle ${autoPlanOpen ? 'plan-on' : ''}`}
+              onClick={() => { setAutoPlanOpen((v) => !v); setPlanOpen(false); }}
+              title="Auto plan: entry, stop and targets drawn from the EMA clouds, with rule checks"
+            >
+              🧭 Auto plan
             </button>
             
             {clouds.some((i) => i.kind === 'ripster' && i.enabled && !isHidden(i.id) && isVisibleOn(i, chartMs) && i.clouds.some((c) => c.enabled)) && (
@@ -2076,6 +2086,21 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           balance={cash}
           onPlace={onPlacePlan}
           onClose={() => setPlanOpen(false)}
+        />
+      )}
+      {autoPlanOpen && data.length > 0 && (
+        <AutoPlan
+          key={symbol}
+          chartRef={chartRef}
+          seriesRef={candleSeriesRef}
+          hostRef={chartContainerRef}
+          symbol={symbol}
+          timeframe={timeframe}
+          bars={data}
+          equity={equity}
+          balance={cash}
+          onPlace={onPlacePlan}
+          onClose={() => setAutoPlanOpen(false)}
         />
       )}
       <PositionOverlay
