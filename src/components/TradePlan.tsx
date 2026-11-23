@@ -3,6 +3,7 @@ import { IChartApi, ISeriesApi, IPriceLine } from 'lightweight-charts';
 import { Order } from '../types';
 import { PlanSide, atr as atrOf, defaultPlan, planResult } from '../utils/tradePlan';
 import { ChartData } from '../types';
+import { useDraggable } from '../hooks/useDraggable';
 import './TradePlan.css';
 
 type Level = 'entry' | 'stop' | 'target';
@@ -29,6 +30,7 @@ const COLORS: Record<Level, string> = { entry: '#4C9AFF', stop: '#ef5350', targe
  * that risks a chosen percent of the account. Placing it sends a paper order with the stop and target attached.
  */
 export const TradePlan: React.FC<Props> = ({ chartRef, seriesRef, hostRef, symbol, currentPrice, bars, equity, balance, onPlace, onClose }) => {
+  const drag = useDraggable('tradePlan');
   const atrValue = useMemo(() => atrOf(bars, 14), [bars]);
   const [side, setSide] = useState<PlanSide>('long');
   const [riskPct, setRiskPct] = useState(() => {
@@ -179,8 +181,8 @@ export const TradePlan: React.FC<Props> = ({ chartRef, seriesRef, hostRef, symbo
             )
         )}
       </div>
-      <div className="plan-card" role="dialog" aria-label="Trade plan">
-        <div className="plan-head">
+      <div className="plan-card" role="dialog" aria-label="Trade plan" ref={drag.ref} style={drag.style}>
+        <div className="plan-head" {...drag.handleProps}>
           <strong>📐 Trade plan · {symbol}</strong>
           <span>
             <button type="button" onClick={() => setCollapsed((v) => !v)} aria-label="Collapse">{collapsed ? '▴' : '▾'}</button>

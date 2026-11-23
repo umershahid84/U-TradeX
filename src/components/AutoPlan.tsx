@@ -7,6 +7,7 @@ import { Gex, computeGex, fmtGex } from '../utils/gex';
 import { Ghost, buildGhosts } from '../utils/ghosts';
 import { RealMarketDataService } from '../services/realMarketData';
 import { PriceBandPrimitive } from '../plugins/priceBand';
+import { useDraggable } from '../hooks/useDraggable';
 import './AutoPlan.css';
 
 type Layer = 'lines' | 'gap' | 'gex' | 'ghosts' | 'checks' | 'elevator';
@@ -56,6 +57,7 @@ const loadLayers = (): Record<Layer, boolean> => {
  * clouds. Layers can be switched on and off. Placing it sends a paper order with the stop and cheat exit attached.
  */
 export const AutoPlan: React.FC<Props> = ({ chartRef, seriesRef, hostRef, symbol, timeframe, bars, equity, balance, onPlace, onClose }) => {
+  const drag = useDraggable('autoPlan');
   const plan = useMemo(() => buildPlan(bars), [bars]);
   const [layers, setLayers] = useState<Record<Layer, boolean>>(loadLayers);
   const [collapsed, setCollapsed] = useState(false);
@@ -306,8 +308,8 @@ export const AutoPlan: React.FC<Props> = ({ chartRef, seriesRef, hostRef, symbol
 
   if (!plan) {
     return (
-      <div className="ap-card" role="dialog" aria-label="Auto plan">
-        <div className="ap-head">
+      <div className="ap-card" role="dialog" aria-label="Auto plan" ref={drag.ref} style={drag.style}>
+        <div className="ap-head" {...drag.handleProps}>
           <strong>🧭 Auto plan · {symbol}</strong>
           <button type="button" onClick={onClose} aria-label="Close auto plan">✕</button>
         </div>
@@ -353,8 +355,8 @@ export const AutoPlan: React.FC<Props> = ({ chartRef, seriesRef, hostRef, symbol
           {pill('stop', 'STOP', plan.stop)}
         </div>
       )}
-      <div className="ap-card" role="dialog" aria-label="Auto plan">
-        <div className="ap-head">
+      <div className="ap-card" role="dialog" aria-label="Auto plan" ref={drag.ref} style={drag.style}>
+        <div className="ap-head" {...drag.handleProps}>
           <strong>🧭 Auto plan · {symbol} · {timeframe}</strong>
           <span>
             <button type="button" onClick={() => setCollapsed((v) => !v)} aria-label="Collapse">{collapsed ? '▴' : '▾'}</button>

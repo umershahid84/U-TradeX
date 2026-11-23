@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlphaDashboard as Dash } from '../utils/alphaSignals';
 import { ALPHA_COLORS } from './alphaManager';
+import { useDraggable } from '../hooks/useDraggable';
 import './AlphaDashboard.css';
 
 interface Props {
@@ -11,14 +12,15 @@ interface Props {
 
 /** Summary table in the top-right of the chart: trend, action, confidence, risk, entry zone and levels */
 export const AlphaDashboard: React.FC<Props> = ({ dash, decimals }) => {
+  const drag = useDraggable('alphaHud');
   if (!dash) return null;
   const f = (n: number) => n.toFixed(decimals);
   const trendBg = ALPHA_COLORS[dash.trendState];
   const dark = dash.trendState === 'profit' || dash.trendState === 'caution';
 
   return (
-    <div className="alpha-dash" role="table" aria-label="Alpha Signals">
-      <div className="ad-head">ALPHA SIGNALS</div>
+    <div className="alpha-dash" role="table" aria-label="Alpha Signals" ref={drag.ref} style={drag.style}>
+      <div className="ad-head" {...drag.handleProps}>ALPHA SIGNALS</div>
       <div className="ad-row ad-trend" style={{ background: trendBg, color: dark ? '#1a1a1a' : '#fff' }}>Trend: {dash.trend}</div>
       <div className="ad-row">Action: {dash.action}</div>
       <div className="ad-row">Confidence: {dash.confidence}%</div>
