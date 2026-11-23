@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { IChartApi, ISeriesApi, IPriceLine } from 'lightweight-charts';
+import { IChartApi, ISeriesApi, IPriceLine, ISeriesMarkersPluginApi, LineSeries, Time, createSeriesMarkers } from 'lightweight-charts';
 import { ChartData, Order } from '../types';
 import { AutoPlan as Plan, buildPlan } from '../utils/autoPlan';
 import { planResult } from '../utils/tradePlan';
+import { Gex, computeGex, fmtGex } from '../utils/gex';
+import { Ghost, buildGhosts } from '../utils/ghosts';
+import { RealMarketDataService } from '../services/realMarketData';
 import { PriceBandPrimitive } from '../plugins/priceBand';
 import './AutoPlan.css';
 
-type Layer = 'lines' | 'checks' | 'elevator';
+type Layer = 'lines' | 'gap' | 'gex' | 'ghosts' | 'checks' | 'elevator';
 
 interface Props {
   chartRef: React.MutableRefObject<IChartApi | null>;
@@ -32,9 +35,9 @@ const PHASE_LABEL: Record<Plan['phase'], string> = {
 };
 const COLOR = { entry: '#4C9AFF', stop: '#ef5350', cheat: '#ffa726', t1: '#26a69a', t2: '#1de9b6' };
 const PRESETS: Record<string, Record<Layer, boolean>> = {
-  clean: { lines: true, checks: false, elevator: false },
-  air: { lines: true, checks: false, elevator: true },
-  full: { lines: true, checks: true, elevator: true },
+  clean: { lines: true, gap: false, gex: false, ghosts: false, checks: false, elevator: false },
+  air: { lines: true, gap: true, gex: true, ghosts: false, checks: false, elevator: true },
+  full: { lines: true, gap: true, gex: true, ghosts: true, checks: true, elevator: true },
 };
 
 const loadLayers = (): Record<Layer, boolean> => {
@@ -108,7 +111,7 @@ export const AutoPlan: React.FC<Props> = ({ chartRef, seriesRef, hostRef, symbol
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, layers.lines, symbol]);
 
-  // the air gap band
+  // the air gap: the space between the entry and target 1, from the break to the right edge (what price has to cross)
   useEffect(() => {
     const series = seriesRef.current;
     if (!series) return;
@@ -116,8 +119,20 @@ export const AutoPlan: React.FC<Props> = ({ chartRef, seriesRef, hostRef, symbol
       band.current = new PriceBandPrimitive();
       series.attachPrimitive(band.current);
     }
-    band.current.setBand(plan && plan.airGap && layers.elevator ? { from: plan.airGap.from, to: plan.airGap.to, label: `AIR GAP ${money(plan.airGap.amount)}` } : null);
-  }, [plan?.airGap?.from, plan?.airGap?.to, layers.elevator, seriesRef]);
+    const long = plan?.side === 'long';
+    band.current.setBand(
+      plan && layers.gap
+        ? {
+            from: plan.entry,
+            to: plan.t1,
+            label: `AIR GAP ${money(plan.room)} · ${plan.rr.toFixed(1)} R`,
+            rgb: long ? '38, 166, 154' : '239, 83, 80',
+            fromTime: plan.breakTime !== null ? plan.breakTime / 1000 : bars.length ? bars[bars.length - 1].time / 1000 : undefined,
+          }
+        : null
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, layers.gap, seriesRef]);
   useEffect(
     () => () => {
       const series = seriesRef.current;
@@ -133,6 +148,133 @@ export const AutoPlan: React.FC<Props> = ({ chartRef, seriesRef, hostRef, symbol
     },
     [seriesRef]
   );
+
+  // "ENTRY · SHORT" at the break candle and "T1 REACHED" where it got there
+  const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+    if (!markersRef.current) markersRef.current = createSeriesMarkers(series, []);
+    const m: { time: Time; position: 'aboveBar' | 'belowBar'; color: string; shape: 'arrowUp' | 'arrowDown' | 'circle'; text: string }[] = [];
+    if (plan && layers.lines && plan.breakTime !== null && plan.breakIdx !== null) {
+      const long = plan.side === 'long';
+      m.push({ time: (plan.breakTime / 1000) as Time, position: long ? 'belowBar' : 'aboveBar', color: long ? '#26a69a' : '#ef5350', shape: long ? 'arrowUp' : 'arrowDown', text: `ENTRY · ${long ? 'LONG' : 'SHORT'}` });
+      if (plan.phase === 'target1' || plan.phase === 'target2') {
+        for (let i = plan.breakIdx + 1; i < bars.length; i++) {
+          if (long ? bars[i].high >= plan.t1 : bars[i].low <= plan.t1) {
+            m.push({ time: (bars[i].time / 1000) as Time, position: long ? 'aboveBar' : 'belowBar', color: '#1de9b6', shape: 'circle', text: 'T1 REACHED' });
+            break;
+          }
+        }
+      }
+    }
+    try {
+      markersRef.current.setMarkers(m);
+    } catch {
+      /* series replaced */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, plan?.breakTime, layers.lines, seriesRef]);
+  useEffect(
+    () => () => {
+      try {
+        markersRef.current?.setMarkers([]);
+        markersRef.current?.detach();
+      } catch {
+        /* series replaced */
+      }
+      markersRef.current = null;
+    },
+    []
+  );
+
+  // ghosts: earlier same-direction breaks of this cloud, drawn faintly from today's entry
+  const ghosts: Ghost[] = useMemo(() => (plan && layers.ghosts ? buildGhosts(bars, plan) : []), [bars, plan, layers.ghosts]);
+  const ghostSeries = useRef<ISeriesApi<'Line'>[]>([]);
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const drop = () => {
+      for (const g of ghostSeries.current) {
+        try {
+          chart.removeSeries(g);
+        } catch {
+          /* chart replaced */
+        }
+      }
+      ghostSeries.current = [];
+    };
+    drop();
+    ghosts.forEach((g, i) => {
+      try {
+        const ls = chart.addSeries(LineSeries, {
+          color: `rgba(190, 200, 255, ${0.55 - i * 0.1})`,
+          lineWidth: 1,
+          lineStyle: 2,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+          autoscaleInfoProvider: () => null,
+        });
+        ls.setData(g.points.map((p) => ({ time: (p.time / 1000) as Time, value: p.value })));
+        ghostSeries.current.push(ls);
+      } catch {
+        /* skip a ghost that cannot be drawn */
+      }
+    });
+    return drop;
+  }, [ghosts, chartRef]);
+
+  // GEX: call wall, put wall, gamma flip and net gamma, estimated from open interest in the nearest expirations
+  const [gex, setGex] = useState<{ data: Gex | null; state: 'idle' | 'loading' | 'error' | 'empty'; note?: string }>({ data: null, state: 'idle' });
+  const spot = bars.length ? bars[bars.length - 1].close : 0;
+  const spotRef = useRef(spot);
+  spotRef.current = spot;
+  useEffect(() => {
+    if (!layers.gex || !spotRef.current) return;
+    let live = true;
+    setGex({ data: null, state: 'loading' });
+    (async () => {
+      try {
+        const svc = RealMarketDataService.getInstance();
+        const exps = (await svc.getOptionExpirations(symbol)).slice(0, 4);
+        const chains = (await Promise.all(exps.map((d) => svc.fetchOptionsChain(symbol, d).catch(() => [])))).flat();
+        if (!live) return;
+        const g = computeGex(chains, spotRef.current);
+        setGex(g ? { data: g, state: 'idle' } : { data: null, state: 'empty', note: 'No usable option open interest for this symbol' });
+      } catch (e) {
+        if (live) setGex({ data: null, state: 'error', note: e instanceof Error ? e.message : 'Option chain unavailable' });
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [layers.gex, symbol]);
+  const gexLines = useRef<IPriceLine[]>([]);
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+    const drop = () => {
+      for (const l of gexLines.current) {
+        try {
+          series.removePriceLine(l);
+        } catch {
+          /* series replaced */
+        }
+      }
+      gexLines.current = [];
+    };
+    drop();
+    const g = gex.data;
+    if (!layers.gex || !g) return drop;
+    const mk = (price: number | null, color: string, title: string) => {
+      if (price !== null) gexLines.current.push(series.createPriceLine({ price, color, lineWidth: 1, lineStyle: 1, axisLabelVisible: false, title }));
+    };
+    mk(g.callWall, '#66bb6a', 'CALL WALL');
+    mk(g.putWall, '#ef5350', 'PUT WALL');
+    mk(g.flip, '#ffca28', 'γ FLIP');
+    return drop;
+  }, [gex.data, layers.gex, seriesRef]);
 
   // labels next to the lines
   useEffect(() => {
@@ -287,11 +429,47 @@ export const AutoPlan: React.FC<Props> = ({ chartRef, seriesRef, hostRef, symbol
               </div>
             )}
 
+            {layers.gex && (
+              <div className="ap-section">
+                <div className="ap-sec-head">
+                  <span>GEX (estimated)</span>
+                  {gex.data && <b className={gex.data.net >= 0 ? 'up' : 'down'}>Net {fmtGex(gex.data.net)}</b>}
+                </div>
+                {gex.state === 'loading' && <div className="ap-note">Loading option open interest…</div>}
+                {(gex.state === 'error' || gex.state === 'empty') && <div className="ap-note">{gex.note}</div>}
+                {gex.data && (
+                  <>
+                    <div className="ap-lv"><span>Call wall</span><b>{gex.data.callWall !== null ? money(gex.data.callWall) : '–'}</b><i /></div>
+                    <div className="ap-lv"><span>Put wall</span><b>{gex.data.putWall !== null ? money(gex.data.putWall) : '–'}</b><i /></div>
+                    <div className="ap-lv"><span>Gamma flip</span><b>{gex.data.flip !== null ? money(gex.data.flip) : '–'}</b><i /></div>
+                    <div className="ap-note">
+                      {gex.data.net >= 0
+                        ? 'Positive gamma: dealer hedging tends to dampen moves.'
+                        : 'Negative gamma: dealer hedging tends to amplify moves.'}{' '}
+                      Estimated from open interest in the next {gex.data.expirations} expirations, assuming dealers are long calls and short puts.
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {layers.ghosts && (
+              <div className="ap-section">
+                <div className="ap-sec-head"><span>Ghosts</span><small>{ghosts.length ? `${ghosts.length} past ${plan.side} break${ghosts.length > 1 ? 's' : ''}` : 'none'}</small></div>
+                {ghosts.map((g) => (
+                  <div key={g.date} className="ap-lv"><span>{g.date}</span><b className={g.resultPct >= 0 ? 'up' : 'down'}>{g.resultPct >= 0 ? '+' : ''}{g.resultPct.toFixed(2)}%</b><i>to close</i></div>
+                ))}
+                {!ghosts.length && (
+                  <div className="ap-note">{triggered ? 'No earlier day in this chart broke the same cloud the same way (try 5D).' : 'Ghosts appear once today’s break prints.'}</div>
+                )}
+              </div>
+            )}
+
             <div className="ap-layers">
-              {(['lines', 'checks', 'elevator'] as Layer[]).map((l) => (
+              {(['lines', 'gap', 'gex', 'ghosts', 'checks', 'elevator'] as Layer[]).map((l) => (
                 <label key={l}>
                   <input type="checkbox" checked={layers[l]} onChange={() => setLayers((cur) => ({ ...cur, [l]: !cur[l] }))} />
-                  {l === 'lines' ? 'Plan lines' : l === 'checks' ? 'Checks' : 'Elevator + air gap'}
+                  {{ lines: 'Plan lines', gap: 'Air gap', gex: 'GEX levels', ghosts: 'Ghosts', checks: 'Checks', elevator: 'Elevator' }[l]}
                 </label>
               ))}
             </div>
