@@ -20,6 +20,8 @@ export interface Tally {
 export interface PeriodTally extends Tally {
   key: string;
   label: string;
+  /** The trades in this period */
+  list: ClosedTrade[];
 }
 
 export const tally = (trades: ClosedTrade[]): Tally => {
@@ -43,7 +45,7 @@ export const tally = (trades: ClosedTrade[]): Tally => {
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** Monday of the week containing a New York calendar date (YYYY-MM-DD) */
-const weekStart = (date: string): string => {
+export const weekStart = (date: string): string => {
   const d = new Date(`${date}T12:00:00Z`);
   const back = (d.getUTCDay() + 6) % 7; // Monday = 0
   d.setUTCDate(d.getUTCDate() - back);
@@ -79,7 +81,7 @@ export const byPeriod = (trades: ClosedTrade[], unit: PeriodUnit): PeriodTally[]
   }
   return [...groups.entries()]
     .sort((a, b) => (a[0] < b[0] ? 1 : -1))
-    .map(([key, list]) => ({ key, label: periodLabel(key, unit), ...tally(list) }));
+    .map(([key, list]) => ({ key, label: periodLabel(key, unit), list, ...tally(list) }));
 };
 
 /** Trades closed in the current day / week / month / year */

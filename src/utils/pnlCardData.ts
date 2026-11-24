@@ -153,3 +153,31 @@ export const dayCard = (account: PaperTradingAccount): PnLCardData => {
     ],
   };
 };
+
+/** Realized result of a group of closed trades (a day, week, month, year or everything) */
+export const periodCard = (headline: string, status: string, trades: ClosedTrade[]): PnLCardData => {
+  const pnl = trades.reduce((s, t) => s + t.pnl, 0);
+  const cost = trades.reduce((s, t) => s + t.entryPrice * t.quantity * (t.option ? 100 : 1), 0);
+  const wins = trades.filter((t) => t.pnl > 0).length;
+  const losses = trades.filter((t) => t.pnl < 0).length;
+  const best = trades.reduce<number | null>((m, t) => (m === null || t.pnl > m ? t.pnl : m), null);
+  const worst = trades.reduce<number | null>((m, t) => (m === null || t.pnl < m ? t.pnl : m), null);
+  const last = trades.reduce((m, t) => Math.max(m, t.closedAt), 0);
+  return {
+    kind: 'day',
+    headline,
+    tag: `${trades.length} closed trade${trades.length === 1 ? '' : 's'}`,
+    status,
+    pnl,
+    pnlPct: cost > 0 ? (pnl / cost) * 100 : null,
+    dateLabel: dateLabel(last || Date.now()),
+    rows: [
+      { label: 'Trades', value: String(trades.length) },
+      { label: 'Win rate', value: trades.length ? `${Math.round((wins / trades.length) * 100)}% (${wins}/${trades.length})` : '—' },
+      { label: 'In profit / loss', value: `${wins} / ${losses}` },
+      { label: 'Realized P&L', value: signed(pnl), money: true },
+      { label: 'Best trade', value: best === null ? '—' : signed(best), money: true },
+      { label: 'Worst trade', value: worst === null ? '—' : signed(worst), money: true },
+    ],
+  };
+};

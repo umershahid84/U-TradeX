@@ -1,11 +1,16 @@
 import React, { useMemo, useState } from 'react';
 import { ClosedTrade } from '../types';
-import { PeriodUnit, Tally, byPeriod, currentPeriod, profitableDays, tally } from '../utils/winRate';
+import { PeriodUnit, Tally, byPeriod, periodKey, profitableDays, tally } from '../utils/winRate';
+import { inRange } from '../utils/dateRange';
+import { PnLCardData } from '../utils/pnlCard';
+import { periodCard } from '../utils/pnlCardData';
 import './TradeStats.css';
 
 interface Props {
   trades: ClosedTrade[];
   openPositions: number;
+  /** Opens a P&L card (copy / download) */
+  onCard: (card: PnLCardData) => void;
 }
 
 type Filter = 'all' | 'stock' | 'option';
@@ -30,7 +35,7 @@ const RateCell: React.FC<{ t: Tally }> = ({ t }) => (
   </td>
 );
 
-const Row: React.FC<{ label: string; t: Tally; showEven: boolean }> = ({ label, t, showEven }) => (
+const Row: React.FC<{ label: string; t: Tally; showEven: boolean; onCard?: () => void }> = ({ label, t, showEven, onCard }) => (
   <tr>
     <td>{label}</td>
     <td>{t.trades}</td>
@@ -39,24 +44,39 @@ const Row: React.FC<{ label: string; t: Tally; showEven: boolean }> = ({ label, 
     {showEven && <td>{t.even}</td>}
     <RateCell t={t} />
     <td className={t.pnl >= 0 ? 'up' : 'down'}>{t.trades ? money(t.pnl) : '—'}</td>
+    <td className="ts-card">
+      {onCard && t.trades > 0 && (
+        <button type="button" className="ps-action" title="P&L card to copy, download or share" aria-label={`P&L card for ${label}`} onClick={onCard}>📤</button>
+      )}
+    </td>
   </tr>
 );
 
 /** Win rate (today, this week, this month, this year, all time), trade counts, and the history by day, week, month or year */
-export const TradeStats: React.FC<Props> = ({ trades, openPositions }) => {
+export const TradeStats: React.FC<Props> = ({ trades, openPositions, onCard }) => {
   const [filter, setFilter] = useState<Filter>('all');
   const [unit, setUnit] = useState<PeriodUnit>('day');
 
   const list = useMemo(() => (filter === 'all' ? trades : trades.filter((t) => t.kind === filter)), [trades, filter]);
   const all = useMemo(() => tally(list), [list]);
-  const periods = useMemo(
-    () => (['day', 'week', 'month', 'year'] as PeriodUnit[]).map((u) => ({ u, t: currentPeriod(list, u) })),
-    [list]
-  );
+  // the trades in the current day, week, month and year, and the last six months
+  const periods = useMemo(() => {
+    const now = Date.now();
+    const unitList = (u: PeriodUnit) => list.filter((t) => periodKey(t.closedAt, u) === periodKey(now, u));
+    const six = list.filter((t) => inRange(t.closedAt, '6m', now));
+    return [
+      { id: 'day', label: 'Today', head: 'Daily P&L', status: 'Today', list: unitList('day') },
+      { id: 'week', label: 'This week', head: 'Weekly P&L', status: 'This week', list: unitList('week') },
+      { id: 'month', label: 'This month', head: 'Monthly P&L', status: 'This month', list: unitList('month') },
+      { id: '6m', label: 'Last 6 months', head: 'Six-month P&L', status: 'Last 6 months', list: six },
+      { id: 'year', label: 'This year', head: 'Yearly P&L', status: 'This year', list: unitList('year') },
+    ].map((p) => ({ ...p, t: tally(p.list) }));
+  }, [list]);
+  const HEADS: Record<PeriodUnit, string> = { day: 'Daily P&L', week: 'Weekly P&L', month: 'Monthly P&L', year: 'Yearly P&L' };
   const history = useMemo(() => byPeriod(list, unit).slice(0, 30), [list, unit]);
   const days = useMemo(() => profitableDays(list), [list]);
   const showEven = all.even > 0;
-  const colSpan = showEven ? 7 : 6;
+  const colSpan = showEven ? 8 : 7;
   const unitMeta = UNITS.find((x) => x.id === unit)!;
 
   if (trades.length === 0) {
@@ -94,14 +114,13 @@ export const TradeStats: React.FC<Props> = ({ trades, openPositions }) => {
 
       <table className="ts-table">
         <thead>
-          <tr><th>Win rate</th><th>Trades</th><th>Won</th><th>Lost</th>{showEven && <th>Even</th>}<th>Rate</th><th>Net P&amp;L</th></tr>
+          <tr><th>Win rate</th><th>Trades</th><th>Won</th><th>Lost</th>{showEven && <th>Even</th>}<th>Rate</th><th>Net P&amp;L</th><th>Card</th></tr>
         </thead>
         <tbody>
-          <Row label="Today" t={periods[0].t} showEven={showEven} />
-          <Row label="This week" t={periods[1].t} showEven={showEven} />
-          <Row label="This month" t={periods[2].t} showEven={showEven} />
-          <Row label="This year" t={periods[3].t} showEven={showEven} />
-          <Row label="All time" t={all} showEven={showEven} />
+          {periods.map((p) => (
+            <Row key={p.id} label={p.label} t={p.t} showEven={showEven} onCard={() => onCard(periodCard(p.head, p.status, p.list))} />
+          ))}
+          <Row label="All time" t={all} showEven={showEven} onCard={() => onCard(periodCard('All-time P&L', 'All time', list))} />
         </tbody>
       </table>
 
@@ -117,13 +136,13 @@ export const TradeStats: React.FC<Props> = ({ trades, openPositions }) => {
       </div>
       <table className="ts-table">
         <thead>
-          <tr><th>{unitMeta.label} win rate</th><th>Trades</th><th>Won</th><th>Lost</th>{showEven && <th>Even</th>}<th>Rate</th><th>Net P&amp;L</th></tr>
+          <tr><th>{unitMeta.label} win rate</th><th>Trades</th><th>Won</th><th>Lost</th>{showEven && <th>Even</th>}<th>Rate</th><th>Net P&amp;L</th><th>Card</th></tr>
         </thead>
         <tbody>
           {history.length === 0 ? (
             <tr><td colSpan={colSpan} className="ts-none">No trades in this view.</td></tr>
           ) : (
-            history.map((p) => <Row key={p.key} label={p.label} t={p} showEven={showEven} />)
+            history.map((p) => <Row key={p.key} label={p.label} t={p} showEven={showEven} onCard={() => onCard(periodCard(HEADS[unit], p.label, p.list))} />)
           )}
         </tbody>
       </table>

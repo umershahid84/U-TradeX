@@ -19,3 +19,5 @@
 .ts-none { text-align: center !important; color: #6a6e90; padding: 12px 0 !important; }
 .ts-note { font-size: 10.5px; color: #6a6e90; line-height: 1.45; }
 @media (max-width: 900px) { .ts-table th, .ts-table td { padding: 5px 6px; } .ts-bar { display: none; } }
+
+.ts-table th:last-child, .ts-table td.ts-card { text-align: center; width: 34px; padding-left: 2px; padding-right: 2px; }

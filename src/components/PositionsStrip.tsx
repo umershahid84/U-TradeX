@@ -4,6 +4,7 @@ import { TradeStats } from './TradeStats';
 import { PnLCardData } from '../utils/pnlCard';
 import { closedTradeCard, dayCard, optionCard, orderCard, positionCard } from '../utils/pnlCardData';
 import { PaperTradingAccount, Order } from '../types';
+import { RANGES, RangeId, fmtDateTime, inRange } from '../utils/dateRange';
 import './PositionsStrip.css';
 
 interface PositionsStripProps {
@@ -29,18 +30,30 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
 }) => {
   const [tab, setTab] = useState<Tab>('positions');
   const [card, setCard] = useState<PnLCardData | null>(null);
+  // Orders and Closed can be narrowed to today, this week, month, six months or year (New York calendar)
+  const [range, setRange] = useState<RangeId>('all');
 
   const optionRows = account.options.map((o) => {
     const cost = o.premium * o.quantity * 100;
     const value = (o.currentPremium ?? o.premium) * o.quantity * 100;
     return { o, cost, value, pnl: value - cost };
   });
-  const history = [...account.closedTrades].sort((a, b) => b.closedAt - a.closedAt);
+  const history = account.closedTrades.filter((t) => inRange(t.closedAt, range)).sort((a, b) => b.closedAt - a.closedAt);
   const historyPnl = history.reduce((sum, t) => sum + t.pnl, 0);
   const historyWins = history.filter((t) => t.pnl > 0).length;
-  const when = (ms: number) => new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-  const orders: Order[] = [...account.orders].sort((a, b) => b.timestamp - a.timestamp);
-  const pending = orders.filter((o) => o.status === 'pending').length;
+  const allOrders: Order[] = [...account.orders].sort((a, b) => b.timestamp - a.timestamp);
+  const orders = allOrders.filter((o) => inRange(o.timestamp, range));
+  const rangeBar = (shown: number, total: number) => (
+    <div className="ps-range" role="tablist" aria-label="Period">
+      {RANGES.map((r) => (
+        <button key={r.id} type="button" role="tab" aria-selected={range === r.id} title={r.title} className={range === r.id ? 'active' : ''} onClick={() => setRange(r.id)}>
+          {r.label}
+        </button>
+      ))}
+      <span>{shown} of {total} · New York time</span>
+    </div>
+  );
+  const pending = allOrders.filter((o) => o.status === 'pending').length;
   const stockPnl = account.positions.reduce((s, p) => s + p.pnl, 0);
   const optionPnl = optionRows.reduce((s, r) => s + r.pnl, 0);
 
@@ -49,7 +62,7 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
     { id: 'options', label: 'Options', count: account.options.length },
     { id: 'closed', label: 'Closed', count: account.closedTrades.length },
     { id: 'stats', label: 'Stats', count: account.closedTrades.length },
-    { id: 'orders', label: 'Orders', count: orders.length },
+    { id: 'orders', label: 'Orders', count: account.orders.length },
   ];
 
   return (
@@ -76,7 +89,7 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
               {account.positions.length > 0 && <em className={stockPnl >= 0 ? 'up' : 'down'}> {signedMoney(stockPnl)}</em>}
               <i>·</i> Options <b>{account.options.length}</b>
               {account.options.length > 0 && <em className={optionPnl >= 0 ? 'up' : 'down'}> {signedMoney(optionPnl)}</em>}
-              <i>·</i> Orders <b>{orders.length}</b>
+              <i>·</i> Orders <b>{account.orders.length}</b>
               {pending > 0 && <em className="pending"> {pending} pending</em>}
             </span>
           )}
@@ -159,75 +172,88 @@ export const PositionsStrip: React.FC<PositionsStripProps> = ({
             )
           )}
 
-          {tab === 'stats' && <TradeStats trades={account.closedTrades} openPositions={account.positions.length + account.options.length} />}
+          {tab === 'stats' && <TradeStats trades={account.closedTrades} openPositions={account.positions.length + account.options.length} onCard={setCard} />}
 
           {tab === 'closed' && (
-            history.length === 0 ? (
+            account.closedTrades.length === 0 ? (
               <div className="ps-empty">No closed positions yet. When you close a trade it is recorded here, with a P&amp;L card you can share.</div>
             ) : (
               <>
+                {rangeBar(history.length, account.closedTrades.length)}
                 <div className="ps-stats">
                   <span>Realized <b className={historyPnl >= 0 ? 'up' : 'down'}>{signedMoney(historyPnl)}</b></span>
-                  <span>Win rate <b>{Math.round((historyWins / history.length) * 100)}%</b> ({historyWins}/{history.length})</span>
+                  <span>Win rate <b>{history.length ? `${Math.round((historyWins / history.length) * 100)}%` : '—'}</b> ({historyWins}/{history.length})</span>
                   <button type="button" className="ps-action" onClick={() => { if (window.confirm('Clear the closed-position history? This cannot be undone.')) onClearHistory(); }}>Clear history</button>
                 </div>
-                <table className="ps-table">
-                  <thead>
-                    <tr><th>Symbol</th><th>Side</th><th>Qty</th><th>Avg price</th><th>Closed price</th><th>Realized P&amp;L</th><th>%</th><th>Closed</th><th /></tr>
-                  </thead>
-                  <tbody>
-                    {history.map((t) => (
-                      <tr key={t.id}>
-                        <td>
-                          <button type="button" className="ps-link" onClick={() => onSelectSymbol(t.symbol)}>{t.symbol}</button>
-                          {t.option ? ` ${t.option.type.toUpperCase()} $${t.option.strike}` : ''}
-                        </td>
-                        <td className={t.side === 'long' ? 'up' : 'down'}>{t.side.toUpperCase()}</td>
-                        <td>{t.quantity}</td>
-                        <td>{money(t.entryPrice)}</td>
-                        <td>{money(t.exitPrice)}</td>
-                        <td className={t.pnl >= 0 ? 'up' : 'down'}>{signedMoney(t.pnl)}</td>
-                        <td className={t.pnl >= 0 ? 'up' : 'down'}>{t.pnlPct === null ? '—' : pct(t.pnlPct)}</td>
-                        <td>{when(t.closedAt)}</td>
-                        <td><button type="button" className="ps-action" title="P&L card to download or share" onClick={() => setCard(closedTradeCard(t))}>📤</button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                {history.length === 0 ? (
+                  <div className="ps-empty">No closed trades in this period.</div>
+                ) : (
+                  <table className="ps-table">
+                    <thead>
+                      <tr><th>Symbol</th><th>Side</th><th>Qty</th><th>Bought / opened</th><th>Sold / closed</th><th>Avg price</th><th>Closed price</th><th>Realized P&amp;L</th><th>%</th><th /></tr>
+                    </thead>
+                    <tbody>
+                      {history.map((t) => (
+                        <tr key={t.id}>
+                          <td>
+                            <button type="button" className="ps-link" onClick={() => onSelectSymbol(t.symbol)}>{t.symbol}</button>
+                            {t.option ? ` ${t.option.type.toUpperCase()} $${t.option.strike}` : ''}
+                          </td>
+                          <td className={t.side === 'long' ? 'up' : 'down'}>{t.side.toUpperCase()}</td>
+                          <td>{t.quantity}</td>
+                          <td className="ps-when">{t.openedAt ? fmtDateTime(t.openedAt) : '—'}</td>
+                          <td className="ps-when">{fmtDateTime(t.closedAt)}</td>
+                          <td>{money(t.entryPrice)}</td>
+                          <td>{money(t.exitPrice)}</td>
+                          <td className={t.pnl >= 0 ? 'up' : 'down'}>{signedMoney(t.pnl)}</td>
+                          <td className={t.pnl >= 0 ? 'up' : 'down'}>{t.pnlPct === null ? '—' : pct(t.pnlPct)}</td>
+                          <td><button type="button" className="ps-action" title="P&L card to download or share" onClick={() => setCard(closedTradeCard(t))}>📤</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </>
             )
           )}
 
           {tab === 'orders' && (
-            orders.length === 0 ? (
+            allOrders.length === 0 ? (
               <div className="ps-empty">No orders yet.</div>
             ) : (
-              <table className="ps-table">
-                <thead>
-                  <tr><th>Time</th><th>Symbol</th><th>Side</th><th>Type</th><th>Qty</th><th>Price</th><th>Status</th><th /></tr>
-                </thead>
-                <tbody>
-                  {orders.map((o) => (
-                    <tr key={o.id}>
-                      <td>{new Date(o.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</td>
-                      <td><button type="button" className="ps-link" onClick={() => onSelectSymbol(o.symbol)}>{o.symbol}</button>{o.option ? ` ${o.option.type.toUpperCase()} $${o.option.strike}` : ''}</td>
-                      <td className={o.side === 'buy' ? 'up' : 'down'}>{o.side.toUpperCase()}</td>
-                      <td>{o.type}</td>
-                      <td>{o.quantity}</td>
-                      <td>{money(o.price)}</td>
-                      <td><span className={`ps-status ${o.status}`}>{o.status}</span></td>
-                      <td>
-                        {orderCard(o, account.positions, account.orders) && (
-                          <button type="button" className="ps-action" title="P&L card to download or share" onClick={() => setCard(orderCard(o, account.positions, account.orders))}>📤</button>
-                        )}{' '}
-                        {o.status === 'pending' && (
-                          <button type="button" className="ps-action" onClick={() => onCancelOrder(o.id)}>Cancel</button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <>
+                {rangeBar(orders.length, allOrders.length)}
+                {orders.length === 0 ? (
+                  <div className="ps-empty">No orders in this period.</div>
+                ) : (
+                  <table className="ps-table">
+                    <thead>
+                      <tr><th>Date &amp; time (ET)</th><th>Symbol</th><th>Side</th><th>Type</th><th>Qty</th><th>Price</th><th>Status</th><th /></tr>
+                    </thead>
+                    <tbody>
+                      {orders.map((o) => (
+                        <tr key={o.id}>
+                          <td className="ps-when">{fmtDateTime(o.timestamp)}</td>
+                          <td><button type="button" className="ps-link" onClick={() => onSelectSymbol(o.symbol)}>{o.symbol}</button>{o.option ? ` ${o.option.type.toUpperCase()} $${o.option.strike}` : ''}</td>
+                          <td className={o.side === 'buy' ? 'up' : 'down'}>{o.side.toUpperCase()}</td>
+                          <td>{o.type}</td>
+                          <td>{o.quantity}</td>
+                          <td>{money(o.price)}</td>
+                          <td><span className={`ps-status ${o.status}`}>{o.status}</span></td>
+                          <td>
+                            {orderCard(o, account.positions, account.orders) && (
+                              <button type="button" className="ps-action" title="P&L card to download or share" onClick={() => setCard(orderCard(o, account.positions, account.orders))}>📤</button>
+                            )}{' '}
+                            {o.status === 'pending' && (
+                              <button type="button" className="ps-action" onClick={() => onCancelOrder(o.id)}>Cancel</button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </>
             )
           )}
         </div>

@@ -47,3 +47,9 @@
 .ps-table td.up { color: #26a69a; } .ps-table td.down { color: #ef5350; }
 
 .ps-body.tall { max-height: 340px; }
+
+.ps-range { display: flex; align-items: center; gap: 4px; padding: 6px 12px 2px; flex-wrap: wrap; }
+.ps-range button { padding: 3px 10px; background: #1a1e3f; border: 1px solid #2a2e4f; border-radius: 4px; color: #8a8fb5; font-size: 11px; font-weight: 600; cursor: pointer; }
+.ps-range button.active { background: #2962ff; border-color: #2962ff; color: #fff; }
+.ps-range span { margin-left: auto; font-size: 11px; color: #6a6e90; }
+.ps-table td.ps-when { white-space: nowrap; color: #c0c4e0; }
