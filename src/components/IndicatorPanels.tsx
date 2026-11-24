@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   createChart,
   IChartApi,
@@ -35,6 +35,19 @@ const disposeChart = (ref: React.MutableRefObject<IChartApi | null>) => {
   }
 };
 
+// shorter than before so the price chart keeps the height; a panel can also be folded to its title bar
+const PANEL_H = 84;
+type PanelId = 'volume' | 'rsi' | 'macd';
+
+const loadFolded = (): Record<PanelId, boolean> => {
+  try {
+    const v = JSON.parse(localStorage.getItem('panelsFolded') ?? '{}');
+    return { volume: !!v.volume, rsi: !!v.rsi, macd: !!v.macd };
+  } catch {
+    return { volume: false, rsi: false, macd: false };
+  }
+};
+
 export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
   data,
   showVolume,
@@ -43,6 +56,17 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
   theme = 'dark',
 }) => {
   const pal = THEME_COLORS[theme];
+  const [folded, setFolded] = useState<Record<PanelId, boolean>>(loadFolded);
+  const toggleFold = (id: PanelId) =>
+    setFolded((f) => {
+      const next = { ...f, [id]: !f[id] };
+      try {
+        localStorage.setItem('panelsFolded', JSON.stringify(next));
+      } catch {
+        /* storage unavailable */
+      }
+      return next;
+    });
   const volumeContainerRef = useRef<HTMLDivElement>(null);
   const rsiContainerRef = useRef<HTMLDivElement>(null);
   const macdContainerRef = useRef<HTMLDivElement>(null);
@@ -53,7 +77,7 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
 
   // Volume Panel
   useEffect(() => {
-    if (!showVolume || !volumeContainerRef.current || !data.length) {
+    if (!showVolume || folded.volume || !volumeContainerRef.current || !data.length) {
       disposeChart(volumeChartRef);
       return;
     }
@@ -70,7 +94,7 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
           horzLines: { color: pal.grid },
         },
         width: volumeContainerRef.current.clientWidth,
-        height: 120,
+        height: PANEL_H,
         localization: etTimeOptions.localization,
         timeScale: {
           tickMarkFormatter: etTimeOptions.timeScale.tickMarkFormatter,
@@ -123,11 +147,11 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
       console.error('Error creating volume panel:', error);
       disposeChart(volumeChartRef);
     }
-  }, [data, showVolume, theme]);
+  }, [data, showVolume, folded.volume, theme]);
 
   // RSI Panel
   useEffect(() => {
-    if (!showRSI || !rsiContainerRef.current || !data.length || data.length < 15) {
+    if (!showRSI || folded.rsi || !rsiContainerRef.current || !data.length || data.length < 15) {
       disposeChart(rsiChartRef);
       return;
     }
@@ -144,7 +168,7 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
           horzLines: { color: pal.grid },
         },
         width: rsiContainerRef.current.clientWidth,
-        height: 120,
+        height: PANEL_H,
         localization: etTimeOptions.localization,
         timeScale: {
           tickMarkFormatter: etTimeOptions.timeScale.tickMarkFormatter,
@@ -229,11 +253,11 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
       console.error('Error creating RSI panel:', error);
       disposeChart(rsiChartRef);
     }
-  }, [data, showRSI, theme]);
+  }, [data, showRSI, folded.rsi, theme]);
 
   // MACD Panel
   useEffect(() => {
-    if (!showMACD || !macdContainerRef.current || !data.length || data.length < 26) {
+    if (!showMACD || folded.macd || !macdContainerRef.current || !data.length || data.length < 26) {
       disposeChart(macdChartRef);
       return;
     }
@@ -250,7 +274,7 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
           horzLines: { color: pal.grid },
         },
         width: macdContainerRef.current.clientWidth,
-        height: 120,
+        height: PANEL_H,
         localization: etTimeOptions.localization,
         timeScale: {
           tickMarkFormatter: etTimeOptions.timeScale.tickMarkFormatter,
@@ -333,28 +357,34 @@ export const IndicatorPanels: React.FC<IndicatorPanelsProps> = ({
       console.error('Error creating MACD panel:', error);
       disposeChart(macdChartRef);
     }
-  }, [data, showMACD, theme]);
+  }, [data, showMACD, folded.macd, theme]);
 
   return (
     <div className="indicator-panels">
       {showVolume && (
         <div className="panel-container">
-          <div className="panel-header">Volume</div>
-          <div ref={volumeContainerRef} className="panel-chart" />
+          <button type="button" className="panel-header" aria-expanded={!folded.volume} onClick={() => toggleFold('volume')} title="Click to fold or unfold">
+            <i>{folded.volume ? '▸' : '▾'}</i> Volume
+          </button>
+          {!folded.volume && <div ref={volumeContainerRef} className="panel-chart" />}
         </div>
       )}
       
       {showRSI && (
         <div className="panel-container">
-          <div className="panel-header">RSI (14)</div>
-          <div ref={rsiContainerRef} className="panel-chart" />
+          <button type="button" className="panel-header" aria-expanded={!folded.rsi} onClick={() => toggleFold('rsi')} title="Click to fold or unfold">
+            <i>{folded.rsi ? '▸' : '▾'}</i> RSI (14)
+          </button>
+          {!folded.rsi && <div ref={rsiContainerRef} className="panel-chart" />}
         </div>
       )}
       
       {showMACD && (
         <div className="panel-container">
-          <div className="panel-header">MACD (12, 26, 9)</div>
-          <div ref={macdContainerRef} className="panel-chart" />
+          <button type="button" className="panel-header" aria-expanded={!folded.macd} onClick={() => toggleFold('macd')} title="Click to fold or unfold">
+            <i>{folded.macd ? '▸' : '▾'}</i> MACD (12, 26, 9)
+          </button>
+          {!folded.macd && <div ref={macdContainerRef} className="panel-chart" />}
         </div>
       )}
     </div>

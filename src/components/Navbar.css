@@ -188,3 +188,10 @@
 }
 
 .brand-x { color: #FFB300; }
+
+/* Desktop: tighter rows */
+@media (min-width: 901px) {
+  .navbar { padding: 6px 16px; gap: 6px 16px; }
+  .search-input { padding: 6px 10px; font-size: 13px; }
+  .timeframe-buttons button, .range-buttons button { padding: 4px 9px; }
+}

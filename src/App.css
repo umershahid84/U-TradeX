@@ -335,3 +335,16 @@
 .fc-move { font-weight: 700; }
 .fc-move.up { color: #26a69a; }
 .fc-move.down { color: #ef5350; }
+
+/* Desktop: a tighter header so the chart gets the height */
+@media (min-width: 901px) {
+  .chart-header { padding: 8px 14px; gap: 4px 14px; }
+  .symbol-info { gap: 12px; }
+  .symbol-info h2 { font-size: 20px; }
+  .current-price { font-size: 22px; }
+  .bid-ask-display { gap: 14px; }
+  .bid-price, .ask-price { display: flex; flex-direction: row; align-items: baseline; gap: 5px; }
+  .bid-price .value, .ask-price .value { font-size: 14px; }
+  .main-content { padding: 8px 12px; gap: 10px; }
+  .center-column { gap: 8px; }
+}

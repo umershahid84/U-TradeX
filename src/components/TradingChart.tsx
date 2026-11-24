@@ -174,6 +174,24 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const [expanded, setExpanded] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [autoPlanOpen, setAutoPlanOpen] = useState(false);
+  // the Tools menu keeps the less-used chart buttons in one place
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const toolsRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!toolsOpen) return;
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      if (toolsRef.current && !toolsRef.current.contains(e.target as Node)) setToolsOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setToolsOpen(false);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('touchstart', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('touchstart', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [toolsOpen]);
   // politicians' disclosed trades as markers (local server only); remembered between visits
   const [polOn, setPolOn] = useState(() => {
     try {
@@ -183,6 +201,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     }
   });
   const [polStatus, setPolStatus] = useState('');
+  const toolsActive = [planOpen, autoPlanOpen, polOn, showFibonacci, showCustomPanel].filter(Boolean).length;
   useEffect(() => {
     try {
       localStorage.setItem('politicianMarkers', polOn ? '1' : '0');
@@ -1732,24 +1751,10 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         <div className="chart-control-buttons">
           <div className="button-row">
             <button
-              className={`fibonacci-btn ${showFibonacci ? 'active' : ''}`}
-              onClick={addFibonacciLevels}
-            >
-              🔢 {showFibonacci ? 'Hide' : 'Add'} Fibonacci
-            </button>
-            
-            <button
               className="indicator-toggle"
               onClick={() => setShowIndicatorPanel(!showIndicatorPanel)}
             >
               {showIndicatorPanel ? '📊 Close Menu' : '📊 Indicators'}
-            </button>
-            
-            <button
-              className="indicator-toggle"
-              onClick={() => setShowCustomPanel(!showCustomPanel)}
-            >
-              {showCustomPanel ? '🔧 Hide Custom' : '🔧 Custom Indicators'}
             </button>
 
             <button
@@ -1766,30 +1771,37 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               🎨 Style
             </button>
 
-            <button
-              className={`indicator-toggle ${planOpen ? 'plan-on' : ''}`}
-              onClick={() => { setPlanOpen((v) => !v); setAutoPlanOpen(false); }}
-              title="Plan a trade: entry, stop and target with risk-based size"
-            >
-              📐 Plan
-            </button>
+            <div className="tools-wrap" ref={toolsRef}>
+              <button
+                className={`indicator-toggle ${toolsOpen || toolsActive ? 'plan-on' : ''}`}
+                onClick={() => setToolsOpen((v) => !v)}
+                aria-haspopup="menu"
+                aria-expanded={toolsOpen}
+                title="Trade plan, Auto plan, politicians' trades, Fibonacci and custom indicators"
+              >
+                🧰 Tools{toolsActive ? ` · ${toolsActive}` : ''} ▾
+              </button>
+              {toolsOpen && (
+                <div className="tools-menu" role="menu">
+                  <button role="menuitem" className={planOpen ? 'on' : ''} onClick={() => { setPlanOpen((v) => !v); setAutoPlanOpen(false); setToolsOpen(false); }}>
+                    <span>📐</span><b>Trade plan</b><small>Drag entry, stop and target; risk-based size</small>
+                  </button>
+                  <button role="menuitem" className={autoPlanOpen ? 'on' : ''} onClick={() => { setAutoPlanOpen((v) => !v); setPlanOpen(false); setToolsOpen(false); }}>
+                    <span>🧭</span><b>Auto plan</b><small>Entry, stop and targets from the EMA clouds, checks, GEX</small>
+                  </button>
+                  <button role="menuitem" className={polOn ? 'on' : ''} onClick={() => setPolOn((v) => !v)} title={polStatus}>
+                    <span>🏛</span><b>Politicians' trades</b><small>{polOn ? `On: ${polStatus || '…'}` : 'Congress disclosures on the chart (local app)'}</small>
+                  </button>
+                  <button role="menuitem" className={showFibonacci ? 'on' : ''} onClick={() => { addFibonacciLevels(); setToolsOpen(false); }}>
+                    <span>🔢</span><b>{showFibonacci ? 'Hide' : 'Add'} Fibonacci</b><small>Retracement levels for the visible range</small>
+                  </button>
+                  <button role="menuitem" className={showCustomPanel ? 'on' : ''} onClick={() => { setShowCustomPanel(!showCustomPanel); setToolsOpen(false); }}>
+                    <span>🔧</span><b>Custom indicators</b><small>Pine Script or JavaScript</small>
+                  </button>
+                </div>
+              )}
+            </div>
 
-            <button
-              className={`indicator-toggle ${autoPlanOpen ? 'plan-on' : ''}`}
-              onClick={() => { setAutoPlanOpen((v) => !v); setPlanOpen(false); }}
-              title="Auto plan: entry, stop and targets drawn from the EMA clouds, with rule checks"
-            >
-              🧭 Auto plan
-            </button>
-
-            <button
-              className={`indicator-toggle ${polOn ? 'plan-on' : ''}`}
-              onClick={() => setPolOn((v) => !v)}
-              title={polOn ? `Politicians' trades on the chart: ${polStatus || '…'} (click to hide)` : "Show trades disclosed by members of Congress on the chart (local app with an Alpha Vantage key)"}
-            >
-              🏛 Politicians
-            </button>
-            
             {clouds.some((i) => i.kind === 'ripster' && i.enabled && !isHidden(i.id) && isVisibleOn(i, chartMs) && i.clouds.some((c) => c.enabled)) && (
               <div className={`trend-indicator trend-${ripsterTrend}`}>
                 Ripster Trend: {ripsterTrend.toUpperCase()}
