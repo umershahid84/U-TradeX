@@ -2,6 +2,7 @@ import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { MoomooQuoteClient, withMoomoo, type MoomooConfig } from './local/moomoo'
 import { createPoliticiansRoute } from './local/politicians'
+import { handleStream } from './local/stream'
 
 // Serves /api/* locally with the same handlers Vercel runs in production (api/_lib/market.ts).
 // With MOOMOO_ENABLED=true in .env.local, live quotes come from your Moomoo account through the OpenD
@@ -12,6 +13,17 @@ const marketApi = (moomoo: { client: MoomooQuoteClient; cfg: MoomooConfig } | nu
     server.middlewares.use('/api', async (req, res) => {
       const url = new URL(req.url ?? '/', 'http://localhost')
       const query = Object.fromEntries(url.searchParams)
+      // live prices pushed from OpenD (Moomoo only); without Moomoo the browser keeps polling
+      if (url.pathname === '/stream') {
+        if (!moomoo) {
+          res.statusCode = 404
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ error: 'Unknown endpoint: /stream' }))
+          return
+        }
+        await handleStream(moomoo.client, req, res, query)
+        return
+      }
       // local-only: politicians' trades (Alpha Vantage key and disk cache stay on this computer)
       if (url.pathname === '/politicians' || url.pathname === '/politicians/list') {
         const r = await politicians(url.pathname, query)

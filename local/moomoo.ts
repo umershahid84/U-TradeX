@@ -8,7 +8,7 @@
 import { sessionAt, Session } from '../src/utils/marketSessions';
 import type { ApiResult, ScanRow } from '../api/_lib/market';
 import { SCAN_UNIVERSE } from '../api/_lib/universe';
-import { QuoteTransport, TcpTransport, WsTransport, errText, ALLOWED_CMDS } from './transport';
+import { QuoteTransport, TcpTransport, WsTransport, errText, ALLOWED_CMDS, PUSH } from './transport';
 
 export { ALLOWED_CMDS };
 
@@ -26,6 +26,7 @@ export interface MoomooConfig {
 
 const US_MARKET = 11; // Qot_Common.QotMarket_US_Security
 const SUB_BASIC = 1; // Qot_Common.SubType_Basic
+const SUB_ORDERBOOK = 2; // Qot_Common.SubType_OrderBook
 const MAX_SUBSCRIPTIONS = 60;
 const RETRY_AFTER_FAILURE_MS = 15000;
 
@@ -211,8 +212,48 @@ export class MoomooQuoteClient {
   }
 
   private create(): QuoteTransport {
-    if (this.makeTransport) return this.makeTransport(this.cfg);
-    return this.cfg.protocol === 'ws' ? new WsTransport(this.cfg) : new TcpTransport(this.cfg);
+    const t = this.makeTransport ? this.makeTransport(this.cfg) : this.cfg.protocol === 'ws' ? new WsTransport(this.cfg) : new TcpTransport(this.cfg);
+    t.onPush = (cmd, msg) => this.handlePush(cmd, msg);
+    return t;
+  }
+
+  // ---- live pushes: OpenD sends a quote / order book whenever it changes, after we subscribe ----
+  private quoteListeners = new Set<(code: string, qot: any) => void>();
+  private bookListeners = new Set<(code: string, book: { bid: number; ask: number }) => void>();
+
+  /** Called for every pushed basic quote (code, BasicQot). Returns the function that stops listening. */
+  onQuote(cb: (code: string, qot: any) => void): () => void {
+    this.quoteListeners.add(cb);
+    return () => this.quoteListeners.delete(cb);
+  }
+  /** Called for every pushed order book with its best bid and ask */
+  onBook(cb: (code: string, book: { bid: number; ask: number }) => void): () => void {
+    this.bookListeners.add(cb);
+    return () => this.bookListeners.delete(cb);
+  }
+
+  private handlePush(cmd: number, msg: any) {
+    if (cmd === PUSH.BASIC_QOT) {
+      for (const b of msg?.s2c?.basicQotList ?? []) {
+        const code = String(b.security?.code ?? '').toUpperCase();
+        if (code) this.quoteListeners.forEach((cb) => cb(code, b));
+      }
+    } else if (cmd === PUSH.ORDER_BOOK) {
+      const s2c = msg?.s2c;
+      const code = String(s2c?.security?.code ?? '').toUpperCase();
+      if (!code) return;
+      const best = (list: any[]) => Number(list?.[0]?.price ?? 0) || 0;
+      const book = { bid: best(s2c.orderBookBidList), ask: best(s2c.orderBookAskList) };
+      this.bookListeners.forEach((cb) => cb(code, book));
+    }
+  }
+
+  /** Start receiving pushes for codes (quotes, and the order book for option contracts); returns the codes now live */
+  async watch(codes: string[], orderBook = false): Promise<string[]> {
+    const t = await this.ensure();
+    const live = await this.subscribe(t, codes, SUB_BASIC);
+    if (orderBook && live.length) await this.subscribe(t, live, SUB_ORDERBOOK);
+    return live;
   }
 
   private async ensure(): Promise<QuoteTransport> {
@@ -253,7 +294,7 @@ export class MoomooQuoteClient {
     const take = need.slice(0, Math.max(0, MAX_SUBSCRIPTIONS - this.subscribed.size));
     const sub = (list: string[]) =>
       t.Sub({
-        c2s: { securityList: this.securities(list), subTypeList: [subType], isSubOrUnSub: true, isRegOrUnRegPush: false, ...(extended ? { extendedTime: true } : {}) },
+        c2s: { securityList: this.securities(list), subTypeList: [subType], isSubOrUnSub: true, isRegOrUnRegPush: subType === SUB_BASIC || subType === SUB_ORDERBOOK, ...(extended ? { extendedTime: true } : {}) },
       });
     if (take.length) {
       try {
@@ -420,7 +461,8 @@ export class MoomooQuoteClient {
   }
 
   /** Live quotes for specific contracts: "SPY|2026-11-27|770|call" */
-  async contractQuotes(contracts: string[]): Promise<any[]> {
+  /** Moomoo contract codes for keys like "SPY|2026-11-27|760|call" */
+  async resolveContracts(contracts: string[]): Promise<{ key: string; contract: string }[]> {
     const t = await this.ensure();
     const want = contracts.map((c) => {
       const [symbol, expiry, strike, type] = c.split('|');
@@ -433,6 +475,12 @@ export class MoomooQuoteClient {
       const contract = w.type === 'put' ? row?.put : row?.call;
       if (contract) codes.push({ key: w.key, contract });
     }
+    return codes;
+  }
+
+  async contractQuotes(contracts: string[]): Promise<any[]> {
+    const t = await this.ensure();
+    const codes = await this.resolveContracts(contracts);
     const snaps = await this.snapshots(t, codes.map((c) => c.contract));
     return codes.flatMap((c) => {
       const sn = snaps.get(c.contract);

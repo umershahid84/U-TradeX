@@ -364,6 +364,11 @@ function App() {
     loadData();
   }, [symbol, timeframe, timeRange, includeAfterHours]);
 
+  // The price subscriptions below must not restart whenever these callbacks are recreated (that happens on most
+  // renders): a restart drops the live stream and reconnects. They read the newest callbacks through this ref.
+  const tickRef = useRef({ updatePositionPrices, onTick });
+  tickRef.current = { updatePositionPrices, onTick };
+
   // Subscribe to live price updates for current symbol
   useEffect(() => {
     const unsubscribe = marketData.subscribeToPrice(symbol, (price) => {
@@ -405,10 +410,10 @@ function App() {
       });
 
       // Update position prices for current symbol
-      updatePositionPrices(symbol, price);
+      tickRef.current.updatePositionPrices(symbol, price);
 
       // Check TP/SL
-      onTick(symbol, price);
+      tickRef.current.onTick(symbol, price);
       checkAlertsRef.current(symbol, price);
     }, includeAfterHours, (ok, message) => {
       // a price feed that stops answering must not keep showing "Live"
@@ -417,7 +422,7 @@ function App() {
     });
 
     return unsubscribe;
-  }, [symbol, timeframe, updatePositionPrices, includeAfterHours, onTick]);
+  }, [symbol, timeframe, includeAfterHours]);
 
   // Subscribe to price updates for every other symbol we hold stock or options in.
   // Keyed by the symbol list (not the account objects, which change on every tick).
@@ -431,15 +436,15 @@ function App() {
     if (!heldSymbols) return;
     const unsubscribers = heldSymbols.split(',').map((held) =>
       marketData.subscribeToPrice(held, (price) => {
-        updatePositionPrices(held, price);
-        onTick(held, price);
+        tickRef.current.updatePositionPrices(held, price);
+        tickRef.current.onTick(held, price);
       })
     );
 
     return () => {
       unsubscribers.forEach(unsub => unsub());
     };
-  }, [heldSymbols, updatePositionPrices, onTick]);
+  }, [heldSymbols]);
 
   // Real marks for the option contracts you hold, when the feed offers them (Moomoo); otherwise the model estimate stays
   const heldContracts = account.options.map((o) => `${o.symbol}|${o.expiry}|${o.strike}|${o.type}`).join(',');

@@ -258,9 +258,11 @@ export class RealMarketDataService {
     let isActive = true;
     let inFlight = false;
     let failures = 0;
+    // when the local server streams Moomoo's pushes, prices arrive as they happen and polling only steps in as a backup
+    let lastPushAt = 0;
 
     const pollPrice = async () => {
-      if (!isActive || inFlight) {
+      if (!isActive || inFlight || Date.now() - lastPushAt < 5000) {
         return;
       }
       inFlight = true;
@@ -286,9 +288,50 @@ export class RealMarketDataService {
       void pollPrice();
     }, RealMarketDataService.PRICE_POLL_INTERVAL_MS);
 
+    const stream = this.openStream({ symbol: this.normalizeSymbol(symbol), prepost: String(includePrePost) }, (event, data) => {
+      if (!isActive || event !== 'quote') return;
+      const price = (data as { price?: number }).price;
+      if (typeof price === 'number' && price > 0) {
+        lastPushAt = Date.now();
+        this.priceCache.set(symbol, price);
+        onStatus?.(true);
+        callback(price);
+      }
+    });
+
     return () => {
       isActive = false;
       clearInterval(intervalId);
+      stream();
+    };
+  }
+
+  /**
+   * Live updates from the local server (Server-Sent Events). Only a local app with Moomoo offers this: anywhere else the
+   * request fails and the connection is closed, so the caller just keeps polling. Returns the function that closes it.
+   */
+  openStream(params: Record<string, string>, onEvent: (event: string, data: unknown) => void): () => void {
+    if (typeof EventSource === 'undefined') return () => undefined;
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource(`/api/stream?${new URLSearchParams(params).toString()}`);
+    } catch {
+      return () => undefined;
+    }
+    const handle = (event: string) => (m: MessageEvent) => {
+      try {
+        const data = JSON.parse(m.data);
+        onEvent(event, data);
+        // the server could not stream: stop reconnecting and let polling carry on
+        if (event === 'problem') es?.close();
+      } catch {
+        /* ignore a malformed message */
+      }
+    };
+    for (const ev of ['ready', 'quote', 'contract', 'problem']) es.addEventListener(ev, handle(ev));
+    return () => {
+      es?.close();
+      es = null;
     };
   }
 }

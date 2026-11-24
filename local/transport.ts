@@ -26,6 +26,10 @@ export const CMD = {
   GET_OPTION_EXPIRATION: 3224,
 } as const;
 
+// Pushes OpenD sends us after a subscription (we never send these ids): a new quote, a new order book
+export const PUSH = { BASIC_QOT: 3005, ORDER_BOOK: 3013 } as const;
+const PUSH_NAMES: Record<number, string> = { [PUSH.BASIC_QOT]: 'Qot_UpdateBasicQot', [PUSH.ORDER_BOOK]: 'Qot_UpdateOrderBook' };
+
 // connect/keep-alive plus market-data requests only (subscribe, quotes, candles, snapshots, option expirations and chains)
 export const ALLOWED_CMDS: ReadonlySet<number> = new Set(Object.values(CMD));
 
@@ -34,6 +38,8 @@ export interface QuoteTransport {
   readonly connected: boolean;
   /** Changes when the underlying connection is replaced (subscriptions do not survive that) */
   readonly connID: number;
+  /** Called for every quote or order-book push OpenD sends (live data without asking) */
+  onPush: ((cmd: number, msg: any) => void) | null;
   Sub(req: unknown): Promise<any>;
   GetBasicQot(req: unknown): Promise<any>;
   GetKL(req: unknown): Promise<any>;
@@ -66,6 +72,7 @@ export class TcpTransport implements QuoteTransport {
   private ready = false;
   private root: any = null;
   connID = 0;
+  onPush: ((cmd: number, msg: any) => void) | null = null;
 
   constructor(private cfg: TransportConfig, private loadProto: () => Promise<any> = async () => (await import('moomoo-api/proto.js')).default) {}
 
@@ -142,7 +149,18 @@ export class TcpTransport implements QuoteTransport {
       const body = this.buf.subarray(HEADER_LEN, HEADER_LEN + len);
       this.buf = this.buf.subarray(HEADER_LEN + len);
       const waiter = this.pending.get(serial);
-      if (!waiter) continue; // a push we did not ask for
+      if (!waiter) {
+        // a push after a subscription (quotes, order book); anything else we did not ask for is ignored
+        const pushName = PUSH_NAMES[cmd];
+        if (pushName && this.onPush) {
+          try {
+            this.onPush(cmd, this.root.lookup(`${pushName}.Response`).decode(body));
+          } catch {
+            /* one bad push must not break the connection */
+          }
+        }
+        continue;
+      }
       this.pending.delete(serial);
       clearTimeout(waiter.timer);
       try {
@@ -234,6 +252,7 @@ export class TcpTransport implements QuoteTransport {
 /** WebSocket transport through Moomoo's JavaScript SDK (OpenD's separate WebSocket port) */
 export class WsTransport implements QuoteTransport {
   private ws: any = null;
+  onPush: ((cmd: number, msg: any) => void) | null = null;
   constructor(private cfg: TransportConfig, private loadSdk: () => Promise<any> = () => import('moomoo-api')) {}
 
   get connected(): boolean {
@@ -272,6 +291,10 @@ export class WsTransport implements QuoteTransport {
       }
       throw e;
     });
+    // pushes arrive through the SDK as (cmd, decoded body)
+    ws.onPush = (cmd: number, msg: any) => {
+      if (PUSH_NAMES[cmd]) this.onPush?.(cmd, msg);
+    };
     this.ws = ws;
   }
 

@@ -198,38 +198,86 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
     return [...new Set(keys)].join(',');
   }, [view, ranked, zeroBest, chainRows, chainExpiry, selected, symbol, optionType]);
 
+  // newest quotes (from the 3-second refresh or the live stream) written into the chains and the selected contract
+  type LiveQuote = { key: string; bid: number; ask: number; last: number; iv?: number };
+  const ctxRef = useRef({ optionType });
+  ctxRef.current = { optionType };
+  const applyQuotes = useCallback((quotes: LiveQuote[]) => {
+    if (!quotes.length) return;
+    const patch = (c: OptionChainData, q: LiveQuote): OptionChainData => ({
+      ...c, bid: q.bid, ask: q.ask, lastPrice: q.last, impliedVolatility: q.iv || c.impliedVolatility,
+    });
+    setChains((prev) => {
+      const next = { ...prev };
+      for (const q of quotes) {
+        const [, expiry, strike, type] = q.key.split('|');
+        const chain = next[expiry];
+        if (!chain) continue;
+        const side = type === 'put' ? 'puts' : 'calls';
+        next[expiry] = { ...chain, [side]: chain[side].map((c) => (Math.abs(c.strike - Number(strike)) < 0.0005 ? patch(c, q) : c)) };
+      }
+      return next;
+    });
+    setSelected((sel) => {
+      const q = sel && quotes.find((x) => {
+        const [, expiry, strike, type] = x.key.split('|');
+        return expiry === sel.expiry && Math.abs(Number(strike) - sel.option.strike) < 0.0005 && type === ctxRef.current.optionType;
+      });
+      return sel && q ? { ...sel, option: patch(sel.option, q) } : sel;
+    });
+    setUpdatedAt(Date.now());
+  }, []);
+
+  // Live stream: with Moomoo the local server pushes each contract's bid and ask the moment OpenD sends it
+  const lastStreamAt = useRef(0);
+  const [streaming, setStreaming] = useState(false);
+  const streamRef = useRef<{ close: () => void; keys: Set<string> } | null>(null);
+  useEffect(() => {
+    if (source !== 'moomoo' || !liveKeys) return;
+    const wanted = liveKeys.split(',');
+    const cur = streamRef.current;
+    // already streaming everything on screen: keep that connection (re-ranking must not reconnect every second)
+    if (cur && wanted.every((k) => cur.keys.has(k))) return;
+    cur?.close();
+    const keys = new Set([...(cur ? [...cur.keys] : []), ...wanted].slice(-20));
+    const close = marketData.openStream({ contracts: [...keys].join(',') }, (event, data) => {
+      if (event === 'contract') {
+        lastStreamAt.current = Date.now();
+        setStreaming(true);
+        applyQuotes([data as LiveQuote]);
+      } else if (event === 'problem') {
+        setStreaming(false);
+      }
+    });
+    streamRef.current = { close, keys };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, liveKeys, applyQuotes]);
+  useEffect(
+    () => () => {
+      streamRef.current?.close();
+      streamRef.current = null;
+      setStreaming(false);
+    },
+    [symbol, source]
+  );
+
+  // The 3-second refresh stays as the backup: it only runs when nothing has been pushed lately
   useEffect(() => {
     if (source !== 'moomoo' || !liveKeys) return;
     let cancelled = false;
     const poll = async () => {
+      if (Date.now() - lastStreamAt.current < 6000) return;
+      setStreaming(false);
       const quotes = await marketData.getOptionQuotes(liveKeys.split(','));
-      if (cancelled || !quotes.length) return;
-      const patch = (c: OptionChainData, q: (typeof quotes)[number]): OptionChainData => ({
-        ...c, bid: q.bid, ask: q.ask, lastPrice: q.last, impliedVolatility: q.iv || c.impliedVolatility,
-      });
-      setChains((prev) => {
-        const next = { ...prev };
-        for (const q of quotes) {
-          const [, expiry, strike, type] = q.key.split('|');
-          const chain = next[expiry];
-          if (!chain) continue;
-          const side = type === 'put' ? 'puts' : 'calls';
-          next[expiry] = { ...chain, [side]: chain[side].map((c) => (Math.abs(c.strike - Number(strike)) < 0.0005 ? patch(c, q) : c)) };
-        }
-        return next;
-      });
-      setSelected((sel) => {
-        const q = sel && quotes.find((x) => x.key === `${symbol}|${sel.expiry}|${sel.option.strike}|${optionType}`);
-        return sel && q ? { ...sel, option: patch(sel.option, q) } : sel;
-      });
-      setUpdatedAt(Date.now());
+      if (!cancelled) applyQuotes(quotes);
     };
     const id = setInterval(() => void poll(), 3000);
     return () => {
       cancelled = true;
       clearInterval(id);
     };
-  }, [source, liveKeys, symbol, optionType]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, liveKeys, symbol, optionType, applyQuotes]);
 
   const select = (expiry: string, option: OptionChainData) => setSelected({ expiry, option });
 
@@ -310,7 +358,7 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
         {source && (
           <div className={`options-source ${source === 'moomoo' ? 'live' : ''}`}>
             {source === 'moomoo'
-              ? `Prices: Moomoo, live${updatedAt ? ` · updated ${new Date(updatedAt).toLocaleTimeString()}` : ''}`
+              ? `Prices: Moomoo, ${streaming ? 'live stream' : 'live'}${updatedAt ? ` · updated ${new Date(updatedAt).toLocaleTimeString()}` : ''}`
               : 'Prices: Yahoo (delayed, can be minutes behind)'}
           </div>
         )}
