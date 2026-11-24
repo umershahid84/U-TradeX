@@ -1,7 +1,7 @@
 import React from 'react';
 import './SidebarTabs.css';
 
-export type SidebarTab = 'watchlist' | 'scanner' | 'bots' | 'trade' | 'options' | 'sentiment';
+export type SidebarTab = 'watchlist' | 'scanner' | 'bots' | 'trade' | 'options' | 'sentiment' | 'politicians';
 
 export const TAB_META: { id: SidebarTab; label: string; icon: string }[] = [
   { id: 'watchlist', label: 'Watchlist', icon: '⭐' },
@@ -10,6 +10,7 @@ export const TAB_META: { id: SidebarTab; label: string; icon: string }[] = [
   { id: 'trade', label: 'Trade', icon: '💱' },
   { id: 'options', label: 'Options', icon: '🎯' },
   { id: 'sentiment', label: 'Sentiment', icon: '🌡️' },
+  { id: 'politicians', label: 'Congress', icon: '🏛' },
 ];
 
 interface SidebarTabsProps {

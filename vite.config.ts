@@ -1,16 +1,25 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { MoomooQuoteClient, withMoomoo, type MoomooConfig } from './local/moomoo'
+import { createPoliticiansRoute } from './local/politicians'
 
 // Serves /api/* locally with the same handlers Vercel runs in production (api/_lib/market.ts).
 // With MOOMOO_ENABLED=true in .env.local, live quotes come from your Moomoo account through the OpenD
 // gateway on this computer (read-only; see local/moomoo.ts) and Yahoo covers everything else.
-const marketApi = (moomoo: { client: MoomooQuoteClient; cfg: MoomooConfig } | null): Plugin => ({
+const marketApi = (moomoo: { client: MoomooQuoteClient; cfg: MoomooConfig } | null, politicians: ReturnType<typeof createPoliticiansRoute>): Plugin => ({
   name: 'market-api',
   configureServer(server) {
     server.middlewares.use('/api', async (req, res) => {
       const url = new URL(req.url ?? '/', 'http://localhost')
       const query = Object.fromEntries(url.searchParams)
+      // local-only: politicians' trades (Alpha Vantage key and disk cache stay on this computer)
+      if (url.pathname === '/politicians') {
+        const r = await politicians(query)
+        res.statusCode = r.status
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify(r.body))
+        return
+      }
       const { route } = await server.ssrLoadModule('/api/_lib/market.ts')
       const handler = moomoo ? withMoomoo(route, moomoo.client, moomoo.cfg) : route
       const result = await handler(url.pathname, query)
@@ -39,7 +48,7 @@ export default defineConfig(({ mode }) => {
     console.log(`[moomoo] live data from OpenD at ${cfg.host}:${cfg.port} via ${cfg.protocol} (read-only${cfg.only ? ', Moomoo only' : ', Yahoo fallback'})`)
   }
   return {
-    plugins: [react(), marketApi(moomoo)],
+    plugins: [react(), marketApi(moomoo, createPoliticiansRoute(env.ALPHAVANTAGE_API_KEY || undefined, '.cache'))],
     server: {
       port: 3000,
       open: true

@@ -9,7 +9,7 @@
 .sidebar-tabs button.active { background: #2962ff; color: #fff; }
 .tab-icon { font-size: 13px; }
 /* six tabs: icon above a short label so they fit whatever font the computer uses */
-.sidebar-tabs button { min-width: 0; flex-shrink: 1; flex-direction: column; gap: 1px; padding: 5px 0; font-size: 10px; letter-spacing: -0.2px; overflow: hidden; text-overflow: ellipsis; }
+.sidebar-tabs button { min-width: 0; flex-shrink: 1; flex-direction: column; gap: 1px; padding: 5px 0; font-size: 9.5px; letter-spacing: -0.3px; overflow: hidden; text-overflow: ellipsis; }
 .sidebar-tabs .tab-icon { display: block; font-size: 15px; line-height: 1.1; }
 .sidebar-tabs .tabs-collapse { flex: 0 0 28px; padding: 8px 0; color: #6a6e90; font-size: 11px; }
 

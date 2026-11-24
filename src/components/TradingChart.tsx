@@ -21,6 +21,7 @@ import { findGaps } from '../utils/gaps';
 import { attachGapZones, GapZonesPrimitive } from '../plugins/gapZones';
 import { TradePlan } from './TradePlan';
 import { AutoPlan } from './AutoPlan';
+import { PoliticianMarkers } from './PoliticianMarkers';
 import { AutoChartManager, AutoChartOptions } from './autoChartManager';
 import { AutoChartBadge } from './AutoChartBadge';
 import { ChartLegend, LegendItem } from './ChartLegend';
@@ -173,6 +174,22 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const [expanded, setExpanded] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [autoPlanOpen, setAutoPlanOpen] = useState(false);
+  // politicians' disclosed trades as markers (local server only); remembered between visits
+  const [polOn, setPolOn] = useState(() => {
+    try {
+      return localStorage.getItem('politicianMarkers') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [polStatus, setPolStatus] = useState('');
+  useEffect(() => {
+    try {
+      localStorage.setItem('politicianMarkers', polOn ? '1' : '0');
+    } catch {
+      /* storage unavailable */
+    }
+  }, [polOn]);
   // TradingView-style price scale buttons: A = auto-fit the price scale, L = logarithmic scale
   const [autoScale, setAutoScale] = useState(true);
   const [logScale, setLogScale] = useState(() => {
@@ -1764,6 +1781,14 @@ export const TradingChart: React.FC<TradingChartProps> = ({
             >
               🧭 Auto plan
             </button>
+
+            <button
+              className={`indicator-toggle ${polOn ? 'plan-on' : ''}`}
+              onClick={() => setPolOn((v) => !v)}
+              title={polOn ? `Politicians' trades on the chart: ${polStatus || '…'} (click to hide)` : "Show trades disclosed by members of Congress on the chart (local app with an Alpha Vantage key)"}
+            >
+              🏛 Politicians
+            </button>
             
             {clouds.some((i) => i.kind === 'ripster' && i.enabled && !isHidden(i.id) && isVisibleOn(i, chartMs) && i.clouds.some((c) => c.enabled)) && (
               <div className={`trend-indicator trend-${ripsterTrend}`}>
@@ -2088,6 +2113,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           onClose={() => setPlanOpen(false)}
         />
       )}
+      {polOn && data.length > 0 && <PoliticianMarkers key={symbol} seriesRef={candleSeriesRef} symbol={symbol} bars={data} onStatus={setPolStatus} />}
       {autoPlanOpen && data.length > 0 && (
         <AutoPlan
           key={symbol}

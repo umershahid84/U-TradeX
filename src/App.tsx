@@ -16,6 +16,7 @@ import { usePriceAlerts } from './hooks/usePriceAlerts';
 import { Toasts } from './components/Toasts';
 import { LateDayChip } from './components/LateDayChip';
 import { Scanner } from './components/Scanner';
+import { Politicians } from './components/Politicians';
 import { BotLab } from './components/BotLab';
 import { useOrbBot } from './hooks/useOrbBot';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -136,7 +137,7 @@ const INTERVAL_NAME: Record<string, string> = {
   '10m': '10-minute', '15m': '15-minute', '30m': '30-minute', '1h': 'hourly', '4h': '4-hour', '1d': 'daily', '1wk': 'weekly', '1mo': 'monthly', '3mo': 'quarterly',
 };
 
-const TAB_IDS: SidebarTab[] = ['watchlist', 'scanner', 'bots', 'trade', 'options', 'sentiment'];
+const TAB_IDS: SidebarTab[] = ['watchlist', 'scanner', 'bots', 'trade', 'options', 'sentiment', 'politicians'];
 
 const loadTab = (): SidebarTab => {
   const saved = getStorageValue('sidebarTab', 'watchlist');
@@ -697,6 +698,7 @@ function App() {
     <>
       {activeTab === 'watchlist' && <Watchlist activeSymbol={symbol} onSelect={(s) => { handleSymbolChange(s); if (isMobile) setMobileView('chart'); }} />}
       {activeTab === 'scanner' && <Scanner activeSymbol={symbol} onSelect={(s) => { handleSymbolChange(s); if (isMobile) setMobileView('chart'); }} />}
+      {activeTab === 'politicians' && <Politicians activeSymbol={symbol} onSelect={(s) => { handleSymbolChange(s); if (isMobile) setMobileView('chart'); }} />}
       {activeTab === 'bots' && <BotLab activeSymbol={symbol} config={bot.config} setConfig={bot.setConfig} status={bot.status} equity={account.totalValue} />}
       {activeTab === 'trade' && (
         <>
