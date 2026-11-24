@@ -4,7 +4,8 @@ import { OptionsDirectionGuide } from './OptionsDirectionGuide';
 import { OptionPnlEstimate } from './OptionPnlEstimate';
 import { solveIv, yearsToExpiry } from '../utils/optionPricing';
 import { RealMarketDataService, OptionChainData } from '../services/realMarketData';
-import { OptionSide, RatedOption, daysToExpiry, rankOtmOptions } from '../utils/optionScoring';
+import { OptionSide, RatedOption, daysToExpiry, rankOtmOptions, rankZeroDte } from '../utils/optionScoring';
+import { etClock } from '../utils/lateDay';
 import './OptionsPanel.css';
 
 interface OptionsPanelProps {
@@ -48,7 +49,7 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
   onBuyOption,
 }) => {
   const [optionType, setOptionType] = useState<OptionSide>('call');
-  const [view, setView] = useState<'best' | 'chain'>('best');
+  const [view, setView] = useState<'best' | 'zero' | 'chain'>('best');
   const [expiryDates, setExpiryDates] = useState<string[]>([]);
   const [chains, setChains] = useState<Record<string, ExpiryChain>>({});
   const [chainExpiry, setChainExpiry] = useState('');
@@ -148,6 +149,35 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
     [chains, optionType, currentPrice]
   );
 
+  // 0DTE: the contracts that expire today (New York date). Only listed for names with daily expiries (SPY, QQQ, ...).
+  const todayEt = etClock(Date.now());
+  const zeroExpiry = expiryDates.includes(todayEt.date) ? todayEt.date : '';
+  const marketClosed = todayEt.weekday === 0 || todayEt.weekday === 6 || todayEt.minutes >= 16 * 60;
+  const zeroChain = zeroExpiry ? chains[zeroExpiry] : undefined;
+  const zeroBest = useMemo(
+    () => ({
+      call: zeroChain && currentPrice > 0 ? rankZeroDte('call', zeroChain, currentPrice) : [],
+      put: zeroChain && currentPrice > 0 ? rankZeroDte('put', zeroChain, currentPrice) : [],
+    }),
+    [zeroChain, currentPrice]
+  );
+
+  // today's chain is not in the usual scan (that starts 5 days out): load it here and keep it fresh
+  useEffect(() => {
+    if (view !== 'zero' || !zeroExpiry) return;
+    let cancelled = false;
+    const load = () =>
+      loadChain(zeroExpiry).then((c) => {
+        if (!cancelled && c) setChains((prev) => ({ ...prev, [c.expiry]: c }));
+      });
+    void load();
+    const id = setInterval(() => void load(), 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [view, zeroExpiry, loadChain]);
+
   const chainRows = useMemo(() => {
     const chain = chains[chainExpiry];
     if (!chain || currentPrice <= 0) return [];
@@ -162,10 +192,11 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
   const liveKeys = useMemo(() => {
     const keys: string[] = [];
     if (view === 'best') ranked.slice(0, 8).forEach((r) => keys.push(`${symbol}|${r.expiry}|${r.contract.strike}|${optionType}`));
+    else if (view === 'zero') [...zeroBest.call, ...zeroBest.put].forEach((r) => keys.push(`${symbol}|${r.expiry}|${r.contract.strike}|${r.side}`));
     else chainRows.forEach((c) => keys.push(`${symbol}|${chainExpiry}|${c.strike}|${optionType}`));
     if (selected) keys.push(`${symbol}|${selected.expiry}|${selected.option.strike}|${optionType}`);
     return [...new Set(keys)].join(',');
-  }, [view, ranked, chainRows, chainExpiry, selected, symbol, optionType]);
+  }, [view, ranked, zeroBest, chainRows, chainExpiry, selected, symbol, optionType]);
 
   useEffect(() => {
     if (source !== 'moomoo' || !liveKeys) return;
@@ -288,6 +319,9 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
           <button type="button" className={view === 'best' ? 'active' : ''} onClick={() => setView('best')}>
             ⭐ Best OTM
           </button>
+          <button type="button" className={view === 'zero' ? 'active' : ''} onClick={() => setView('zero')}>
+            ⚡ 0DTE
+          </button>
           <button type="button" className={view === 'chain' ? 'active' : ''} onClick={() => setView('chain')}>
             Full chain
           </button>
@@ -306,7 +340,59 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({
           </div>
         )}
 
-        {loading && Object.keys(chains).length === 0 ? (
+        {view === 'zero' ? (
+          <div className="best-list">
+            <div className="best-note">
+              Contracts that expire today ({zeroExpiry || todayEt.date}), best calls and puts rated on spread, delta and
+              breakeven. They can lose most of their value within hours; spreads and fast moves decide the result.
+            </div>
+            {!expiryDates.length ? (
+              <div className="no-data">{loading ? 'Loading options chain...' : error || 'No expirations loaded yet'}</div>
+            ) : marketClosed ? (
+              <div className="no-data">The market is closed, so there are no live 0DTE contracts. Today's contracts have expired or will list on the next trading day.</div>
+            ) : !zeroExpiry ? (
+              <div className="no-data">
+                {symbol} has no contracts expiring today{expiryDates[0] ? ` (the next expiry is ${fmtExpiry(expiryDates[0])})` : ''}. Daily expiries are listed for names like SPY and QQQ.
+              </div>
+            ) : !zeroChain ? (
+              <div className="no-data">Loading today's contracts...</div>
+            ) : (
+              (['call', 'put'] as OptionSide[]).map((side) => (
+                <div key={side}>
+                  <div className="best-note"><b>{side === 'call' ? 'Best calls' : 'Best puts'}</b></div>
+                  {zeroBest[side].length === 0 && <div className="no-data">No liquid out-of-the-money {side}s expiring today right now</div>}
+                  {zeroBest[side].map((r) => (
+                    <div
+                      key={`${side}-${r.contract.strike}`}
+                      className={`best-row ${optionType === side && isSelected(r.expiry, r.contract.strike) ? 'selected' : ''}`}
+                      onClick={() => { setOptionType(side); select(r.expiry, r.contract); }}
+                    >
+                      <span className={`grade grade-${r.grade}`} title={`Score ${r.score.toFixed(0)}/100`}>
+                        {r.grade}
+                        <small>{r.score.toFixed(0)}</small>
+                      </span>
+                      <div className="best-main">
+                        <div className="best-title">
+                          ${r.contract.strike.toFixed(2)} {side.toUpperCase()}
+                          <span className="best-expiry">0DTE</span>
+                        </div>
+                        <div className="best-stats">
+                          <span>Δ {r.delta.toFixed(2)}</span>
+                          <span>Spread {(r.spreadPct * 100).toFixed(0)}%</span>
+                          <span>B/E {(r.breakevenMove * 100).toFixed(2)}%</span>
+                          <span>Bid ${r.contract.bid.toFixed(2)} / Ask ${r.contract.ask.toFixed(2)}</span>
+                          <span>Vol {r.contract.volume.toLocaleString()}</span>
+                          <span>OI {r.contract.openInterest.toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <span className="best-price">${r.mid.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+        ) : loading && Object.keys(chains).length === 0 ? (
           <div className="loading">Loading options chain...</div>
         ) : error && Object.keys(chains).length === 0 ? (
           <div className="no-data">{error}</div>

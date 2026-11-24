@@ -134,3 +134,28 @@ export const rankOtmOptions = (
   }
   return rated.sort((a, b) => b.score - a.score).slice(0, limit);
 };
+
+/**
+ * Best contracts expiring today (0DTE). The usual 3-6 week time preference makes no sense here, so the rating drops
+ * it: liquidity 40% (tight spread matters most with so little time), delta 30% (best near 0.30), breakeven 30%
+ * (how far the stock must move before the close, against the move the market expects for the rest of today).
+ * Contracts under $0.10 are left out as lottery tickets whose spread is most of the price.
+ */
+export const rankZeroDte = (
+  side: OptionSide,
+  chain: { expiry: string; calls: OptionChainData[]; puts: OptionChainData[] },
+  spot: number,
+  limit = 5,
+  now = Date.now()
+): RatedOption[] => {
+  const rated: RatedOption[] = [];
+  for (const c of side === 'call' ? chain.calls : chain.puts) {
+    const r = rateOption(side, chain.expiry, c, spot, now);
+    if (!r || r.mid < 0.1) continue;
+    let score = 100 * (0.4 * r.parts.liquidity + 0.3 * r.parts.delta + 0.3 * r.parts.breakeven);
+    if (r.spreadPct > 0.5) score = Math.min(score, 44);
+    else if (r.spreadPct > 0.25) score = Math.min(score, 74);
+    rated.push({ ...r, score, grade: gradeFor(score), parts: { ...r.parts, time: 0 } });
+  }
+  return rated.sort((a, b) => b.score - a.score).slice(0, limit);
+};
