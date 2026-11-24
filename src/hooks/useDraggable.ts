@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 interface Offset {
   x: number;
@@ -72,8 +72,8 @@ export function useDraggable(key: string) {
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     const s = start.current;
     if (!s) return;
-    const x = Math.min(Math.max(s.ox + e.clientX - s.px, Math.min(s.minX, 0)), Math.max(s.maxX, 0));
-    const y = Math.min(Math.max(s.oy + e.clientY - s.py, Math.min(s.minY, 0)), Math.max(s.maxY, 0));
+    const x = Math.max(Math.min(s.ox + e.clientX - s.px, Math.max(s.maxX, 0)), Math.min(s.minX, 0));
+    const y = Math.max(Math.min(s.oy + e.clientY - s.py, Math.max(s.maxY, 0)), Math.min(s.minY, 0));
     setOffset({ x, y });
   }, []);
 
@@ -87,6 +87,39 @@ export function useDraggable(key: string) {
   useEffect(() => {
     if (!dragging) save(offset);
   }, [dragging, offset, save]);
+
+  // keep the panel on screen when the window or the panel changes size (a position saved on a bigger screen would
+  // otherwise leave the title bar out of reach)
+  const offsetRef = useRef(offset);
+  offsetRef.current = offset;
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const parent = el?.offsetParent as HTMLElement | null;
+    if (!el || !parent) return;
+    const fit = () => {
+      if (start.current) return;
+      const o = offsetRef.current;
+      const r = el.getBoundingClientRect();
+      const p = parent.getBoundingClientRect();
+      if (!r.width || !p.width) return;
+      const baseLeft = r.left - o.x, baseTop = r.top - o.y;
+      // the panel's top-left corner may sit anywhere that keeps it inside the container
+      const minX = p.left - baseLeft, maxX = p.right - r.width - baseLeft;
+      const minY = p.top - baseTop, maxY = p.bottom - r.height - baseTop;
+      const x = Math.round(Math.max(Math.min(o.x, Math.max(maxX, 0)), Math.min(minX, 0)));
+      const y = Math.round(Math.max(Math.min(o.y, Math.max(maxY, 0)), Math.min(minY, 0)));
+      if (x !== o.x || y !== o.y) setOffset({ x, y });
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(parent);
+    ro.observe(el);
+    window.addEventListener('resize', fit);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', fit);
+    };
+  }, []);
 
   const reset = useCallback(() => setOffset({ x: 0, y: 0 }), []);
 
