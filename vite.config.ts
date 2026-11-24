@@ -13,8 +13,8 @@ const marketApi = (moomoo: { client: MoomooQuoteClient; cfg: MoomooConfig } | nu
       const url = new URL(req.url ?? '/', 'http://localhost')
       const query = Object.fromEntries(url.searchParams)
       // local-only: politicians' trades (Alpha Vantage key and disk cache stay on this computer)
-      if (url.pathname === '/politicians') {
-        const r = await politicians(query)
+      if (url.pathname === '/politicians' || url.pathname === '/politicians/list') {
+        const r = await politicians(url.pathname, query)
         res.statusCode = r.status
         res.setHeader('Content-Type', 'application/json')
         res.end(JSON.stringify(r.body))
