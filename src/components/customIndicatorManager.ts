@@ -197,6 +197,7 @@ export class CustomIndicatorManager {
     }
     status.warnings = result.warnings;
     status.inputs = result.inputs;
+    status.tables = result.tables;
     if (result.plots.length === 0 && result.fills.length === 0 && result.markers.length === 0 && result.hlines.length === 0) {
       status.warnings = [...status.warnings, 'The script does not plot anything. Use plot(), fill(), hline() or plotshape().'];
     }

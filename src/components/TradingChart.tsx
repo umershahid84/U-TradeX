@@ -22,6 +22,7 @@ import { attachGapZones, GapZonesPrimitive } from '../plugins/gapZones';
 import { TradePlan } from './TradePlan';
 import { AutoPlan } from './AutoPlan';
 import { PoliticianMarkers } from './PoliticianMarkers';
+import { PineTables } from './PineTables';
 import { AutoChartManager, AutoChartOptions } from './autoChartManager';
 import { AutoChartBadge } from './AutoChartBadge';
 import { ChartLegend, LegendItem } from './ChartLegend';
@@ -2125,6 +2126,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           onClose={() => setPlanOpen(false)}
         />
       )}
+      <PineTables tables={Object.entries(customStatuses).flatMap(([id, st]) => (hiddenIds.includes(`custom-${id}`) ? [] : st.tables ?? []))} />
       {polOn && data.length > 0 && <PoliticianMarkers key={symbol} seriesRef={candleSeriesRef} symbol={symbol} bars={data} onStatus={setPolStatus} />}
       {autoPlanOpen && data.length > 0 && (
         <AutoPlan

@@ -48,6 +48,27 @@ export interface PineInput {
   options?: string[];
 }
 
+/** An on-chart table (table.new / table.cell): its final state after the last bar */
+export interface PineTable {
+  id: number;
+  position: string;
+  columns: number;
+  rows: number;
+  bgcolor?: string;
+  borderColor?: string;
+  cells: {
+    col: number;
+    row: number;
+    text: string;
+    textColor?: string;
+    bgcolor?: string;
+    size?: string;
+    halign?: string;
+    colspan: number;
+    rowspan: number;
+  }[];
+}
+
 export interface PineResult {
   title: string;
   overlay: boolean;
@@ -57,6 +78,7 @@ export interface PineResult {
   markers: PineMarker[];
   inputs: PineInput[];
   warnings: string[];
+  tables: PineTable[];
   /** The Pine version from //@version=N (5 when the script does not say) */
   version: number;
 }
@@ -164,6 +186,8 @@ class Interp {
   declSrc = new Map<string, Stmt>();
   secCache = new Map<string, { vals: Val[]; map: number[]; last: boolean[] }>();
   isSub = false;
+  tableList = new Map<number, PineTable & { deleted?: boolean }>();
+  nextTable = 1;
   stack: Frame[] = [];
   i = 0;
   steps = 0;
@@ -172,7 +196,7 @@ class Interp {
 
   result: PineResult = {
     title: 'Custom Indicator', overlay: false, plots: [], hlines: [], fills: [],
-    markers: [], inputs: [], warnings: [], version: 5,
+    markers: [], inputs: [], warnings: [], tables: [], version: 5,
   };
   plotById = new Map<number, PinePlot>();
   hlineById = new Map<number, number>();
@@ -582,7 +606,7 @@ class Interp {
       return record(out);
     }
 
-    if (IGNORED.has(name) || /^(strategy|table|label|line|box|linefill|polyline|chart)\./.test(name)) {
+    if (!LIB[name] && (IGNORED.has(name) || /^(strategy|table|label|line|box|linefill|polyline|chart)\./.test(name))) {
       this.warn(`${name}() is not supported and was ignored`);
       return null;
     }
@@ -1182,6 +1206,64 @@ def('array.concat', ['id1', 'id2'], (c, a) => { arr(c, a.id1, 'array.concat').pu
 def('array.fill', ['id', 'value', 'index_from', 'index_to'], (c, a) => { arr(c, a.id, 'array.fill').fill(a.value ?? null, a.index_from ?? 0, a.index_to ?? undefined); return null; });
 def('array.join', ['id', 'separator'], (c, a) => arr(c, a.id, 'array.join').map((v: Val) => String(v ?? 'na')).join(a.separator ?? ','));
 
+// ---- tables ----
+const tableOf = (c: Interp, h: Val, fn: string) => {
+  const t = h && typeof h === 'object' && typeof h.__table === 'number' ? c.tableList.get(h.__table) : undefined;
+  if (!t) return c.err(`${fn}(): not a table (or it was deleted)`);
+  return t;
+};
+def('table.new', ['position', 'columns', 'rows', 'bgcolor', 'frame_color', 'frame_width', 'border_color', 'border_width'], (c, a) => {
+  const id = c.nextTable++;
+  c.tableList.set(id, {
+    id, position: String(a.position ?? 'position.top_right'),
+    columns: Math.max(1, Math.min(50, Math.floor(isNum(a.columns) ? a.columns : 1))),
+    rows: Math.max(1, Math.min(100, Math.floor(isNum(a.rows) ? a.rows : 1))),
+    bgcolor: typeof a.bgcolor === 'string' ? a.bgcolor : undefined,
+    borderColor: typeof a.border_color === 'string' ? a.border_color : typeof a.frame_color === 'string' ? a.frame_color : undefined,
+    cells: [],
+  });
+  return { __table: id };
+});
+def('table.delete', ['table_id'], (c, a) => { const t = a.table_id?.__table !== undefined ? c.tableList.get(a.table_id.__table) : undefined; if (t) (t as any).deleted = true; return null; });
+def('table.clear', ['table_id', 'start_column', 'start_row', 'end_column', 'end_row'], (c, a) => {
+  const t = tableOf(c, a.table_id, 'table.clear');
+  const c0 = a.start_column ?? 0, r0 = a.start_row ?? 0, c1 = a.end_column ?? c0, r1 = a.end_row ?? r0;
+  t.cells = t.cells.filter((x) => !(x.col >= c0 && x.col <= c1 && x.row >= r0 && x.row <= r1));
+  return null;
+});
+def('table.cell', ['table_id', 'column', 'row', 'text', 'width', 'height', 'text_color', 'text_halign', 'text_valign', 'text_size', 'bgcolor', 'tooltip', 'text_font_family'], (c, a) => {
+  const t = tableOf(c, a.table_id, 'table.cell');
+  if (!isNum(a.column) || !isNum(a.row)) return c.err('table.cell(): the column and row must be numbers');
+  if (a.column < 0 || a.column >= t.columns || a.row < 0 || a.row >= t.rows) return c.err(`table.cell(): cell (${a.column}, ${a.row}) is outside the ${t.columns} x ${t.rows} table`);
+  let cell = t.cells.find((x) => x.col === a.column && x.row === a.row);
+  if (!cell) { cell = { col: a.column, row: a.row, text: '', colspan: 1, rowspan: 1 }; t.cells.push(cell); }
+  cell.text = a.text == null ? '' : String(a.text);
+  if (typeof a.text_color === 'string') cell.textColor = a.text_color;
+  if (typeof a.bgcolor === 'string') cell.bgcolor = a.bgcolor;
+  if (a.text_size != null) cell.size = String(a.text_size);
+  if (a.text_halign != null) cell.halign = String(a.text_halign);
+  return null;
+});
+def('table.merge_cells', ['table_id', 'start_column', 'start_row', 'end_column', 'end_row'], (c, a) => {
+  const t = tableOf(c, a.table_id, 'table.merge_cells');
+  const cell = t.cells.find((x) => x.col === a.start_column && x.row === a.start_row);
+  if (cell && isNum(a.end_column) && isNum(a.end_row)) {
+    cell.colspan = Math.max(1, a.end_column - a.start_column + 1);
+    cell.rowspan = Math.max(1, a.end_row - a.start_row + 1);
+  }
+  return null;
+});
+def('table.set_position', ['table_id', 'position'], (c, a) => { tableOf(c, a.table_id, 'table.set_position').position = String(a.position); return null; });
+def('table.set_bgcolor', ['table_id', 'bgcolor'], (c, a) => { tableOf(c, a.table_id, 'table.set_bgcolor').bgcolor = String(a.bgcolor); return null; });
+for (const [fn, prop] of [['cell_set_text', 'text'], ['cell_set_text_color', 'textColor'], ['cell_set_bgcolor', 'bgcolor']] as const) {
+  def(`table.${fn}`, ['table_id', 'column', 'row', 'value'], (c, a) => {
+    const t = tableOf(c, a.table_id, `table.${fn}`);
+    const cell = t.cells.find((x) => x.col === a.column && x.row === a.row);
+    if (cell) (cell as any)[prop] = prop === 'text' ? String(a.value ?? '') : String(a.value);
+    return null;
+  });
+}
+
 // request.security: only the chart's own symbol and timeframe are available here, so only that form is accepted
 def('request.security', ['symbol', 'timeframe', 'expression', 'gaps', 'lookahead'], (c, a) => {
   const tf = String(a.timeframe ?? '');
@@ -1225,6 +1307,8 @@ export function runPine(
   interp.run(program);
 
   const r = interp.result;
+  // the tables still alive after the last bar (the latest few, in case a script never deletes the ones it recreates)
+  r.tables = [...interp.tableList.values()].filter((t: any) => !t.deleted).slice(-6).map(({ deleted: _d, ...t }: any) => t);
   // offsets can leave holes; normalise plot arrays to bar length
   r.plots.forEach((p) => {
     for (let k = 0; k < bars.length; k++) if (p.values[k] === undefined) p.values[k] = null;

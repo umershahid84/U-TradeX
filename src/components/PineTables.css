@@ -1,0 +1,14 @@
+/* tables drawn by Pine scripts, over the chart; they never block clicks on the candles */
+.pt-spot { position: absolute; z-index: 8; display: flex; flex-direction: column; gap: 6px; pointer-events: none; max-width: 60%; max-height: 70%; overflow: hidden; }
+.pt-top_left { top: 52px; left: 14px; align-items: flex-start; }
+.pt-top_center { top: 52px; left: 50%; transform: translateX(-50%); align-items: center; }
+.pt-top_right { top: 10px; right: 78px; align-items: flex-end; }
+.pt-middle_left { top: 50%; left: 14px; transform: translateY(-50%); align-items: flex-start; }
+.pt-middle_center { top: 50%; left: 50%; transform: translate(-50%, -50%); align-items: center; }
+.pt-middle_right { top: 50%; right: 78px; transform: translateY(-50%); align-items: flex-end; }
+.pt-bottom_left { bottom: 34px; left: 14px; align-items: flex-start; }
+.pt-bottom_center { bottom: 34px; left: 50%; transform: translateX(-50%); align-items: center; }
+.pt-bottom_right { bottom: 34px; right: 78px; align-items: flex-end; }
+.pt-table { display: inline-grid; border: 1px solid rgba(120, 123, 134, 0.5); border-radius: 3px; overflow: hidden; background: rgba(13, 17, 23, 0.85); }
+.pt-cell { padding: 2px 6px; color: #d1d4dc; white-space: nowrap; line-height: 1.25; border: 0 solid rgba(120, 123, 134, 0.25); outline: 1px solid rgba(120, 123, 134, 0.25); outline-offset: -1px; }
+@media (max-width: 900px) { .pt-spot { max-width: 96%; } .pt-top_right, .pt-middle_right, .pt-bottom_right { right: 10px; } }

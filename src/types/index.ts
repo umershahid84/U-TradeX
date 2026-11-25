@@ -157,6 +157,8 @@ export interface CustomIndicatorStatus {
   errorLine?: number;
   warnings: string[];
   inputs: import('../pine').PineInput[];
+  /** Tables the script drew (table.new / table.cell) */
+  tables?: import('../pine').PineTable[];
 }
 
 export interface PriceAlert {
