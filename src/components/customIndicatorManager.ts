@@ -180,8 +180,21 @@ export class CustomIndicatorManager {
     };
   }
 
+  private runCache = new Map<string, { key: string; at: number; ms: number; result: PineResult }>();
+
   private buildPine(ind: CustomIndicator, data: ChartData[], status: CustomIndicatorStatus): Spec {
-    const result: PineResult = runPine(ind.source, data, ind.inputValues ?? {});
+    // A live tick changes only the last candle, so a heavy script is not re-run on every tick: the result is reused for a
+    // while (at least 1.5 s, and six times as long as the script takes to run). A new candle or an edit runs it at once.
+    const key = JSON.stringify([ind.source, ind.inputValues ?? {}, data.length, data[data.length - 1]?.time]);
+    const hit = this.runCache.get(ind.id);
+    let result: PineResult;
+    if (hit && hit.key === key && Date.now() - hit.at < Math.max(1500, hit.ms * 6)) {
+      result = hit.result;
+    } else {
+      const t0 = Date.now();
+      result = runPine(ind.source, data, ind.inputValues ?? {});
+      this.runCache.set(ind.id, { key, at: Date.now(), ms: Date.now() - t0, result });
+    }
     status.warnings = result.warnings;
     status.inputs = result.inputs;
     if (result.plots.length === 0 && result.fills.length === 0 && result.markers.length === 0 && result.hlines.length === 0) {

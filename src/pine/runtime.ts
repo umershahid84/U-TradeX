@@ -159,6 +159,11 @@ class Interp {
   states = new Map<string, St>();
   callHist = new Map<string, Val[]>();
   callPath: string[] = [];
+  // request.security: the script's own top-level definitions (so another timeframe can re-evaluate them), the
+  // per-call-site results, and whether this interpreter is the helper that runs on the other timeframe's candles
+  declSrc = new Map<string, Stmt>();
+  secCache = new Map<string, { vals: Val[]; map: number[]; last: boolean[] }>();
+  isSub = false;
   stack: Frame[] = [];
   i = 0;
   steps = 0;
@@ -198,6 +203,13 @@ class Interp {
   }
 
   run(stmts: Stmt[]) {
+    // remember top-level definitions for request.security
+    const collect = (list: Stmt[]) => list.forEach((s) => {
+      if (s.k === 'decl') this.declSrc.set(s.name, s);
+      else if (s.k === 'tuple') s.names.forEach((n) => this.declSrc.set(n, s));
+      else if (s.k === 'seq') collect(s.body);
+    });
+    if (!this.isSub) collect(stmts);
     // hoist function definitions
     const hoist = (list: Stmt[]) => list.forEach((s) => { if (s.k === 'fn') this.fnDefs.set(s.name, s); });
     hoist(stmts);
@@ -324,6 +336,7 @@ class Interp {
         }
         return last;
       }
+      case 'seq': { let last: Val = null; for (const x of s.body) last = this.exec(x); return last; }
       case 'break': throw new BreakSignal();
       case 'continue': throw new ContinueSignal();
       case 'fn': this.fnDefs.set(s.name, s); return null;
@@ -424,6 +437,11 @@ class Interp {
       case 'last_bar_index': return this.bars.length - 1;
       case 'tr': return this.trueRange(j);
     }
+    if (name === 'weekofyear') {
+      const p: Record<string, string> = {};
+      nyParts.formatToParts(new Date(b.time)).forEach((x) => (p[x.type] = x.value));
+      return Math.floor((Date.UTC(+p.year, +p.month - 1, +p.day) - Date.UTC(+p.year, 0, 1)) / 604800000) + 1;
+    }
     if (['hour', 'minute', 'dayofweek', 'dayofmonth', 'month', 'year'].includes(name)) {
       const p: Record<string, string> = {};
       nyParts.formatToParts(new Date(b.time)).forEach((x) => (p[x.type] = x.value));
@@ -439,6 +457,13 @@ class Interp {
     return undefined;
   }
 
+  /** Chart bar length in ms (the smallest typical gap between bars) */
+  barMs(): number {
+    if (this.bars.length < 2) return 60_000;
+    const gaps = this.bars.slice(1, 200).map((b, k) => b.time - this.bars[k].time).filter((g) => g > 0).sort((x, y) => x - y);
+    return gaps[Math.floor(gaps.length / 2)] ?? 60_000;
+  }
+
   trueRange(j: number): number {
     const b = this.bars[j];
     if (j === 0) return b.high - b.low;
@@ -446,7 +471,20 @@ class Interp {
     return Math.max(b.high - b.low, Math.abs(b.high - pc), Math.abs(b.low - pc));
   }
 
+  /** In a request.security helper: evaluate one of the script's own variables on this timeframe's candles */
+  materialize(name: string) {
+    const src = this.declSrc.get(name);
+    if (!src || this.findFrame(name)?.get(name)?.[this.i] !== undefined) return;
+    if (src.k === 'decl') this.setVar(name, this.eval(src.init), this.global);
+    else if (src.k === 'tuple') {
+      const v = this.eval(src.e);
+      src.names.forEach((n, k) => this.setVar(n, Array.isArray(v) ? v[k] ?? null : null, this.global));
+    }
+  }
+
   evalName(name: string, off: number, line: number): Val {
+    if (this.isSub && this.declSrc.has(name) && !this.global.has(name)) this.materialize(name);
+    else if (this.isSub && off === 0 && this.declSrc.has(name) && this.global.get(name)?.[this.i] === undefined) this.materialize(name);
     const frame = this.findFrame(name);
     if (frame) {
       const j = this.i - off;
@@ -467,8 +505,15 @@ class Interp {
     if (name === 'barstate.isconfirmed' || name === 'barstate.ishistory') return true;
     if (name === 'barstate.isrealtime' || name === 'barstate.isnew') return false;
     if (name === 'syminfo.tickerid' || name === 'syminfo.ticker') return 'SYMBOL';
+    if (name === 'syminfo.root') return 'SYMBOL';
+    if (name === 'syminfo.type') return 'stock';
+    if (name === 'syminfo.pointvalue') return 1;
+    if (name === 'syminfo.mintick') return 0.01;
     if (name === 'timeframe.period') return 'chart';
-    if (name === 'timeframe.isintraday') return true;
+    if (name === 'timeframe.isintraday') return this.barMs() < 20 * 3600 * 1000;
+    if (name === 'timeframe.isdaily') return this.barMs() >= 20 * 3600 * 1000 && this.barMs() < 6 * 86400000;
+    if (name === 'timeframe.isweekly') return this.barMs() >= 6 * 86400000 && this.barMs() < 27 * 86400000;
+    if (name === 'timeframe.ismonthly') return this.barMs() >= 27 * 86400000;
     if (name === 'ta.tr') return this.trueRange(this.i);
     if (name === 'ta.vwap' || name === 'vwap') return this.vwap(this.stateFor({ id: -1 }), this.series('hlc3', 0));
     if (name === 'ta.obv' || name === 'obv') return this.obv(this.stateFor({ id: -2 }));
@@ -508,6 +553,8 @@ class Interp {
       return v;
     };
 
+    if (name === 'request.security') return record(this.security(e));
+
     // v5/v6 method syntax on arrays: arr.push(x) is array.push(arr, x)
     let args0 = e.args;
     const dot = name.indexOf('.');
@@ -535,7 +582,7 @@ class Interp {
       return record(out);
     }
 
-    if (IGNORED.has(name) || name.startsWith('strategy.') || name.startsWith('table.')) {
+    if (IGNORED.has(name) || /^(strategy|table|label|line|box|linefill|polyline|chart)\./.test(name)) {
       this.warn(`${name}() is not supported and was ignored`);
       return null;
     }
@@ -564,9 +611,99 @@ class Interp {
     return record(result);
   }
 
+  // ---- request.security ----
+  /** Candles of another timeframe built from the chart's own candles (only timeframes longer than the chart's) */
+  private higherBars(tf: string): { bars: PineBar[]; map: number[]; last: boolean[] } | null {
+    const t = tf.trim().toUpperCase();
+    const m = /^(\d*)(S|D|W|M)?$/.exec(t);
+    if (!m) return null;
+    const n = m[1] ? +m[1] : 1;
+    const unit = m[2] ?? (m[1] ? 'MIN' : '');
+    if (!unit) return null;
+    const key = (time: number): string => {
+      if (unit === 'MIN' || unit === 'S') {
+        const ms = n * (unit === 'S' ? 1000 : 60_000);
+        return String(Math.floor(time / ms));
+      }
+      const d = new Date(time).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      if (unit === 'D') return n === 1 ? d : String(Math.floor(Date.parse(d + 'T12:00:00Z') / 86400000 / n));
+      if (unit === 'W') { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() - ((x.getUTCDay() + 6) % 7)); return x.toISOString().slice(0, 10); }
+      return d.slice(0, 7);
+    };
+    const bars: PineBar[] = [];
+    const map: number[] = [];
+    const last: boolean[] = [];
+    let cur = '';
+    this.bars.forEach((b, i) => {
+      const k = key(b.time);
+      if (k !== cur) {
+        cur = k;
+        bars.push({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume });
+      } else {
+        const h = bars[bars.length - 1];
+        h.high = Math.max(h.high, b.high);
+        h.low = Math.min(h.low, b.low);
+        h.close = b.close;
+        h.volume += b.volume;
+      }
+      map[i] = bars.length - 1;
+    });
+    this.bars.forEach((_b, i) => { last[i] = i === this.bars.length - 1 || map[i + 1] !== map[i]; });
+    // not longer than the chart's own candles: nothing to build
+    return bars.length < this.bars.length ? { bars, map, last } : null;
+  }
+
+  security(e: Extract<Expr, { k: 'call' }>): Val {
+    const pos = e.args.filter((a) => !a.name).map((a) => a.value);
+    const named = (n: string) => e.args.find((a) => a.name === n)?.value;
+    const symExpr = named('symbol') ?? pos[0];
+    const tfExpr = named('timeframe') ?? pos[1];
+    const exprNode = named('expression') ?? pos[2];
+    if (!symExpr || !tfExpr || !exprNode) return this.err('request.security(symbol, timeframe, expression) needs three arguments', e.line);
+    const sym = String(this.eval(symExpr) ?? '');
+    const tf = String(this.eval(tfExpr) ?? '');
+    const lookahead = String(named('lookahead') ? this.eval(named('lookahead')!) : 'barmerge.lookahead_off').includes('on');
+    const nas = (): Val => (exprNode.k === 'arr' ? exprNode.items.map(() => null) : null);
+
+    const own = sym === '' || sym === 'SYMBOL' || sym === 'syminfo.tickerid';
+    if (!own) {
+      this.warn(`request.security() for another symbol (${sym}) is not available here, so it returns na`);
+      return nas();
+    }
+    if (tf === 'chart' || tf === '') return this.eval(exprNode);
+
+    const key = this.callPath.join('>') + '|' + e.id;
+    let res = this.secCache.get(key);
+    if (!res) {
+      const hb = this.higherBars(tf);
+      if (!hb) {
+        this.warn(`request.security() timeframe "${tf}" is not longer than the chart's, so the chart's own candles were used`);
+        return this.eval(exprNode);
+      }
+      // run the expression over every candle of that timeframe once, with the script's own definitions available
+      const sub = new Interp(hb.bars, this.userInputs);
+      sub.isSub = true;
+      sub.declSrc = this.declSrc;
+      sub.fnDefs = this.fnDefs;
+      sub.result.version = this.result.version;
+      const vals: Val[] = [];
+      for (sub.i = 0; sub.i < hb.bars.length; sub.i++) vals.push(sub.eval(exprNode));
+      res = { vals, map: hb.map, last: hb.last };
+      this.secCache.set(key, res);
+      if (hb.bars.length < 30) this.warn(`request.security(${tf}) only had ${hb.bars.length} candles of that timeframe to work with: load a longer range for reliable values`);
+    }
+    // without lookahead a higher-timeframe candle's value appears when it closes; with it, as the candle forms
+    const idx = res.map[this.i];
+    const k = lookahead || res.last[this.i] ? idx : idx - 1;
+    return k >= 0 ? res.vals[k] ?? nas() : nas();
+  }
+
   // ---- output ----
   addPlot(e: { id: number }, a: Record<string, Val>, defaultStyle: PinePlot['style'] = 'line') {
     const pid = e.id + this.callPath.length * 1e6;
+    // display=display.status_line / data_window / none: not drawn on the chart (only display.pane or display.all are)
+    const disp = a.display == null ? '' : String(a.display);
+    if (disp && !disp.includes('pane') && !disp.includes('all')) return { __plot: pid };
     let plot = this.plotById.get(pid);
     if (!plot) {
       const styleStr = String(a.style ?? 'plot.style_line');
@@ -629,8 +766,57 @@ LIB['math.avg'] = { params: [], pre: (a, r) => { a.r = r; }, fn: (_c, a) => (a.r
 def('nz', ['x', 'replacement'], (_c, a) => (a.x == null || (typeof a.x === 'number' && !Number.isFinite(a.x)) ? (a.replacement ?? 0) : a.x));
 def('na', ['x'], (_c, a) => a.x == null);
 def('fixnan', ['x'], (_c, a, _n, st) => { if (a.x != null) st.v = a.x; return st.v ?? null; });
-def('str.tostring', ['x'], (_c, a) => String(a.x));
+def('str.tostring', ['x', 'format'], (_c, a) => {
+  if (a.x == null) return 'NaN';
+  if (!isNum(a.x)) return String(a.x);
+  const f = String(a.format ?? '');
+  if (!f) return String(a.x);
+  if (f === 'format.mintick' || f === 'mintick') return a.x.toFixed(2);
+  const m = /^[#0,]*(?:\.([#0]+))?$/.exec(f);
+  if (!m) return String(a.x);
+  const dec = m[1] ? m[1].length : 0;
+  const out = a.x.toFixed(dec);
+  // '#' decimals are optional, '0' decimals are kept
+  return m[1] && !m[1].includes('0') ? String(+out) : out;
+});
 def('str.format', ['f'], (_c, a) => String(a.f));
+def('str.length', ['s'], (_c, a) => String(a.s ?? '').length);
+def('str.lower', ['s'], (_c, a) => String(a.s ?? '').toLowerCase());
+def('str.upper', ['s'], (_c, a) => String(a.s ?? '').toUpperCase());
+def('str.contains', ['s', 'sub'], (_c, a) => String(a.s ?? '').includes(String(a.sub ?? '')));
+def('str.startswith', ['s', 'sub'], (_c, a) => String(a.s ?? '').startsWith(String(a.sub ?? '')));
+def('str.endswith', ['s', 'sub'], (_c, a) => String(a.s ?? '').endsWith(String(a.sub ?? '')));
+def('str.substring', ['s', 'from', 'to'], (_c, a) => String(a.s ?? '').substring(a.from ?? 0, a.to ?? undefined));
+def('str.pos', ['s', 'sub'], (_c, a) => { const k = String(a.s ?? '').indexOf(String(a.sub ?? '')); return k < 0 ? null : k; });
+def('str.replace_all', ['s', 'target', 'replacement'], (_c, a) => String(a.s ?? '').split(String(a.target ?? '')).join(String(a.replacement ?? '')));
+def('str.tonumber', ['s'], (_c, a) => { const n = Number(a.s); return Number.isFinite(n) ? n : null; });
+// calendar parts of a time in a time zone (America/New_York unless one is given)
+const zoneParts = (ms: number, tz: string | undefined) => {
+  let fmt = nyParts;
+  if (typeof tz === 'string' && tz !== 'America/New_York') {
+    try { fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', weekday: 'short', hour12: false }); } catch { /* unknown zone: New York */ }
+  }
+  const p: Record<string, string> = {};
+  fmt.formatToParts(new Date(ms)).forEach((x) => (p[x.type] = x.value));
+  return p;
+};
+for (const part of ['hour', 'minute', 'second', 'dayofweek', 'dayofmonth', 'month', 'year', 'weekofyear']) {
+  def(part, ['time', 'timezone'], (c, a) => {
+    const t = isNum(a.time) ? a.time : c.series('time', 0);
+    const p = zoneParts(t, a.timezone);
+    if (part === 'hour') return +p.hour % 24;
+    if (part === 'minute') return +p.minute;
+    if (part === 'second') return +(p.second ?? 0);
+    if (part === 'dayofweek') return WEEKDAYS[p.weekday];
+    if (part === 'dayofmonth') return +p.day;
+    if (part === 'month') return +p.month;
+    if (part === 'year') return +p.year;
+    const d = Date.UTC(+p.year, +p.month - 1, +p.day);
+    return Math.floor((d - Date.UTC(+p.year, 0, 1)) / 604800000) + 1;
+  });
+}
+def('timeframe.in_seconds', ['timeframe'], (c) => Math.round(c.barMs() / 1000));
+def('timeframe.from_seconds', ['seconds'], (_c, a) => String(a.seconds));
 def('int', ['x'], (_c, a) => (isNum(a.x) ? Math.trunc(a.x) : null));
 def('float', ['x'], (_c, a) => a.x ?? null);
 def('bool', ['x'], (_c, a) => !!a.x);
@@ -675,6 +861,9 @@ const inputDef = (type: PineInput['type']) => (c: Interp, a: Record<string, Val>
   def(`input.${t}`, ['defval', 'title', 'minval', 'maxval', 'step', 'options'], inputDef(t));
 });
 def('input.source', ['defval', 'title'], inputDef('source'));
+// timeframes, symbols, sessions and times are plain text settings here
+for (const t of ['timeframe', 'symbol', 'session']) def(`input.${t}`, ['defval', 'title', 'options'], inputDef('string'));
+def('input.time', ['defval', 'title'], inputDef('float'));
 LIB['input.auto'] = {
   params: ['defval', 'title', 'type'],
   fn: (c, a, n) => {
@@ -686,6 +875,17 @@ LIB['input.auto'] = {
 
 // ta.* implementations
 const num = (v: Val) => (isNum(v) ? v : null);
+def('ta.correlation', ['source1', 'source2', 'length'], (_c, a, _n, st) => {
+  const n = a.length;
+  (st.x ||= []).push(num(a.source1));
+  (st.y ||= []).push(num(a.source2));
+  if (st.x.length > n) { st.x.shift(); st.y.shift(); }
+  if (st.x.length < n || st.x.some((v: any) => v === null) || st.y.some((v: any) => v === null)) return null;
+  const mx = avg(st.x), my = avg(st.y);
+  let sxy = 0, sxx = 0, syy = 0;
+  for (let k = 0; k < n; k++) { const dx = st.x[k] - mx, dy = st.y[k] - my; sxy += dx * dy; sxx += dx * dx; syy += dy * dy; }
+  return sxx > 0 && syy > 0 ? sxy / Math.sqrt(sxx * syy) : null;
+});
 def('ta.sma', ['source', 'length'], (_c, a, _n, st) => smaStep(st, num(a.source), a.length));
 def('ta.ema', ['source', 'length'], (_c, a, _n, st) => emaStep(st, num(a.source), a.length));
 def('ta.rma', ['source', 'length'], (_c, a, _n, st) => rmaStep(st, num(a.source), a.length));
@@ -910,7 +1110,7 @@ const at = (a: Val[], i: Val, c: Interp, fn: string) => {
   return k;
 };
 const nums = (a: Val[]) => a.filter(isNum);
-for (const t of ['float', 'int', 'bool', 'string', 'color']) {
+for (const t of ['float', 'int', 'bool', 'string', 'color', 'box', 'label', 'line', 'table', 'linefill']) {
   def(`array.new_${t}`, ['size', 'initial_value'], (c, a) => {
     const n = isNum(a.size) ? Math.floor(a.size) : 0;
     if (n < 0 || n > MAX_ARRAY) return c.err(`array.new_${t}(): the size must be between 0 and ${MAX_ARRAY}`);

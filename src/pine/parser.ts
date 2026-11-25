@@ -23,12 +23,13 @@ export type Stmt =
   | { k: 'if'; cond: Expr; then: Stmt[]; else?: Stmt[]; line: number }
   | { k: 'for'; v: string; from: Expr; to: Expr; by?: Expr; body: Stmt[]; line: number }
   | { k: 'while'; cond: Expr; body: Stmt[]; line: number }
+  | { k: 'seq'; body: Stmt[] }
   | { k: 'forin'; v: string; idx?: string; iter: Expr; body: Stmt[]; line: number }
   | { k: 'break' }
   | { k: 'continue' }
   | { k: 'fn'; name: string; params: string[]; body: Stmt[]; line: number };
 
-const TYPE_WORDS = new Set(['int', 'float', 'bool', 'string', 'color', 'series', 'simple', 'const', 'label', 'line', 'box']);
+const TYPE_WORDS = new Set(['int', 'float', 'bool', 'string', 'color', 'series', 'simple', 'const', 'label', 'line', 'box', 'table', 'linefill', 'polyline']);
 const ASSIGN_OPS = new Set(['=', ':=', '+=', '-=', '*=', '/=', '%=']);
 
 class Parser {
@@ -138,24 +139,8 @@ class Parser {
       this.p++;
     }
 
-    // `array<float> x = ...` (the type is not needed here)
-    if (this.cur.t === 'id' && (this.cur.v === 'array' || this.cur.v === 'matrix' || this.cur.v === 'map') && this.isOp('<', this.peek())) {
-      let k = this.p + 1;
-      let depth = 0;
-      for (; k < this.toks.length; k++) {
-        const t = this.toks[k];
-        if (t.t === 'op' && t.v === '<') depth++;
-        else if (t.t === 'op' && t.v === '>') { depth--; if (depth === 0) break; }
-        else if (t.t === 'nl' || t.t === 'eof') break;
-      }
-      if (depth === 0 && this.toks[k + 1]?.t === 'id' && this.toks[k + 2]?.t === 'op' && ASSIGN_OPS.has(this.toks[k + 2].v)) this.p = k + 1;
-    }
-
-    // optional type annotation: `float x = ...`
-    if (this.cur.t === 'id' && TYPE_WORDS.has(this.cur.v) && this.peek().t === 'id' &&
-        ASSIGN_OPS.has(this.peek(2).v) && this.peek(2).t === 'op') {
-      this.p++;
-    }
+    // a type in front of the name: `float x = ...`, `array<float> a = ...`, `float[] a = ...`, `label l = ...`
+    this.skipTypeAnnotation();
 
     // tuple destructuring: [a, b] = expr
     if (this.isOp('[')) {
@@ -173,8 +158,7 @@ class Parser {
       if (ok && this.isOp(']') && this.isOp('=', this.peek())) {
         this.p += 2;
         const e = this.expr();
-        this.endOfStatement();
-        return { k: 'tuple', names, e, line };
+        return this.finish({ k: 'tuple', names, e, line });
       }
       this.p = save;
     }
@@ -186,7 +170,7 @@ class Parser {
         this.p++; // (
         const params: string[] = [];
         while (!this.isOp(')')) {
-          if (this.cur.t === 'id' && TYPE_WORDS.has(this.cur.v) && this.peek().t === 'id') this.p++;
+          this.skipTypeAnnotation();
           params.push(this.ident());
           if (this.isOp('=')) { this.p++; this.expr(); } // default values are ignored
           if (this.isOp(',')) this.p++;
@@ -208,15 +192,55 @@ class Parser {
         const name = this.ident();
         const op = this.toks[this.p++].v;
         const e = this.expr();
-        this.endOfStatement();
-        if (op === '=') return { k: 'decl', name, init: e, persistent, line };
-        return { k: 'assign', name, op, e, line };
+        return this.finish(op === '=' ? { k: 'decl', name, init: e, persistent, line } : { k: 'assign', name, op, e, line });
       }
     }
 
     const e = this.expr();
+    return this.finish({ k: 'expr', e, line });
+  }
+
+  /** End of a statement; `a = 1, var b = 2` puts several statements on one line */
+  private finish(first: Stmt): Stmt {
+    if (!this.isOp(',')) { this.endOfStatement(); return first; }
+    const body: Stmt[] = [first];
+    while (this.isOp(',')) {
+      this.p++;
+      const line = this.cur.line;
+      let persistent = false;
+      if ((this.isKw('var') || this.isKw('varip')) && this.peek().t === 'id') { persistent = true; this.p++; }
+      this.skipTypeAnnotation();
+      if (this.cur.t === 'id' && this.peek().t === 'op' && ASSIGN_OPS.has(this.peek().v)) {
+        const name = this.ident();
+        const op = this.toks[this.p++].v;
+        const e = this.expr();
+        body.push(op === '=' ? { k: 'decl', name, init: e, persistent, line } : { k: 'assign', name, op, e, line });
+      } else {
+        body.push({ k: 'expr', e: this.expr(), line });
+      }
+    }
     this.endOfStatement();
-    return { k: 'expr', e, line };
+    return { k: 'seq', body };
+  }
+
+  /** Skips a type in front of a name: float, label, array<float>, float[] ... */
+  private skipTypeAnnotation() {
+    if (this.cur.t !== 'id') return;
+    const isType = TYPE_WORDS.has(this.cur.v) || this.cur.v === 'array' || this.cur.v === 'matrix' || this.cur.v === 'map';
+    if (!isType) return;
+    let k = this.p + 1;
+    if (this.toks[k]?.t === 'op' && this.toks[k].v === '<') {
+      let depth = 0;
+      for (; k < this.toks.length; k++) {
+        const t = this.toks[k];
+        if (t.t === 'op' && t.v === '<') depth++;
+        else if (t.t === 'op' && t.v === '>') { depth--; if (depth === 0) { k++; break; } }
+        else if (t.t === 'nl' || t.t === 'eof') return;
+      }
+    }
+    // float[] name
+    while (this.toks[k]?.t === 'op' && this.toks[k].v === '[' && this.toks[k + 1]?.t === 'op' && this.toks[k + 1].v === ']') k += 2;
+    if (this.toks[k]?.t === 'id' && this.toks[k + 1]?.t === 'op' && (ASSIGN_OPS.has(this.toks[k + 1].v) || this.toks[k + 1].v === ',' || this.toks[k + 1].v === ')')) this.p = k;
   }
 
   /** switch [value] followed by indented `case => result` lines and an optional `=> default` */
