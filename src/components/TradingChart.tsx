@@ -628,6 +628,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
     candleSeriesRef.current = candleSeries;
     customManagerRef.current = new CustomIndicatorManager(chart, candleSeries);
+    customManagerRef.current.onNeedHtf = (tf) => loadScriptTfRef.current(tf);
     sessionBandsRef.current = attachSessionBands(candleSeries);
     autoChartRef.current = new AutoChartManager(chart, candleSeries);
     alphaRef.current = new AlphaManager(chart, candleSeries);
@@ -1713,6 +1714,36 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   // Constants for drawing
   const RECTANGLE_SEGMENTS = 10; // Number of segments for smooth rectangle rendering
 
+  // A script's request.security(..., "60" / "D" ...) is answered with real candles of that timeframe, loaded here on request
+  const [htfTick, setHtfTick] = useState(0);
+  const loadScriptTfRef = useRef<(tf: string) => void>(() => undefined);
+  loadScriptTfRef.current = (tf: string) => {
+    const t = tf.trim().toUpperCase();
+    const m = /^(\d*)(S|D|W|M)?$/.exec(t);
+    if (!m) return;
+    const n = m[1] ? +m[1] : 1;
+    const unit = m[2] ?? 'MIN';
+    // Yahoo history: hourly candles for 1 hour and up to a day, daily candles for days, weeks and months
+    let interval = '', range = '';
+    if (unit === 'MIN' && n >= 60 && n < 1440) { interval = '1h'; range = '6mo'; }
+    else if (unit === 'D' || (unit === 'MIN' && n >= 1440)) { interval = '1d'; range = '2y'; }
+    else if (unit === 'W') { interval = '1d'; range = '5y'; }
+    else if (unit === 'M') { interval = '1d'; range = '10y'; }
+    if (!interval) return;
+    RealMarketDataService.getInstance()
+      .fetchChartData(symbol, interval, range, includeAfterHours && interval === '1h')
+      .then((raw) => {
+        customManagerRef.current?.setHtf(tf, raw.map((d) => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume })));
+        setHtfTick((v) => v + 1);
+      })
+      .catch(() => undefined);
+  };
+  // another symbol (or extended hours switched) means other candles
+  useEffect(() => {
+    customManagerRef.current?.clearHtf();
+    setHtfTick((v) => v + 1);
+  }, [symbol, includeAfterHours]);
+
   // Render custom (Pine Script / JavaScript) indicators. They live in their own manager,
   // so toggling built-in indicators never removes them and removed ones are cleaned up.
   useEffect(() => {
@@ -1723,7 +1754,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       data
     );
     setCustomStatuses((prev) => (JSON.stringify(prev) === JSON.stringify(statuses) ? prev : statuses));
-  }, [data, customIndicators, hiddenIds]);
+  }, [data, customIndicators, hiddenIds, htfTick]);
 
   useEffect(() => {
     try {

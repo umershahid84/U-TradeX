@@ -11,7 +11,7 @@ import {
   Time,
 } from 'lightweight-charts';
 import { ChartData, CustomIndicator, CustomIndicatorStatus } from '../types';
-import { PineError, PineMarker, PineResult, runPine } from '../pine';
+import { PineBar, PineError, PineMarker, PineResult, runPine } from '../pine';
 import { CloudData, CloudSeries } from '../plugins/cloudSeries';
 import { PineDrawingsPrimitive, Drawings } from '../plugins/pineDrawings';
 
@@ -194,6 +194,22 @@ export class CustomIndicatorManager {
     };
   }
 
+  // Real candles for the longer timeframes scripts ask for with request.security (loaded by the chart on request)
+  private htf: Record<string, PineBar[]> = {};
+  private htfAsked = new Set<string>();
+  onNeedHtf: ((tf: string) => void) | null = null;
+
+  setHtf(tf: string, bars: PineBar[]) {
+    this.htf[tf.trim().toUpperCase()] = bars;
+    this.runCache.clear();
+  }
+
+  clearHtf() {
+    this.htf = {};
+    this.htfAsked.clear();
+    this.runCache.clear();
+  }
+
   private runCache = new Map<string, { key: string; at: number; ms: number; result: PineResult }>();
 
   private buildPine(ind: CustomIndicator, data: ChartData[], status: CustomIndicatorStatus): Spec {
@@ -206,7 +222,14 @@ export class CustomIndicatorManager {
       result = hit.result;
     } else {
       const t0 = Date.now();
-      result = runPine(ind.source, data, ind.inputValues ?? {});
+      result = runPine(ind.source, data, ind.inputValues ?? {}, this.htf);
+      for (const tf of result.securityTfs) {
+        const k = tf.trim().toUpperCase();
+        if (!this.htf[k] && !this.htfAsked.has(k)) {
+          this.htfAsked.add(k);
+          this.onNeedHtf?.(tf);
+        }
+      }
       this.runCache.set(ind.id, { key, at: Date.now(), ms: Date.now() - t0, result });
     }
     status.warnings = result.warnings;

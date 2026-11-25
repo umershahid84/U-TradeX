@@ -87,6 +87,8 @@ export interface PineResult {
   lines: PineLine[];
   boxes: PineBox[];
   labels: PineLabel[];
+  /** Longer timeframes the script asked for with request.security (so the app can load real candles for them) */
+  securityTfs: string[];
   /** bgcolor(): the background colour of each candle (undefined where none) */
   bg: (string | undefined)[];
   /** The Pine version from //@version=N (5 when the script does not say) */
@@ -196,6 +198,8 @@ class Interp {
   declSrc = new Map<string, Stmt>();
   secCache = new Map<string, { vals: Val[]; map: number[]; last: boolean[] }>();
   isSub = false;
+  /** Real candles for the longer timeframes (base candles to build each timeframe from), when the app has loaded them */
+  htfData: Record<string, PineBar[]> = {};
   drawings = new Map<number, { kind: 'line' | 'box' | 'label'; d: any }>();
   nextDraw = 1;
   tableList = new Map<number, PineTable & { deleted?: boolean }>();
@@ -208,7 +212,7 @@ class Interp {
 
   result: PineResult = {
     title: 'Custom Indicator', overlay: false, plots: [], hlines: [], fills: [],
-    markers: [], inputs: [], warnings: [], tables: [], lines: [], boxes: [], labels: [], bg: [], version: 5,
+    markers: [], inputs: [], warnings: [], tables: [], lines: [], boxes: [], labels: [], bg: [], securityTfs: [], version: 5,
   };
   plotById = new Map<number, PinePlot>();
   hlineById = new Map<number, number>();
@@ -326,6 +330,8 @@ class Interp {
         this.currentLine = s.line;
         const from = this.eval(s.from), to = this.eval(s.to);
         const by = s.by ? this.eval(s.by) : from <= to ? 1 : -1;
+        // an na bound means there is nothing to loop over (the data it comes from is not there yet)
+        if (from == null || to == null) return null;
         if (!isNum(from) || !isNum(to) || !isNum(by) || by === 0) this.err('Invalid for-loop bounds', s.line);
         let last: Val = null;
         // v6 re-evaluates the end of the loop each time round (v4 and v5 evaluate it once)
@@ -648,45 +654,60 @@ class Interp {
   }
 
   // ---- request.security ----
-  /** Candles of another timeframe built from the chart's own candles (only timeframes longer than the chart's) */
-  private higherBars(tf: string): { bars: PineBar[]; map: number[]; last: boolean[] } | null {
+  /** The bucket a candle time falls in for a timeframe like "60", "240", "D", "W", "M" */
+  private bucketKey(tf: string): ((time: number) => string) | null {
     const t = tf.trim().toUpperCase();
     const m = /^(\d*)(S|D|W|M)?$/.exec(t);
     if (!m) return null;
     const n = m[1] ? +m[1] : 1;
     const unit = m[2] ?? (m[1] ? 'MIN' : '');
     if (!unit) return null;
-    const key = (time: number): string => {
-      if (unit === 'MIN' || unit === 'S') {
-        const ms = n * (unit === 'S' ? 1000 : 60_000);
-        return String(Math.floor(time / ms));
-      }
+    return (time: number): string => {
+      if (unit === 'MIN' || unit === 'S') return String(Math.floor(time / (n * (unit === 'S' ? 1000 : 60_000))));
       const d = new Date(time).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
       if (unit === 'D') return n === 1 ? d : String(Math.floor(Date.parse(d + 'T12:00:00Z') / 86400000 / n));
       if (unit === 'W') { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() - ((x.getUTCDay() + 6) % 7)); return x.toISOString().slice(0, 10); }
       return d.slice(0, 7);
     };
+  }
+
+  /**
+   * Candles of a longer timeframe, built from base candles: real loaded ones when the app supplied them, otherwise the
+   * chart's own. `map` gives each chart candle's higher-timeframe candle and `last` marks the chart candle that closes it.
+   */
+  private higherBars(tf: string): { bars: PineBar[]; map: number[]; last: boolean[]; real: boolean } | null {
+    const key = this.bucketKey(tf);
+    if (!key) return null;
+    const real = this.htfData[tf.trim().toUpperCase()] ?? this.htfData[tf.trim()];
+    const base = real && real.length ? real : this.bars;
     const bars: PineBar[] = [];
-    const map: number[] = [];
-    const last: boolean[] = [];
-    let cur = '';
-    this.bars.forEach((b, i) => {
+    const idx = new Map<string, number>();
+    base.forEach((b) => {
       const k = key(b.time);
-      if (k !== cur) {
-        cur = k;
+      const at = idx.get(k);
+      if (at === undefined) {
+        idx.set(k, bars.length);
         bars.push({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume });
       } else {
-        const h = bars[bars.length - 1];
+        const h = bars[at];
         h.high = Math.max(h.high, b.high);
         h.low = Math.min(h.low, b.low);
         h.close = b.close;
         h.volume += b.volume;
       }
-      map[i] = bars.length - 1;
     });
-    this.bars.forEach((_b, i) => { last[i] = i === this.bars.length - 1 || map[i + 1] !== map[i]; });
-    // not longer than the chart's own candles: nothing to build
-    return bars.length < this.bars.length ? { bars, map, last } : null;
+    const map: number[] = [];
+    let prev = -1;
+    this.bars.forEach((b, i) => {
+      const at = idx.get(key(b.time));
+      // a chart candle with no candle of that timeframe (a gap in the loaded data) takes the one before
+      map[i] = at !== undefined ? at : prev;
+      prev = map[i];
+    });
+    const last: boolean[] = this.bars.map((_b, i) => i === this.bars.length - 1 || map[i + 1] !== map[i]);
+    // when built from the chart's own candles, a timeframe not longer than the chart's has nothing to build
+    if (!real && bars.length >= this.bars.length) return null;
+    return { bars, map, last, real: !!real && real.length > 0 };
   }
 
   security(e: Extract<Expr, { k: 'call' }>): Val {
@@ -712,6 +733,7 @@ class Interp {
     let res = this.secCache.get(key);
     if (!res) {
       const hb = this.higherBars(tf);
+      if (!this.result.securityTfs.includes(tf)) this.result.securityTfs.push(tf);
       if (!hb) {
         this.warn(`request.security() timeframe "${tf}" is not longer than the chart's, so the chart's own candles were used`);
         return this.eval(exprNode);
@@ -726,7 +748,7 @@ class Interp {
       for (sub.i = 0; sub.i < hb.bars.length; sub.i++) vals.push(sub.eval(exprNode));
       res = { vals, map: hb.map, last: hb.last };
       this.secCache.set(key, res);
-      if (hb.bars.length < 30) this.warn(`request.security(${tf}) only had ${hb.bars.length} candles of that timeframe to work with: load a longer range for reliable values`);
+      if (!hb.real && hb.bars.length < 30) this.warn(`request.security(${tf}) only had ${hb.bars.length} candles of that timeframe to work with: load a longer range for reliable values`);
     }
     // without lookahead a higher-timeframe candle's value appears when it closes; with it, as the candle forms
     const idx = res.map[this.i];
@@ -1354,10 +1376,13 @@ def('request.security', ['symbol', 'timeframe', 'expression', 'gaps', 'lookahead
 export function runPine(
   source: string,
   bars: PineBar[],
-  userInputs: Record<string, number | boolean | string> = {}
+  userInputs: Record<string, number | boolean | string> = {},
+  /** Real candles for longer timeframes ("60", "D" ...), used by request.security when present */
+  htfData: Record<string, PineBar[]> = {}
 ): PineResult {
   const program = parse(source);
   const interp = new Interp(bars, userInputs);
+  interp.htfData = Object.fromEntries(Object.entries(htfData).map(([k, v]) => [k.trim().toUpperCase(), v]));
   // the version comment: 4, 5 and 6 are accepted
   const ver = /^\s*\/\/\s*@version\s*=\s*(\d+)/m.exec(source);
   if (ver) {
