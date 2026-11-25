@@ -32,6 +32,7 @@ import {
 import { MIN_AUTOCHART_BARS } from './utils/autoChart';
 import { TimeFrame, TimeRange, ChartData, FearGreedData, MarketFearGreed, TakeProfitStopLoss, Order, TrailingStop } from './types';
 import './App.css';
+import './largeScreen.css';
 
 const marketData = RealMarketDataService.getInstance();
 

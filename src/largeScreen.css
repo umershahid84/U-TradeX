@@ -1,0 +1,59 @@
+/*
+ * Large screens (1700 px wide and up, e.g. a 1920 x 1080 monitor): a wider sidebar and larger text and controls, so the
+ * extra pixels are used instead of leaving everything small. Smaller screens are not affected.
+ * Imported last so these rules win over the component styles.
+ */
+@media (min-width: 1700px) {
+  /* header rows */
+  .navbar { padding: 8px 22px; gap: 8px 22px; }
+  .navbar-brand h1 { font-size: 27px; }
+  .brand-tagline { font-size: 12px; }
+  .search-input { font-size: 15px; width: 240px; padding: 8px 12px; }
+  .selector-label { font-size: 13px; }
+  .timeframe-buttons button, .range-buttons button { font-size: 13px; padding: 6px 11px; }
+
+  /* more room for the sidebar */
+  .main-content { padding: 10px 16px; gap: 14px; }
+  .right-sidebar { width: 440px; flex: 0 0 440px; }
+
+  /* price header */
+  .chart-header { padding: 10px 18px; }
+  .symbol-info h2 { font-size: 24px; }
+  .current-price { font-size: 28px; }
+  .session-badge { font-size: 12px; padding: 3px 12px; }
+  .session-move { font-size: 13px; }
+  .bid-price .value, .ask-price .value { font-size: 16px; }
+  .bid-price .label, .ask-price .label, .after-hours-toggle, .connection-status { font-size: 13px; }
+
+  /* chart toolbar */
+  .indicator-toggle, .fibonacci-btn { font-size: 13px; padding: 9px 16px; }
+  .tools-menu { width: 350px; }
+  .tools-menu button b { font-size: 13.5px; }
+  .tools-menu button small { font-size: 11.5px; }
+  .panel-header { font-size: 12.5px; padding: 5px 12px; }
+
+  /* the strip along the bottom: bigger text and room for more rows */
+  .ps-body { max-height: 250px; }
+  .ps-toggle, .ps-tabs, .ps-empty { font-size: 13.5px; }
+  .ps-table { font-size: 13.5px; }
+  .ps-table th { font-size: 12px; padding: 7px 14px; }
+  .ps-table td { padding: 7px 14px; }
+  .ps-link { font-size: 13.5px; }
+  .ps-action { font-size: 12px; padding: 3px 12px; }
+  .ps-daily { font-size: 12.5px; padding: 5px 12px; }
+  .ps-range button { font-size: 12.5px; }
+  .ts-table, .trade-stats { font-size: 13px; }
+
+  /* sidebar */
+  .sidebar-tabs button { font-size: 11.5px; padding: 7px 0; }
+  .sidebar-tabs .tab-icon { font-size: 17px; }
+  .watchlist-header h3 { font-size: 18px; }
+  .watch-symbol { font-size: 15px; }
+  .watch-row { padding-top: 11px; padding-bottom: 11px; }
+  .scan-table, .pol-sub, .pol-top, .pol-field input, .options-panel { font-size: 13px; }
+  .pol-note, .scan-note, .ts-note { font-size: 11.5px; }
+
+  /* floating panels over the chart */
+  .ap-card, .plan-card { font-size: 13px; width: 320px; }
+  .alpha-dash { width: 240px; font-size: 13px; }
+}
