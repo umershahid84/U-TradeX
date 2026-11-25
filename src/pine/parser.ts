@@ -12,7 +12,8 @@ export type Expr =
   | { k: 'index'; obj: Expr; idx: Expr; line: number }
   | { k: 'call'; name: string; args: { name?: string; value: Expr }[]; id: number; line: number }
   | { k: 'arr'; items: Expr[] }
-  | { k: 'ifx'; stmt: Stmt };
+  | { k: 'ifx'; stmt: Stmt }
+  | { k: 'switch'; subject?: Expr; cases: { cond?: Expr; body: Stmt[] }[]; line: number };
 
 export type Stmt =
   | { k: 'expr'; e: Expr; line: number }
@@ -22,6 +23,7 @@ export type Stmt =
   | { k: 'if'; cond: Expr; then: Stmt[]; else?: Stmt[]; line: number }
   | { k: 'for'; v: string; from: Expr; to: Expr; by?: Expr; body: Stmt[]; line: number }
   | { k: 'while'; cond: Expr; body: Stmt[]; line: number }
+  | { k: 'forin'; v: string; idx?: string; iter: Expr; body: Stmt[]; line: number }
   | { k: 'break' }
   | { k: 'continue' }
   | { k: 'fn'; name: string; params: string[]; body: Stmt[]; line: number };
@@ -85,6 +87,25 @@ class Parser {
 
     if (this.isKw('for')) {
       this.p++;
+      // for item in array / for [i, item] in array
+      if (this.isOp('[')) {
+        const save = this.p;
+        this.p++;
+        const a = this.ident();
+        this.expectOp(',');
+        const b = this.ident();
+        this.expectOp(']');
+        if (!this.isKw('in')) { this.p = save; this.fail("Expected 'in' after the loop variables"); }
+        this.p++;
+        const iter = this.expr();
+        return { k: 'forin', v: b, idx: a, iter, body: this.block(), line };
+      }
+      if (this.cur.t === 'id' && this.isKw('in', this.peek())) {
+        const v = this.ident();
+        this.p++;
+        const iter = this.expr();
+        return { k: 'forin', v, iter, body: this.block(), line };
+      }
       const v = this.ident();
       this.expectOp('=');
       const from = this.expr();
@@ -105,11 +126,29 @@ class Parser {
     if (this.isKw('break')) { this.p++; this.endOfStatement(); return { k: 'break' }; }
     if (this.isKw('continue')) { this.p++; this.endOfStatement(); return { k: 'continue' }; }
 
+    // v6 features this interpreter does not have: say so instead of a confusing syntax error
+    if ((this.isKw('method') || this.isKw('type') || this.isKw('import') || this.isKw('export') || this.isKw('enum')) && this.peek().t === 'id') {
+      this.fail(`'${this.cur.v}' (methods, user-defined types, enums and libraries) is not supported yet`);
+    }
+
     // var / varip declarations
     let persistent = false;
     if ((this.isKw('var') || this.isKw('varip')) && this.peek().t === 'id') {
       persistent = true;
       this.p++;
+    }
+
+    // `array<float> x = ...` (the type is not needed here)
+    if (this.cur.t === 'id' && (this.cur.v === 'array' || this.cur.v === 'matrix' || this.cur.v === 'map') && this.isOp('<', this.peek())) {
+      let k = this.p + 1;
+      let depth = 0;
+      for (; k < this.toks.length; k++) {
+        const t = this.toks[k];
+        if (t.t === 'op' && t.v === '<') depth++;
+        else if (t.t === 'op' && t.v === '>') { depth--; if (depth === 0) break; }
+        else if (t.t === 'nl' || t.t === 'eof') break;
+      }
+      if (depth === 0 && this.toks[k + 1]?.t === 'id' && this.toks[k + 2]?.t === 'op' && ASSIGN_OPS.has(this.toks[k + 2].v)) this.p = k + 1;
     }
 
     // optional type annotation: `float x = ...`
@@ -178,6 +217,35 @@ class Parser {
     const e = this.expr();
     this.endOfStatement();
     return { k: 'expr', e, line };
+  }
+
+  /** switch [value] followed by indented `case => result` lines and an optional `=> default` */
+  private switchExpr(): Expr {
+    const line = this.cur.line;
+    this.p++; // switch
+    const subject = this.cur.t === 'nl' ? undefined : this.expr();
+    if (this.cur.t !== 'nl') this.fail('Expected a new line after switch');
+    this.p++;
+    if (this.kind() !== 'indent') this.fail('Expected indented cases after switch');
+    this.p++;
+    const cases: { cond?: Expr; body: Stmt[] }[] = [];
+    while (this.kind() !== 'dedent' && this.kind() !== 'eof') {
+      if (this.cur.t === 'nl') { this.p++; continue; }
+      let cond: Expr | undefined;
+      if (!this.isOp('=>')) cond = this.expr();
+      const cline = this.cur.line;
+      this.expectOp('=>');
+      let body: Stmt[];
+      if (this.cur.t === 'nl') body = this.block();
+      else {
+        const e = this.expr();
+        if (this.cur.t === 'nl') this.p++;
+        body = [{ k: 'expr', e, line: cline }];
+      }
+      cases.push({ cond, body });
+    }
+    if (this.kind() === 'dedent') this.p++;
+    return { k: 'switch', subject, cases, line };
   }
 
   private isFunctionDef(): boolean {
@@ -300,11 +368,19 @@ class Parser {
       case 'id': {
         if (tok.v === 'true' || tok.v === 'false') { this.p++; return { k: 'bool', v: tok.v === 'true' }; }
         if (tok.v === 'if') return { k: 'ifx', stmt: this.ifStatement() };
+        if (tok.v === 'switch') return this.switchExpr();
         this.p++;
         let name = tok.v;
         while (this.isOp('.') && this.peek().t === 'id') {
           this.p++;
           name += '.' + this.toks[this.p++].v;
+        }
+        // array.new<float>(5): the type argument picks the function
+        if ((name === 'array.new' || name === 'matrix.new') && this.isOp('<')) {
+          this.p++;
+          const type = this.ident();
+          this.expectOp('>');
+          name = name === 'array.new' ? `array.new_${type}` : `matrix.new_${type}`;
         }
         if (this.isOp('(')) {
           this.p++;

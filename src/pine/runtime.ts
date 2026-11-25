@@ -57,6 +57,8 @@ export interface PineResult {
   markers: PineMarker[];
   inputs: PineInput[];
   warnings: string[];
+  /** The Pine version from //@version=N (5 when the script does not say) */
+  version: number;
 }
 
 type Val = any;
@@ -165,7 +167,7 @@ class Interp {
 
   result: PineResult = {
     title: 'Custom Indicator', overlay: false, plots: [], hlines: [], fills: [],
-    markers: [], inputs: [], warnings: [],
+    markers: [], inputs: [], warnings: [], version: 5,
   };
   plotById = new Map<number, PinePlot>();
   hlineById = new Map<number, number>();
@@ -278,9 +280,29 @@ class Interp {
         const by = s.by ? this.eval(s.by) : from <= to ? 1 : -1;
         if (!isNum(from) || !isNum(to) || !isNum(by) || by === 0) this.err('Invalid for-loop bounds', s.line);
         let last: Val = null;
-        for (let k = from; by > 0 ? k <= to : k >= to; k += by) {
+        // v6 re-evaluates the end of the loop each time round (v4 and v5 evaluate it once)
+        const bound = () => (this.result.version >= 6 ? this.eval(s.to) : to);
+        for (let k = from; by > 0 ? k <= bound() : k >= bound(); k += by) {
           this.tick(s.line);
           this.setVar(s.v, k);
+          try { last = this.execBlock(s.body); } catch (e) {
+            if (e instanceof BreakSignal) break;
+            if (e instanceof ContinueSignal) continue;
+            throw e;
+          }
+        }
+        return last;
+      }
+      case 'forin': {
+        this.currentLine = s.line;
+        const list = this.eval(s.iter);
+        if (!Array.isArray(list)) this.err('for ... in needs an array', s.line);
+        let last: Val = null;
+        // iterate over a copy of the length at the start, like Pine
+        for (let k = 0; k < list.length; k++) {
+          this.tick(s.line);
+          this.setVar(s.v, list[k] ?? null);
+          if (s.idx) this.setVar(s.idx, k);
           try { last = this.execBlock(s.body); } catch (e) {
             if (e instanceof BreakSignal) break;
             if (e instanceof ContinueSignal) continue;
@@ -340,6 +362,16 @@ class Interp {
       case 'color': return e.v.length === 9 ? toRGBA(e.v, 0) : e.v;
       case 'arr': return e.items.map((x) => this.eval(x));
       case 'ifx': return this.exec(e.stmt);
+      case 'switch': {
+        this.currentLine = e.line;
+        const subject = e.subject ? this.eval(e.subject) : undefined;
+        for (const c of e.cases) {
+          // `=> default` has no condition; with a subject cases compare to it, without one they are true/false tests
+          const hit = !c.cond || (e.subject ? this.eval(c.cond) === subject : this.truthy(this.eval(c.cond)));
+          if (hit) return this.execBlock(c.body);
+        }
+        return null;
+      }
       case 'tern': return this.truthy(this.eval(e.c)) ? this.eval(e.a) : this.eval(e.b);
       case 'un': {
         const v = this.eval(e.e);
@@ -476,13 +508,25 @@ class Interp {
       return v;
     };
 
+    // v5/v6 method syntax on arrays: arr.push(x) is array.push(arr, x)
+    let args0 = e.args;
+    const dot = name.indexOf('.');
+    if (dot > 0 && !LIB[name]) {
+      const head = name.slice(0, dot);
+      const f = this.findFrame(head);
+      if (f && Array.isArray(f.get(head)![this.i])) {
+        name = 'array.' + name.slice(dot + 1);
+        args0 = [{ value: { k: 'name', name: head, id: e.id, line: e.line } }, ...e.args];
+      }
+    }
+
     // user-defined functions
     const user = this.fnDefs.get(name);
     if (user) {
       const frameKey = key;
       let frame = this.frames.get(frameKey);
       if (!frame) { frame = new Map(); this.frames.set(frameKey, frame); this.persistent.set(frame, new Set()); }
-      const vals = e.args.map((a) => this.eval(a.value));
+      const vals = args0.map((a) => this.eval(a.value));
       this.callPath.push(String(e.id));
       this.stack.push(frame);
       user.params.forEach((p, k) => this.setVar(p, vals[k] ?? null));
@@ -508,7 +552,7 @@ class Interp {
     // map args
     const args: Record<string, Val> = {};
     const raw: Val[] = [];
-    e.args.forEach((a, k) => {
+    args0.forEach((a, k) => {
       const v = this.eval(a.value);
       raw.push(v);
       if (a.name) args[a.name] = v;
@@ -856,6 +900,95 @@ const marker = (c: Interp, a: Record<string, Val>, shape: PineMarker['shape'] | 
 def('plotshape', ['series', 'title', 'style', 'location', 'color', 'offset', 'text'], (c, a) => marker(c, a, null));
 def('plotchar', ['series', 'title', 'char', 'location', 'color', 'offset', 'text'], (c, a) => marker(c, a, 'circle'));
 
+// ---- arrays (v5 / v6) ----
+const MAX_ARRAY = 100_000;
+const arr = (c: Interp, v: Val, fn: string): Val[] => (Array.isArray(v) ? v : c.err(`${fn}() needs an array`));
+const at = (a: Val[], i: Val, c: Interp, fn: string) => {
+  if (!isNum(i)) return c.err(`${fn}(): the index must be a number`);
+  const k = i < 0 ? a.length + i : i;
+  if (k < 0 || k >= a.length) return c.err(`${fn}(): index ${i} is out of bounds (size ${a.length})`);
+  return k;
+};
+const nums = (a: Val[]) => a.filter(isNum);
+for (const t of ['float', 'int', 'bool', 'string', 'color']) {
+  def(`array.new_${t}`, ['size', 'initial_value'], (c, a) => {
+    const n = isNum(a.size) ? Math.floor(a.size) : 0;
+    if (n < 0 || n > MAX_ARRAY) return c.err(`array.new_${t}(): the size must be between 0 and ${MAX_ARRAY}`);
+    return Array.from({ length: n }, () => a.initial_value ?? null);
+  });
+}
+LIB['array.from'] = { params: [], pre: (a, r) => { a.r = r; }, fn: (_c, a) => [...a.r] };
+def('array.size', ['id'], (c, a) => arr(c, a.id, 'array.size').length);
+def('array.push', ['id', 'value'], (c, a) => {
+  const x = arr(c, a.id, 'array.push');
+  if (x.length >= MAX_ARRAY) return c.err(`array.push(): arrays are limited to ${MAX_ARRAY} elements`);
+  x.push(a.value ?? null);
+  return null;
+});
+def('array.unshift', ['id', 'value'], (c, a) => { arr(c, a.id, 'array.unshift').unshift(a.value ?? null); return null; });
+def('array.pop', ['id'], (c, a) => arr(c, a.id, 'array.pop').pop() ?? null);
+def('array.shift', ['id'], (c, a) => arr(c, a.id, 'array.shift').shift() ?? null);
+def('array.get', ['id', 'index'], (c, a) => { const x = arr(c, a.id, 'array.get'); return x[at(x, a.index, c, 'array.get')] ?? null; });
+def('array.set', ['id', 'index', 'value'], (c, a) => { const x = arr(c, a.id, 'array.set'); x[at(x, a.index, c, 'array.set')] = a.value ?? null; return null; });
+def('array.insert', ['id', 'index', 'value'], (c, a) => {
+  const x = arr(c, a.id, 'array.insert');
+  const k = isNum(a.index) ? (a.index < 0 ? x.length + a.index : a.index) : -1;
+  if (k < 0 || k > x.length) return c.err(`array.insert(): index ${a.index} is out of bounds`);
+  x.splice(k, 0, a.value ?? null);
+  return null;
+});
+def('array.remove', ['id', 'index'], (c, a) => { const x = arr(c, a.id, 'array.remove'); return x.splice(at(x, a.index, c, 'array.remove'), 1)[0] ?? null; });
+def('array.clear', ['id'], (c, a) => { arr(c, a.id, 'array.clear').length = 0; return null; });
+def('array.first', ['id'], (c, a) => { const x = arr(c, a.id, 'array.first'); return x.length ? x[0] : c.err('array.first(): the array is empty'); });
+def('array.last', ['id'], (c, a) => { const x = arr(c, a.id, 'array.last'); return x.length ? x[x.length - 1] : c.err('array.last(): the array is empty'); });
+def('array.includes', ['id', 'value'], (c, a) => arr(c, a.id, 'array.includes').includes(a.value));
+def('array.indexof', ['id', 'value'], (c, a) => arr(c, a.id, 'array.indexof').indexOf(a.value));
+def('array.lastindexof', ['id', 'value'], (c, a) => arr(c, a.id, 'array.lastindexof').lastIndexOf(a.value));
+def('array.sum', ['id'], (c, a) => nums(arr(c, a.id, 'array.sum')).reduce((x, y) => x + y, 0));
+def('array.avg', ['id'], (c, a) => { const n = nums(arr(c, a.id, 'array.avg')); return n.length ? avg(n) : null; });
+def('array.min', ['id', 'nth'], (c, a) => { const n = nums(arr(c, a.id, 'array.min')).sort((x, y) => x - y); return n[isNum(a.nth) ? a.nth : 0] ?? null; });
+def('array.max', ['id', 'nth'], (c, a) => { const n = nums(arr(c, a.id, 'array.max')).sort((x, y) => y - x); return n[isNum(a.nth) ? a.nth : 0] ?? null; });
+def('array.median', ['id'], (c, a) => {
+  const n = nums(arr(c, a.id, 'array.median')).sort((x, y) => x - y);
+  if (!n.length) return null;
+  const m = Math.floor(n.length / 2);
+  return n.length % 2 ? n[m] : (n[m - 1] + n[m]) / 2;
+});
+def('array.variance', ['id', 'biased'], (c, a) => {
+  const n = nums(arr(c, a.id, 'array.variance'));
+  const biased = a.biased !== false;
+  if (n.length < (biased ? 1 : 2)) return null;
+  const m = avg(n);
+  return n.reduce((s, v) => s + (v - m) ** 2, 0) / (biased ? n.length : n.length - 1);
+});
+def('array.stdev', ['id', 'biased'], (c, a) => {
+  const n = nums(arr(c, a.id, 'array.stdev'));
+  const biased = a.biased !== false;
+  if (n.length < (biased ? 1 : 2)) return null;
+  const m = avg(n);
+  return Math.sqrt(n.reduce((s, v) => s + (v - m) ** 2, 0) / (biased ? n.length : n.length - 1));
+});
+def('array.range', ['id'], (c, a) => { const n = nums(arr(c, a.id, 'array.range')); return n.length ? Math.max(...n) - Math.min(...n) : null; });
+def('array.sort', ['id', 'order'], (c, a) => {
+  const x = arr(c, a.id, 'array.sort');
+  const desc = String(a.order ?? '').includes('desc');
+  x.sort((p: Val, q: Val) => (isNum(p) && isNum(q) ? (desc ? q - p : p - q) : String(p).localeCompare(String(q)) * (desc ? -1 : 1)));
+  return null;
+});
+def('array.reverse', ['id'], (c, a) => { arr(c, a.id, 'array.reverse').reverse(); return null; });
+def('array.copy', ['id'], (c, a) => [...arr(c, a.id, 'array.copy')]);
+def('array.slice', ['id', 'index_from', 'index_to'], (c, a) => arr(c, a.id, 'array.slice').slice(a.index_from ?? 0, a.index_to ?? undefined));
+def('array.concat', ['id1', 'id2'], (c, a) => { arr(c, a.id1, 'array.concat').push(...arr(c, a.id2, 'array.concat')); return a.id1; });
+def('array.fill', ['id', 'value', 'index_from', 'index_to'], (c, a) => { arr(c, a.id, 'array.fill').fill(a.value ?? null, a.index_from ?? 0, a.index_to ?? undefined); return null; });
+def('array.join', ['id', 'separator'], (c, a) => arr(c, a.id, 'array.join').map((v: Val) => String(v ?? 'na')).join(a.separator ?? ','));
+
+// request.security: only the chart's own symbol and timeframe are available here, so only that form is accepted
+def('request.security', ['symbol', 'timeframe', 'expression', 'gaps', 'lookahead'], (c, a) => {
+  const tf = String(a.timeframe ?? '');
+  if (tf === 'chart' || tf === '') return a.expression ?? null;
+  return c.err("request.security() only works for the chart's own timeframe (timeframe.period) in this app");
+});
+
 export function runPine(
   source: string,
   bars: PineBar[],
@@ -863,6 +996,13 @@ export function runPine(
 ): PineResult {
   const program = parse(source);
   const interp = new Interp(bars, userInputs);
+  // the version comment: 4, 5 and 6 are accepted
+  const ver = /^\s*\/\/\s*@version\s*=\s*(\d+)/m.exec(source);
+  if (ver) {
+    interp.result.version = +ver[1];
+    if (+ver[1] < 4 || +ver[1] > 6) interp.warn(`//@version=${ver[1]} is not a version this interpreter knows (4, 5 and 6 are supported); it was run as version 5`);
+    if (+ver[1] < 4 || +ver[1] > 6) interp.result.version = 5;
+  }
   // `input.source(close)` needs the *name* of its default argument
   const patchSources = (list: Stmt[]) => list.forEach((s) => {
     const visit = (e: Expr | undefined): void => {

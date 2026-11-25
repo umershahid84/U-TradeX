@@ -125,7 +125,7 @@ export const CustomIndicatorPanel: React.FC<CustomIndicatorPanelProps> = ({
           )}
 
           <div className="form-group">
-            <label>{language === 'pine' ? 'Pine Script (v5 / v4):' : 'Formula (JavaScript):'}</label>
+            <label>{language === 'pine' ? 'Pine Script (v6, v5 or v4):' : 'Formula (JavaScript):'}</label>
             <textarea
               className="code-editor"
               value={source}
@@ -247,11 +247,12 @@ export const CustomIndicatorPanel: React.FC<CustomIndicatorPanelProps> = ({
       </button>
       {showHelp && (
         <div className="help-section">
-          <p><strong>Language:</strong> v4 and v5 syntax, <code>var</code>, <code>:=</code>, <code>if / for / while</code>, user functions, tuples, history <code>x[1]</code>, ternary.</p>
+          <p><strong>Language:</strong> Pine v4, v5 and v6 (<code>//@version=6</code>): <code>var</code>, <code>:=</code>, <code>if / for / for…in / while / switch</code>, user functions, tuples, history <code>x[1]</code>, ternary, typed declarations (<code>float x = …</code>, <code>array&lt;float&gt; a = …</code>). In v6 the end of a <code>for</code> loop is re-evaluated each time round, as in TradingView.</p>
+          <p><strong>Arrays:</strong> array.new_float/int/bool/string/color, array.new&lt;float&gt;(), array.from, push, pop, shift, unshift, get, set, insert, remove, clear, size, first, last, includes, indexof, sum, avg, min, max, median, stdev, variance, range, sort, reverse, copy, slice, concat, fill, join; method style works too (<code>a.push(x)</code>).</p>
           <p><strong>ta.*</strong> sma, ema, rma, wma, hma, vwma, rsi, macd, bb, stdev, atr, tr, stoch, cci, mfi, wpr, dmi, supertrend, highest, lowest, sum, cum, change, mom, roc, crossover, crossunder, cross, barssince, valuewhen, pivothigh, pivotlow, vwap, obv</p>
           <p><strong>Other:</strong> math.*, nz, na, fixnan, color.new/rgb, input.int/float/bool/string/source.</p>
           <p><strong>Output:</strong> plot (line, histogram, step, circles), hline, fill, plotshape, plotchar.</p>
-          <p className="muted">Not supported: strategies, request.security, labels/lines/boxes, arrays and maps. Unsupported drawing calls are ignored with a warning.</p>
+          <p className="muted">Not supported yet: strategies, <code>request.security</code> for other timeframes or symbols (the chart's own timeframe works), labels/lines/boxes/tables, <code>bgcolor</code>, maps and matrices, and the v6 <code>method</code> / <code>type</code> / <code>enum</code> / <code>import</code> declarations (these give a clear error). Unsupported drawing calls are ignored with a warning. v6 is stricter than this app about booleans, so a script that runs here may still need a fix to run on TradingView.</p>
         </div>
       )}
     </div>

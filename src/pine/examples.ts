@@ -6,7 +6,7 @@ export interface PineExample {
 export const PINE_EXAMPLES: PineExample[] = [
   {
     name: 'EMA Cloud (8/21)',
-    source: `//@version=5
+    source: `//@version=6
 indicator("EMA Cloud", overlay=true)
 fastLen = input.int(8, "Fast EMA")
 slowLen = input.int(21, "Slow EMA")
@@ -21,7 +21,7 @@ fill(p1, p2, color = fast > slow ? color.new(color.green, 80) : color.new(color.
   },
   {
     name: 'RSI with levels',
-    source: `//@version=5
+    source: `//@version=6
 indicator("RSI", overlay=false)
 len = input.int(14, "Length", minval=1)
 src = input.source(close, "Source")
@@ -35,7 +35,7 @@ hline(50, "Mid", color=color.gray)
   },
   {
     name: 'MACD',
-    source: `//@version=5
+    source: `//@version=6
 indicator("MACD", overlay=false)
 fastLen = input.int(12, "Fast")
 slowLen = input.int(26, "Slow")
@@ -50,7 +50,7 @@ plot(signalLine, "Signal", color=color.orange)
   },
   {
     name: 'Bollinger Bands (filled)',
-    source: `//@version=5
+    source: `//@version=6
 indicator("Bollinger Bands", overlay=true)
 len = input.int(20, "Length")
 mult = input.float(2.0, "StdDev", step=0.5)
@@ -65,7 +65,7 @@ fill(u, l, color=color.new(color.blue, 90))
   },
   {
     name: 'Supertrend',
-    source: `//@version=5
+    source: `//@version=6
 indicator("Supertrend", overlay=true)
 factor = input.float(3.0, "Factor", step=0.5)
 atrLen = input.int(10, "ATR Length")
@@ -77,7 +77,7 @@ plot(st, "Supertrend", color = dir < 0 ? color.green : color.red, linewidth=2)
   },
   {
     name: 'EMA cross signals',
-    source: `//@version=5
+    source: `//@version=6
 indicator("EMA Cross Signals", overlay=true)
 fastLen = input.int(9, "Fast")
 slowLen = input.int(21, "Slow")
@@ -92,6 +92,30 @@ buy = ta.crossover(fast, slow)
 sell = ta.crossunder(fast, slow)
 plotshape(buy, "Buy", style=shape.triangleup, location=location.belowbar, color=color.green, text="Buy")
 plotshape(sell, "Sell", style=shape.triangledown, location=location.abovebar, color=color.red, text="Sell")
+`,
+  },
+  {
+    name: 'Moving average selector (v6)',
+    source: `//@version=6
+indicator("MA selector", overlay=true)
+kind = input.string("EMA", "Type", options=["EMA", "SMA", "WMA", "HMA"])
+len = input.int(21, "Length", minval=2)
+src = input.source(close, "Source")
+
+ma = switch kind
+    "EMA" => ta.ema(src, len)
+    "SMA" => ta.sma(src, len)
+    "WMA" => ta.wma(src, len)
+    => ta.hma(src, len)
+
+// the last 10 values of the average, kept in an array, give a simple slope
+var recent = array.new_float(0)
+recent.push(ma)
+if recent.size() > 10
+    recent.shift()
+slope = recent.size() > 1 ? recent.last() - recent.first() : 0.0
+
+plot(ma, "MA", color = slope >= 0 ? color.teal : color.red, linewidth = 2)
 `,
   },
 ];
