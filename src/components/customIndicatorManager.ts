@@ -13,6 +13,7 @@ import {
 import { ChartData, CustomIndicator, CustomIndicatorStatus } from '../types';
 import { PineError, PineMarker, PineResult, runPine } from '../pine';
 import { CloudData, CloudSeries } from '../plugins/cloudSeries';
+import { PineDrawingsPrimitive, Drawings } from '../plugins/pineDrawings';
 
 type SeriesSpec =
   | { kind: 'line'; options: Record<string, unknown>; data: any[] }
@@ -24,6 +25,7 @@ interface Spec {
   series: SeriesSpec[];
   hlines: { price: number; color: string; title: string }[];
   markers: PineMarker[];
+  drawings?: Drawings;
 }
 
 interface Entry {
@@ -43,8 +45,11 @@ export class CustomIndicatorManager {
   private entries = new Map<string, Entry>();
   private candleMarkers: ISeriesMarkersPluginApi<Time>;
 
+  private drawings = new PineDrawingsPrimitive();
+
   constructor(private chart: IChartApi, candles: ISeriesApi<'Candlestick'>) {
     this.candleMarkers = createSeriesMarkers(candles, []);
+    candles.attachPrimitive(this.drawings);
   }
 
   sync(indicators: CustomIndicator[], data: ChartData[]): Record<string, CustomIndicatorStatus> {
@@ -54,6 +59,7 @@ export class CustomIndicatorManager {
     [...this.entries.keys()].forEach((id) => { if (!wanted.has(id)) this.destroy(id); });
 
     const candleMarkers: PineMarker[] = [];
+    const drawn: Drawings = { lines: [], boxes: [], labels: [], bg: [] };
 
     for (const ind of indicators) {
       if (!ind.enabled) {
@@ -95,6 +101,13 @@ export class CustomIndicatorManager {
         });
       }
 
+      if (spec.overlay && spec.drawings) {
+        drawn.lines.push(...spec.drawings.lines);
+        drawn.boxes.push(...spec.drawings.boxes);
+        drawn.labels.push(...spec.drawings.labels);
+        spec.drawings.bg?.forEach((c, i) => { if (c) drawn.bg![i] = c; });
+      }
+
       // markers (plotshape / plotchar)
       if (spec.overlay) {
         candleMarkers.push(...spec.markers);
@@ -105,6 +118,7 @@ export class CustomIndicatorManager {
     }
 
     this.candleMarkers.setMarkers(this.toMarkers(candleMarkers));
+    this.drawings.set(drawn, data);
     this.pruneEmptyPanes();
     return statuses;
   }
@@ -243,6 +257,6 @@ export class CustomIndicatorManager {
       }
     });
 
-    return { overlay: result.overlay, series, hlines: result.hlines, markers: result.markers };
+    return { overlay: result.overlay, series, hlines: result.hlines, markers: result.markers, drawings: { lines: result.lines, boxes: result.boxes, labels: result.labels, bg: result.bg } };
   }
 }

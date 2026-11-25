@@ -48,6 +48,11 @@ export interface PineInput {
   options?: string[];
 }
 
+/** Lines, boxes and labels a script drew (line.new, box.new, label.new): their final state after the last bar */
+export interface PineLine { x1: number; y1: number; x2: number; y2: number; timeX: boolean; color?: string; style?: string; width: number; extend?: string }
+export interface PineBox { left: number; top: number; right: number; bottom: number; timeX: boolean; border?: string; borderWidth: number; borderStyle?: string; bg?: string; text?: string; textColor?: string }
+export interface PineLabel { x: number; y: number; timeX: boolean; yloc?: string; text: string; color?: string; textColor?: string; style?: string; size?: string }
+
 /** An on-chart table (table.new / table.cell): its final state after the last bar */
 export interface PineTable {
   id: number;
@@ -79,6 +84,11 @@ export interface PineResult {
   inputs: PineInput[];
   warnings: string[];
   tables: PineTable[];
+  lines: PineLine[];
+  boxes: PineBox[];
+  labels: PineLabel[];
+  /** bgcolor(): the background colour of each candle (undefined where none) */
+  bg: (string | undefined)[];
   /** The Pine version from //@version=N (5 when the script does not say) */
   version: number;
 }
@@ -104,7 +114,7 @@ const NAMESPACES_AS_STRING = new Set([
 ]);
 
 const IGNORED = new Set([
-  'bgcolor', 'barcolor', 'alertcondition', 'alert', 'plotcandle', 'plotbar', 'plotarrow',
+  'barcolor', 'alertcondition', 'alert', 'plotcandle', 'plotbar', 'plotarrow',
   'label.new', 'label.set_text', 'label.set_xy', 'label.delete', 'line.new', 'line.set_xy1',
   'line.set_xy2', 'line.delete', 'box.new', 'box.delete', 'table.new', 'table.cell', 'log.info',
   'log.warning', 'log.error', 'runtime.error', 'max_bars_back', 'timeframe.change',
@@ -186,6 +196,8 @@ class Interp {
   declSrc = new Map<string, Stmt>();
   secCache = new Map<string, { vals: Val[]; map: number[]; last: boolean[] }>();
   isSub = false;
+  drawings = new Map<number, { kind: 'line' | 'box' | 'label'; d: any }>();
+  nextDraw = 1;
   tableList = new Map<number, PineTable & { deleted?: boolean }>();
   nextTable = 1;
   stack: Frame[] = [];
@@ -196,7 +208,7 @@ class Interp {
 
   result: PineResult = {
     title: 'Custom Indicator', overlay: false, plots: [], hlines: [], fills: [],
-    markers: [], inputs: [], warnings: [], tables: [], version: 5,
+    markers: [], inputs: [], warnings: [], tables: [], lines: [], boxes: [], labels: [], bg: [], version: 5,
   };
   plotById = new Map<number, PinePlot>();
   hlineById = new Map<number, number>();
@@ -204,7 +216,7 @@ class Interp {
   warned = new Set<string>();
   userInputs: Record<string, number | boolean | string>;
 
-  constructor(private bars: PineBar[], userInputs: Record<string, number | boolean | string>) {
+  constructor(public bars: PineBar[], userInputs: Record<string, number | boolean | string>) {
     this.userInputs = userInputs;
     this.stack = [this.global];
     this.persistent.set(this.global, new Set());
@@ -1206,6 +1218,74 @@ def('array.concat', ['id1', 'id2'], (c, a) => { arr(c, a.id1, 'array.concat').pu
 def('array.fill', ['id', 'value', 'index_from', 'index_to'], (c, a) => { arr(c, a.id, 'array.fill').fill(a.value ?? null, a.index_from ?? 0, a.index_to ?? undefined); return null; });
 def('array.join', ['id', 'separator'], (c, a) => arr(c, a.id, 'array.join').map((v: Val) => String(v ?? 'na')).join(a.separator ?? ','));
 
+def('bgcolor', ['color', 'offset', 'editable', 'show_last', 'title', 'display'], (c, a) => {
+  const disp = a.display == null ? '' : String(a.display);
+  if (disp && !disp.includes('pane') && !disp.includes('all')) return null;
+  const j = c.i + (isNum(a.offset) ? a.offset : 0);
+  if (j >= 0 && j < c.bars.length) c.result.bg[j] = typeof a.color === 'string' ? a.color : undefined;
+  return null;
+});
+
+// ---- lines, boxes and labels ----
+const MAX_DRAWINGS = 4000;
+const drawOf = (c: Interp, h: Val, kind: 'line' | 'box' | 'label', _fn: string) => {
+  const o = h && typeof h === 'object' && typeof h.__draw === 'number' ? c.drawings.get(h.__draw) : undefined;
+  if (!o || o.kind !== kind) return null;
+  return o.d;
+};
+const addDraw = (c: Interp, kind: 'line' | 'box' | 'label', d: any) => {
+  const id = c.nextDraw++;
+  c.drawings.set(id, { kind, d });
+  // keep memory bounded for scripts that create one per bar and never delete
+  if (c.drawings.size > MAX_DRAWINGS) c.drawings.delete(c.drawings.keys().next().value as number);
+  return { __draw: id };
+};
+const del = (c: Interp, h: Val) => { if (h && typeof h === 'object' && typeof h.__draw === 'number') c.drawings.delete(h.__draw); return null; };
+const str = (v: Val) => (typeof v === 'string' ? v : undefined);
+const xv = (v: Val) => (isNum(v) ? v : null);
+
+def('line.new', ['x1', 'y1', 'x2', 'y2', 'xloc', 'extend', 'color', 'style', 'width'], (c, a) => {
+  if (!isNum(a.x1) || !isNum(a.y1) || !isNum(a.x2) || !isNum(a.y2)) return { __draw: 0 };
+  return addDraw(c, 'line', { x1: a.x1, y1: a.y1, x2: a.x2, y2: a.y2, timeX: String(a.xloc ?? '').includes('time'), color: str(a.color), style: str(a.style), width: isNum(a.width) ? a.width : 1, extend: str(a.extend) });
+});
+def('line.delete', ['id'], (c, a) => del(c, a.id));
+for (const [fn, props] of [['set_x1', ['x1']], ['set_y1', ['y1']], ['set_x2', ['x2']], ['set_y2', ['y2']], ['set_xy1', ['x1', 'y1']], ['set_xy2', ['x2', 'y2']]] as const) {
+  def(`line.${fn}`, ['id', 'a', 'b'], (c, a) => { const d = drawOf(c, a.id, 'line', fn); if (d) props.forEach((p, k) => { const v = xv(k ? a.b : a.a); if (v !== null) d[p] = v; }); return null; });
+}
+def('line.set_color', ['id', 'color'], (c, a) => { const d = drawOf(c, a.id, 'line', 'set_color'); if (d) d.color = str(a.color); return null; });
+def('line.set_width', ['id', 'width'], (c, a) => { const d = drawOf(c, a.id, 'line', 'set_width'); if (d && isNum(a.width)) d.width = a.width; return null; });
+def('line.set_style', ['id', 'style'], (c, a) => { const d = drawOf(c, a.id, 'line', 'set_style'); if (d) d.style = str(a.style); return null; });
+def('line.set_extend', ['id', 'extend'], (c, a) => { const d = drawOf(c, a.id, 'line', 'set_extend'); if (d) d.extend = str(a.extend); return null; });
+
+def('box.new', ['left', 'top', 'right', 'bottom', 'border_color', 'border_width', 'border_style', 'extend', 'xloc', 'bgcolor', 'text', 'text_size', 'text_color'], (c, a) => {
+  if (!isNum(a.left) || !isNum(a.top) || !isNum(a.right) || !isNum(a.bottom)) return { __draw: 0 };
+  return addDraw(c, 'box', { left: a.left, top: a.top, right: a.right, bottom: a.bottom, timeX: String(a.xloc ?? '').includes('time'), border: str(a.border_color), borderWidth: isNum(a.border_width) ? a.border_width : 1, borderStyle: str(a.border_style), bg: str(a.bgcolor), text: a.text == null ? undefined : String(a.text), textColor: str(a.text_color) });
+});
+def('box.delete', ['id'], (c, a) => del(c, a.id));
+for (const [fn, prop] of [['set_left', 'left'], ['set_right', 'right'], ['set_top', 'top'], ['set_bottom', 'bottom']] as const) {
+  def(`box.${fn}`, ['id', 'value'], (c, a) => { const d = drawOf(c, a.id, 'box', fn); const v = xv(a.value); if (d && v !== null) d[prop] = v; return null; });
+}
+def('box.set_lefttop', ['id', 'left', 'top'], (c, a) => { const d = drawOf(c, a.id, 'box', 'set_lefttop'); if (d && isNum(a.left) && isNum(a.top)) { d.left = a.left; d.top = a.top; } return null; });
+def('box.set_rightbottom', ['id', 'right', 'bottom'], (c, a) => { const d = drawOf(c, a.id, 'box', 'set_rightbottom'); if (d && isNum(a.right) && isNum(a.bottom)) { d.right = a.right; d.bottom = a.bottom; } return null; });
+def('box.set_bgcolor', ['id', 'color'], (c, a) => { const d = drawOf(c, a.id, 'box', 'set_bgcolor'); if (d) d.bg = str(a.color); return null; });
+def('box.set_border_color', ['id', 'color'], (c, a) => { const d = drawOf(c, a.id, 'box', 'set_border_color'); if (d) d.border = str(a.color); return null; });
+
+def('label.new', ['x', 'y', 'text', 'xloc', 'yloc', 'color', 'style', 'textcolor', 'size', 'textalign', 'tooltip'], (c, a) => {
+  if (!isNum(a.x)) return { __draw: 0 };
+  // yloc.abovebar / belowbar place the label by the candle, so y may be missing
+  const y = isNum(a.y) ? a.y : null;
+  return addDraw(c, 'label', { x: a.x, y, timeX: String(a.xloc ?? '').includes('time'), yloc: str(a.yloc), text: a.text == null ? '' : String(a.text), color: str(a.color), textColor: str(a.textcolor), style: str(a.style), size: str(a.size) });
+});
+def('label.delete', ['id'], (c, a) => del(c, a.id));
+def('label.set_text', ['id', 'text'], (c, a) => { const d = drawOf(c, a.id, 'label', 'set_text'); if (d) d.text = a.text == null ? '' : String(a.text); return null; });
+def('label.set_x', ['id', 'x'], (c, a) => { const d = drawOf(c, a.id, 'label', 'set_x'); if (d && isNum(a.x)) d.x = a.x; return null; });
+def('label.set_y', ['id', 'y'], (c, a) => { const d = drawOf(c, a.id, 'label', 'set_y'); if (d && isNum(a.y)) d.y = a.y; return null; });
+def('label.set_xy', ['id', 'x', 'y'], (c, a) => { const d = drawOf(c, a.id, 'label', 'set_xy'); if (d && isNum(a.x) && isNum(a.y)) { d.x = a.x; d.y = a.y; } return null; });
+def('label.set_color', ['id', 'color'], (c, a) => { const d = drawOf(c, a.id, 'label', 'set_color'); if (d) d.color = str(a.color); return null; });
+def('label.set_textcolor', ['id', 'textcolor'], (c, a) => { const d = drawOf(c, a.id, 'label', 'set_textcolor'); if (d) d.textColor = str(a.textcolor); return null; });
+def('label.set_style', ['id', 'style'], (c, a) => { const d = drawOf(c, a.id, 'label', 'set_style'); if (d) d.style = str(a.style); return null; });
+def('label.set_size', ['id', 'size'], (c, a) => { const d = drawOf(c, a.id, 'label', 'set_size'); if (d) d.size = str(a.size); return null; });
+
 // ---- tables ----
 const tableOf = (c: Interp, h: Val, fn: string) => {
   const t = h && typeof h === 'object' && typeof h.__table === 'number' ? c.tableList.get(h.__table) : undefined;
@@ -1308,6 +1388,10 @@ export function runPine(
 
   const r = interp.result;
   // the tables still alive after the last bar (the latest few, in case a script never deletes the ones it recreates)
+  const live = (kind: string) => [...interp.drawings.values()].filter((o) => o.kind === kind).map((o) => o.d).slice(-500);
+  r.lines = live('line');
+  r.boxes = live('box');
+  r.labels = live('label');
   r.tables = [...interp.tableList.values()].filter((t: any) => !t.deleted).slice(-6).map(({ deleted: _d, ...t }: any) => t);
   // offsets can leave holes; normalise plot arrays to bar length
   r.plots.forEach((p) => {
