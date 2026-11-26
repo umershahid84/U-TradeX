@@ -663,6 +663,8 @@ export function withMoomoo(route: RouteFn, client: MoomooQuoteClient, cfg: Moomo
     if (p === 'chart') {
       const code = toMoomooCode(query.symbol ?? '');
       const base = await route(path, query);
+      // scans ask for Yahoo only: a few hundred symbols must not use up Moomoo's limited subscriptions
+      if (query.yahoo === '1') return base;
       if (!code || !KL[query.interval ?? '5m']) return base;
       try {
         const live = await client.candles(code, query.interval ?? '5m', query.prepost === 'true');

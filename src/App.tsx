@@ -17,6 +17,8 @@ import { Toasts } from './components/Toasts';
 import { LateDayChip } from './components/LateDayChip';
 import { Scanner } from './components/Scanner';
 import { Politicians } from './components/Politicians';
+import { AirGaps } from './components/AirGaps';
+import { useAirGapScanner } from './hooks/useAirGapScanner';
 import { BotLab } from './components/BotLab';
 import { useOrbBot } from './hooks/useOrbBot';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -35,6 +37,15 @@ import './App.css';
 import './largeScreen.css';
 
 const marketData = RealMarketDataService.getInstance();
+
+const readWatchlistSymbols = (): string[] => {
+  try {
+    const v = JSON.parse(localStorage.getItem('watchlist') ?? '[]');
+    return Array.isArray(v) ? v.filter((x: unknown): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+};
 
 const fmtMove = (change: number | null, pct: number | null) =>
   change == null || pct == null ? '' : `${change >= 0 ? '+' : '-'}${Math.abs(change).toFixed(2)} (${pct >= 0 ? '+' : '-'}${Math.abs(pct).toFixed(2)}%)`;
@@ -138,7 +149,7 @@ const INTERVAL_NAME: Record<string, string> = {
   '10m': '10-minute', '15m': '15-minute', '30m': '30-minute', '1h': 'hourly', '4h': '4-hour', '1d': 'daily', '1wk': 'weekly', '1mo': 'monthly', '3mo': 'quarterly',
 };
 
-const TAB_IDS: SidebarTab[] = ['watchlist', 'scanner', 'bots', 'trade', 'options', 'sentiment', 'politicians'];
+const TAB_IDS: SidebarTab[] = ['watchlist', 'scanner', 'bots', 'trade', 'options', 'sentiment', 'politicians', 'airgaps'];
 
 const loadTab = (): SidebarTab => {
   const saved = getStorageValue('sidebarTab', 'watchlist');
@@ -687,6 +698,17 @@ function App() {
     });
   };
 
+  // Air gap scanner: keeps running in the background whichever tab is open, and raises alerts
+  const gap = useAirGapScanner({
+    watchlist: readWatchlistSymbols(),
+    onAlert: (a) =>
+      pushToast(
+        a.type === 'entry' ? `↕ Air gap ${a.side === 'long' ? 'long' : 'short'}: ${a.symbol}` : `🎯 Air gap target hit: ${a.symbol}`,
+        a.type === 'entry' ? `Entry $${a.entry.toFixed(2)} → ${a.targetLabel} $${a.target.toFixed(2)} (${a.roomAtr.toFixed(1)} ATR of room)` : `Reached $${a.target.toFixed(2)} (${a.targetLabel})`,
+        a.symbol
+      ),
+  });
+
   const bot = useOrbBot({ equity: account.totalValue, cash: account.balance, positions: account.positions, pushToast, place: placeOrderWithLevels });
 
   const setLevel = (sym: string, kind: 'takeProfit' | 'stopLoss', price?: number) =>
@@ -704,6 +726,21 @@ function App() {
     <>
       {activeTab === 'watchlist' && <Watchlist activeSymbol={symbol} onSelect={(s) => { handleSymbolChange(s); if (isMobile) setMobileView('chart'); }} />}
       {activeTab === 'scanner' && <Scanner activeSymbol={symbol} onSelect={(s) => { handleSymbolChange(s); if (isMobile) setMobileView('chart'); }} />}
+      {activeTab === 'airgaps' && (
+        <AirGaps
+          settings={gap.settings}
+          update={gap.update}
+          ranked={gap.ranked}
+          setupCount={Object.keys(gap.setups).length}
+          progress={gap.progress}
+          dataAsOf={Object.values(gap.setups).reduce((m, s) => Math.max(m, s.asOf), 0)}
+          updatedAt={gap.updatedAt}
+          board={gap.board}
+          clearBoard={gap.clearBoard}
+          activeSymbol={symbol}
+          onSelect={(s) => { handleSymbolChange(s); if (isMobile) setMobileView('chart'); }}
+        />
+      )}
       {activeTab === 'politicians' && <Politicians activeSymbol={symbol} onSelect={(s) => { handleSymbolChange(s); if (isMobile) setMobileView('chart'); }} />}
       {activeTab === 'bots' && <BotLab activeSymbol={symbol} config={bot.config} setConfig={bot.setConfig} status={bot.status} equity={account.totalValue} />}
       {activeTab === 'trade' && (

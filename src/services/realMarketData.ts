@@ -145,13 +145,16 @@ export class RealMarketDataService {
     symbol: string,
     interval: string = '5m',
     range: string = '1d',
-    includePrePost: boolean = false
+    includePrePost: boolean = false,
+    /** Skip Moomoo for this request (scans must not use up its limited subscriptions) */
+    yahooOnly: boolean = false
   ): Promise<ChartData[]> {
     const data = await this.apiGet<{ bars: ChartData[] }>('chart', {
       symbol: this.normalizeSymbol(symbol),
       interval,
       range,
       prepost: String(includePrePost),
+      ...(yahooOnly ? { yahoo: '1' } : {}),
     });
 
     if (!Array.isArray(data.bars) || data.bars.length === 0) {
