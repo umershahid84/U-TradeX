@@ -38,16 +38,65 @@ export const SP_500 = [
   'WMT', 'DIS', 'WBD', 'WM', 'WAT', 'WEC', 'WFC', 'WELL', 'WST', 'WDC', 'WY', 'WMB', 'WTW', 'WYNN', 'XEL', 'XYL', 'YUM', 'ZBRA', 'ZBH', 'ZTS',
 ];
 
-export type UniverseId = 'ndx' | 'sp500' | 'both' | 'watchlist';
+export type UniverseId = 'ndx' | 'sp500' | 'both' | 'russell' | 'watchlist';
 
 export const UNIVERSES: { id: UniverseId; label: string }[] = [
   { id: 'ndx', label: 'Nasdaq 100' },
   { id: 'sp500', label: 'S&P 500' },
-  { id: 'both', label: 'Both' },
+  { id: 'both', label: 'Nasdaq 100 + S&P 500' },
+  { id: 'russell', label: 'Russell 3000 (imported list)' },
   { id: 'watchlist', label: 'Watchlist' },
 ];
 
-export const universeSymbols = (id: UniverseId, watchlist: string[]): string[] => {
-  const list = id === 'ndx' ? NASDAQ_100 : id === 'sp500' ? SP_500 : id === 'both' ? [...NASDAQ_100, ...SP_500] : watchlist;
+const RUSSELL_KEY = 'airGapRussell';
+
+/** The Russell 3000 list the user imported (the app has no free source for it, so it is imported from a file) */
+export const loadRussell = (): string[] => {
+  try {
+    const v = JSON.parse(localStorage.getItem(RUSSELL_KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : [];
+  } catch {
+    return [];
+  }
+};
+
+export const saveRussell = (symbols: string[]) => {
+  try {
+    localStorage.setItem(RUSSELL_KEY, JSON.stringify(symbols));
+  } catch {
+    /* storage unavailable */
+  }
+};
+
+/**
+ * Tickers from pasted text or a file: an iShares / Vanguard style holdings CSV (the Ticker column, equities only when
+ * there is an asset class column) or any list separated by spaces, commas or lines.
+ */
+export const parseSymbolList = (text: string): string[] => {
+  const clean = (s: string) => s.trim().replace(/^"|"$/g, '').toUpperCase().replace(/\./g, '-');
+  const ok = (s: string) => /^[A-Z][A-Z0-9]{0,5}(-[A-Z])?$/.test(s);
+  const lines = text.split(/\r?\n/);
+  // a CSV with a header row naming a ticker column
+  const split = (l: string) => l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+  const hi = lines.findIndex((l) => /(^|,)\s*"?(ticker|symbol)"?\s*(,|$)/i.test(l));
+  if (hi >= 0) {
+    const head = split(lines[hi]).map((c) => c.trim().replace(/^"|"$/g, '').toLowerCase());
+    const ti = head.findIndex((c) => c === 'ticker' || c === 'symbol');
+    const ai = head.findIndex((c) => c === 'asset class');
+    const out: string[] = [];
+    for (const l of lines.slice(hi + 1)) {
+      const cells = split(l);
+      if (cells.length <= ti) continue;
+      if (ai >= 0 && !/equity/i.test(cells[ai] ?? '')) continue;
+      const t = clean(cells[ti] ?? '');
+      if (ok(t)) out.push(t);
+    }
+    if (out.length) return [...new Set(out)];
+  }
+  return [...new Set(text.split(/[\s,;]+/).map(clean).filter(ok))];
+};
+
+export const universeSymbols = (id: UniverseId, watchlist: string[], russell: string[] = []): string[] => {
+  const list = id === 'ndx' ? NASDAQ_100 : id === 'sp500' ? SP_500 : id === 'both' ? [...NASDAQ_100, ...SP_500] : id === 'russell' ? russell : watchlist;
   return [...new Set(list.map((s) => s.toUpperCase()))];
 };

@@ -38,3 +38,10 @@
 .ag-clear { align-self: flex-start; background: none; border: none; color: #8a8fb5; font-size: 11px; cursor: pointer; text-decoration: underline; }
 .ag-note { margin-top: 10px; font-size: 10.5px; color: #6a6e90; line-height: 1.4; }
 @media (max-width: 900px) { .ag-controls select, .ag-controls input[type=number] { font-size: 16px; } }
+
+.ag-import { margin-bottom: 8px; padding: 8px 10px; background: #1a1e3f; border: 1px dashed #3a3e6f; border-radius: 6px; font-size: 11px; color: #8a8fb5; display: flex; flex-direction: column; gap: 6px; }
+.ag-import b { color: #e0e0e0; } .ag-import p { margin: 0; line-height: 1.4; } .ag-import a { color: #7aa2ff; }
+.ag-import textarea { background: #141938; border: 1px solid #2a2e4f; border-radius: 4px; color: #e0e0e0; padding: 5px 7px; font-size: 11px; resize: vertical; }
+.ag-import button { align-self: flex-start; padding: 4px 10px; background: #2962ff; border: none; border-radius: 4px; color: #fff; font-size: 11px; cursor: pointer; }
+.ag-import input[type=file] { font-size: 11px; color: #c0c4e0; }
+@media (max-width: 900px) { .ag-import textarea { font-size: 16px; } }

@@ -737,6 +737,8 @@ function App() {
           updatedAt={gap.updatedAt}
           board={gap.board}
           clearBoard={gap.clearBoard}
+          russell={gap.russell}
+          setRussell={gap.setRussell}
           activeSymbol={symbol}
           onSelect={(s) => { handleSymbolChange(s); if (isMobile) setMobileView('chart'); }}
         />

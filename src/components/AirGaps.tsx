@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { AirGapSetup } from '../utils/airGap';
-import { UNIVERSES } from '../utils/universes';
+import { UNIVERSES, parseSymbolList } from '../utils/universes';
 import { GapAlert, GapSettings } from '../hooks/useAirGapScanner';
 import { playAlert, enableSound } from '../utils/alertSound';
 import './AirGaps.css';
@@ -16,6 +16,8 @@ interface Props {
   updatedAt: number;
   board: GapAlert[];
   clearBoard: () => void;
+  russell: string[];
+  setRussell: (symbols: string[]) => void;
   activeSymbol: string;
   onSelect: (symbol: string) => void;
 }
@@ -57,8 +59,20 @@ const Row: React.FC<{ s: AirGapSetup; rank?: number; active: boolean; onSelect: 
  * Air Gap scanner: symbols whose price sits in front of a stretch of empty space before the next EMA cloud, ranked by room
  * to the target and the day's range left. Alerts (with sound) for new entries and target hits are kept in a board for the day.
  */
-export const AirGaps: React.FC<Props> = ({ settings, update, ranked, setupCount, progress, dataAsOf, updatedAt, board, clearBoard, activeSymbol, onSelect }) => {
+export const AirGaps: React.FC<Props> = ({ settings, update, ranked, setupCount, progress, dataAsOf, updatedAt, board, clearBoard, russell, setRussell, activeSymbol, onSelect }) => {
   const [view, setView] = useState<View>('top10');
+  const [paste, setPaste] = useState('');
+  const [importMsg, setImportMsg] = useState('');
+  const importText = (text: string) => {
+    const list = parseSymbolList(text);
+    if (list.length < 10) {
+      setImportMsg('Found fewer than 10 tickers: choose the holdings CSV or paste a list of tickers.');
+      return;
+    }
+    setRussell(list);
+    setPaste('');
+    setImportMsg(`Imported ${list.length} tickers.`);
+  };
   const shown = useMemo(() => (view === 'top3' ? ranked.slice(0, 3) : view === 'top10' ? ranked.slice(0, 10) : ranked.slice(0, 80)), [ranked, view]);
   const scanning = settings.running && progress.total > 0 && progress.done < progress.total;
 
@@ -92,6 +106,24 @@ export const AirGaps: React.FC<Props> = ({ settings, update, ranked, setupCount,
           🔔 Sound
         </label>
       </div>
+
+      {settings.universe === 'russell' && (
+        <div className="ag-import">
+          <div>
+            <b>{russell.length ? `${russell.length} tickers imported` : 'No list yet'}</b>
+            {russell.length > 0 && <span> · about {Math.max(1, Math.round(russell.length / 800))}–{Math.max(2, Math.round(russell.length / 500))} min per full pass</span>}
+          </div>
+          <p>
+            The app has no free source for the Russell 3000, so you import it: on the{' '}
+            <a href="https://www.ishares.com/us/products/239714/ishares-russell-3000-etf" target="_blank" rel="noreferrer">iShares IWV page</a>{' '}
+            use <em>Detailed Holdings and Analytics → Download</em>, then choose the file here (or paste tickers).
+          </p>
+          <input type="file" accept=".csv,.txt,text/csv,text/plain" aria-label="Choose a holdings file" onChange={(e) => { const f = e.target.files?.[0]; if (f) void f.text().then(importText); e.target.value = ''; }} />
+          <textarea value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="…or paste tickers separated by spaces, commas or lines" rows={2} />
+          {paste.trim() && <button type="button" onClick={() => importText(paste)}>Import pasted list</button>}
+          {importMsg && <small>{importMsg}</small>}
+        </div>
+      )}
 
       {settings.running && (
         <div className="ag-progress">

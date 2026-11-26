@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RealMarketDataService } from '../services/realMarketData';
 import { AirGapSetup, dailyRange, findAirGap } from '../utils/airGap';
-import { UniverseId, universeSymbols } from '../utils/universes';
+import { UniverseId, loadRussell, saveRussell, universeSymbols } from '../utils/universes';
 import { enableSound, playAlert } from '../utils/alertSound';
 import { etClock } from '../utils/lateDay';
 
@@ -70,6 +70,13 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
   const [progress, setProgress] = useState({ done: 0, total: 0, failed: 0 });
   const [updatedAt, setUpdatedAt] = useState(0);
   const [board, setBoard] = useState<GapAlert[]>(loadBoard);
+  const [russell, setRussellState] = useState<string[]>(loadRussell);
+  const russellRef = useRef(russell);
+  russellRef.current = russell;
+  const setRussell = useCallback((symbols: string[]) => {
+    saveRussell(symbols);
+    setRussellState(symbols);
+  }, []);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const onAlertRef = useRef(onAlert);
@@ -118,6 +125,8 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
     const bars = await market.fetchChartData(symbol, interval, interval === '5m' ? '5d' : '1mo', false, true);
     const day = etClock(Date.now()).date;
     let d = daily.current.get(symbol);
+    // most symbols have no air gap at all: the day's usual range is only fetched for the ones that do
+    if ((!d || d.day !== day) && !findAirGap(symbol, bars, null)) return null;
     if (!d || d.day !== day) {
       let value: number | null = null;
       try {
@@ -145,7 +154,7 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
     [raise]
   );
 
-  const symbolsOf = useCallback(() => universeSymbols(settingsRef.current.universe, watchRef.current), []);
+  const symbolsOf = useCallback(() => universeSymbols(settingsRef.current.universe, watchRef.current, russellRef.current), []);
 
   // the scan loop
   useEffect(() => {
@@ -190,11 +199,14 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
       live.current = {};
       setSetups({});
       let lastFull = 0;
+      let fullEvery = FULL_EVERY_MS;
       while (!cancelled) {
         const now = Date.now();
-        if (now - lastFull >= FULL_EVERY_MS || lastFull === 0) {
+        if (now - lastFull >= fullEvery || lastFull === 0) {
           lastFull = now;
           await pass(symbolsOf(), true);
+          // a long list (the Russell 3000) takes minutes: leave at least as long again before the next full pass
+          fullEvery = Math.max(FULL_EVERY_MS, (Date.now() - now) * 1.5);
         } else {
           // the best candidates and anything already in play
           const hot = Object.values(live.current)
@@ -210,7 +222,7 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
       cancelled = true;
     };
     // a change of list or candle size starts a fresh scan
-  }, [settings.running, settings.universe, settings.interval, scanSymbol, handle, symbolsOf]);
+  }, [settings.running, settings.universe, settings.interval, russell.length, scanSymbol, handle, symbolsOf]);
 
   const clearBoard = useCallback(() => {
     setBoard([]);
@@ -231,5 +243,5 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
     [setups, settings.minRoomAtr]
   );
 
-  return { settings, update, setups, ranked, progress, updatedAt, board, clearBoard };
+  return { settings, update, setups, ranked, progress, updatedAt, board, clearBoard, russell, setRussell };
 }
