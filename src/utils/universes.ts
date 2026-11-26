@@ -44,7 +44,7 @@ export const UNIVERSES: { id: UniverseId; label: string }[] = [
   { id: 'ndx', label: 'Nasdaq 100' },
   { id: 'sp500', label: 'S&P 500' },
   { id: 'both', label: 'Nasdaq 100 + S&P 500' },
-  { id: 'russell', label: 'Russell 3000 (imported list)' },
+  { id: 'russell', label: 'Russell 3000' },
   { id: 'watchlist', label: 'Watchlist' },
 ];
 
@@ -96,7 +96,12 @@ export const parseSymbolList = (text: string): string[] => {
   return [...new Set(text.split(/[\s,;]+/).map(clean).filter(ok))];
 };
 
-export const universeSymbols = (id: UniverseId, watchlist: string[], russell: string[] = []): string[] => {
-  const list = id === 'ndx' ? NASDAQ_100 : id === 'sp500' ? SP_500 : id === 'both' ? [...NASDAQ_100, ...SP_500] : id === 'russell' ? russell : watchlist;
+/** Lists fetched from Moomoo (by name) win over the built-in ones */
+export type MoomooLists = Partial<Record<'ndx' | 'sp500' | 'russell3000', string[]>>;
+
+export const universeSymbols = (id: UniverseId, watchlist: string[], russell: string[] = [], moomoo: MoomooLists = {}): string[] => {
+  const ndx = moomoo.ndx ?? NASDAQ_100;
+  const sp = moomoo.sp500 ?? SP_500;
+  const list = id === 'ndx' ? ndx : id === 'sp500' ? sp : id === 'both' ? [...ndx, ...sp] : id === 'russell' ? moomoo.russell3000 ?? russell : watchlist;
   return [...new Set(list.map((s) => s.toUpperCase()))];
 };

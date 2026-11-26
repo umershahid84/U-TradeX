@@ -16,6 +16,7 @@ interface Props {
   updatedAt: number;
   board: GapAlert[];
   clearBoard: () => void;
+  listInfo: Record<string, { source: 'moomoo' | 'fallback'; count: number; note?: string }>;
   russell: string[];
   setRussell: (symbols: string[]) => void;
   activeSymbol: string;
@@ -59,7 +60,7 @@ const Row: React.FC<{ s: AirGapSetup; rank?: number; active: boolean; onSelect: 
  * Air Gap scanner: symbols whose price sits in front of a stretch of empty space before the next EMA cloud, ranked by room
  * to the target and the day's range left. Alerts (with sound) for new entries and target hits are kept in a board for the day.
  */
-export const AirGaps: React.FC<Props> = ({ settings, update, ranked, setupCount, progress, dataAsOf, updatedAt, board, clearBoard, russell, setRussell, activeSymbol, onSelect }) => {
+export const AirGaps: React.FC<Props> = ({ settings, update, ranked, setupCount, progress, dataAsOf, updatedAt, board, clearBoard, listInfo, russell, setRussell, activeSymbol, onSelect }) => {
   const [view, setView] = useState<View>('top10');
   const [paste, setPaste] = useState('');
   const [importMsg, setImportMsg] = useState('');
@@ -107,14 +108,25 @@ export const AirGaps: React.FC<Props> = ({ settings, update, ranked, setupCount,
         </label>
       </div>
 
-      {settings.universe === 'russell' && (
+      {(() => {
+        const name = settings.universe === 'ndx' ? 'ndx' : settings.universe === 'sp500' ? 'sp500' : settings.universe === 'russell' ? 'russell3000' : settings.universe === 'both' ? 'sp500' : '';
+        const info = name ? listInfo[name] : undefined;
+        if (!info) return null;
+        return (
+          <div className={`ag-source ${info.source}`}>
+            {info.source === 'moomoo' ? `✓ List from Moomoo: ${info.count} symbols${info.note ? ` (${info.note})` : ''}` : `List: ${settings.universe === 'russell' ? 'imported' : 'built-in, approximate'} (${info.count} symbols). Moomoo gave none${info.note ? `: ${info.note}` : ''}`}
+          </div>
+        );
+      })()}
+
+      {settings.universe === 'russell' && listInfo.russell3000?.source !== 'moomoo' && (
         <div className="ag-import">
           <div>
             <b>{russell.length ? `${russell.length} tickers imported` : 'No list yet'}</b>
             {russell.length > 0 && <span> · about {Math.max(1, Math.round(russell.length / 800))}–{Math.max(2, Math.round(russell.length / 500))} min per full pass</span>}
           </div>
           <p>
-            The app has no free source for the Russell 3000, so you import it: on the{' '}
+            Moomoo did not supply the Russell 3000 list, so import it: on the{' '}
             <a href="https://www.ishares.com/us/products/239714/ishares-russell-3000-etf" target="_blank" rel="noreferrer">iShares IWV page</a>{' '}
             use <em>Detailed Holdings and Analytics → Download</em>, then choose the file here (or paste tickers).
           </p>

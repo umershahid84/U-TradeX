@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RealMarketDataService } from '../services/realMarketData';
 import { AirGapSetup, dailyRange, findAirGap } from '../utils/airGap';
-import { UniverseId, loadRussell, saveRussell, universeSymbols } from '../utils/universes';
+import { MoomooLists, UniverseId, loadRussell, saveRussell, universeSymbols } from '../utils/universes';
 import { enableSound, playAlert } from '../utils/alertSound';
 import { etClock } from '../utils/lateDay';
 
@@ -71,6 +71,9 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
   const [updatedAt, setUpdatedAt] = useState(0);
   const [board, setBoard] = useState<GapAlert[]>(loadBoard);
   const [russell, setRussellState] = useState<string[]>(loadRussell);
+  // index lists as Moomoo classifies them (when the app runs locally with Moomoo); the built-in ones are the fallback
+  const [listInfo, setListInfo] = useState<Record<string, { source: 'moomoo' | 'fallback'; count: number; note?: string }>>({});
+  const moomooLists = useRef<MoomooLists>({});
   const russellRef = useRef(russell);
   russellRef.current = russell;
   const setRussell = useCallback((symbols: string[]) => {
@@ -154,7 +157,25 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
     [raise]
   );
 
-  const symbolsOf = useCallback(() => universeSymbols(settingsRef.current.universe, watchRef.current, russellRef.current), []);
+  const symbolsOf = useCallback(() => universeSymbols(settingsRef.current.universe, watchRef.current, russellRef.current, moomooLists.current), []);
+
+  /** Ask Moomoo for the lists the chosen universe needs (once per session each) */
+  const loadLists = useCallback(async () => {
+    const u = settingsRef.current.universe;
+    const need: ('ndx' | 'sp500' | 'russell3000')[] = u === 'ndx' ? ['ndx'] : u === 'sp500' ? ['sp500'] : u === 'both' ? ['ndx', 'sp500'] : u === 'russell' ? ['russell3000'] : [];
+    for (const name of need) {
+      if (moomooLists.current[name]) continue;
+      try {
+        const r = await RealMarketDataService.getInstance().getUniverse(name);
+        moomooLists.current[name] = r.symbols;
+        setListInfo((i) => ({ ...i, [name]: { source: 'moomoo', count: r.symbols.length, note: r.plate } }));
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        const fallback = name === 'russell3000' ? russellRef.current.length : name === 'ndx' ? universeSymbols('ndx', []).length : universeSymbols('sp500', []).length;
+        setListInfo((i) => ({ ...i, [name]: { source: 'fallback', count: fallback, note: /Unknown endpoint|unreachable|not running/i.test(msg) ? 'Moomoo is not connected here' : msg } }));
+      }
+    }
+  }, []);
 
   // the scan loop
   useEffect(() => {
@@ -196,6 +217,8 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
     };
 
     (async () => {
+      await loadLists();
+      if (cancelled) return;
       live.current = {};
       setSetups({});
       let lastFull = 0;
@@ -222,7 +245,7 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
       cancelled = true;
     };
     // a change of list or candle size starts a fresh scan
-  }, [settings.running, settings.universe, settings.interval, russell.length, scanSymbol, handle, symbolsOf]);
+  }, [settings.running, settings.universe, settings.interval, russell.length, scanSymbol, handle, symbolsOf, loadLists]);
 
   const clearBoard = useCallback(() => {
     setBoard([]);
@@ -243,5 +266,5 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
     [setups, settings.minRoomAtr]
   );
 
-  return { settings, update, setups, ranked, progress, updatedAt, board, clearBoard, russell, setRussell };
+  return { settings, update, setups, ranked, progress, updatedAt, board, clearBoard, russell, setRussell, listInfo };
 }

@@ -218,6 +218,11 @@ export class RealMarketDataService {
     return data.chains ?? [];
   }
 
+  /** Constituents of an index as Moomoo classifies them ("sp500", "ndx", "russell3000"); throws without Moomoo or when it has no such list */
+  async getUniverse(name: string): Promise<{ symbols: string[]; plate: string }> {
+    return this.apiGet('universe', { name }, 30000);
+  }
+
   /** Gap / movers scan over the built-in list plus `extra` symbols (your watchlist) */
   async getScan(extra: string[]): Promise<{ rows: ScanRow[]; universe: number; source: 'moomoo' | 'yahoo' }> {
     return this.apiGet('scan', { symbols: extra.join(',') }, 25000);

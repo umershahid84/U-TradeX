@@ -341,6 +341,75 @@ export class MoomooQuoteClient {
   private chainStatic = new Map<string, { at: number; rows: OptionRow[] }>();
   private chainLive = new Map<string, { at: number; value: Promise<any> }>();
 
+  // ---- index and sector lists ----
+  private universeCache = new Map<string, { at: number; value: { symbols: string[]; plate: string } }>();
+
+  /** The stocks of one plate or index by its code (e.g. ".SPX"), as plain tickers */
+  private async plateTickers(t: QuoteTransport, code: string): Promise<string[]> {
+    const res = await t.GetPlateSecurity({ c2s: { plate: { market: US_MARKET, code } } });
+    const out: string[] = [];
+    for (const it of res?.s2c?.staticInfoList ?? []) {
+      const c = String(it?.basic?.security?.code ?? '').toUpperCase();
+      // plain tickers only (no options, warrants or index codes); BRK.B becomes BRK-B like the rest of the app
+      if (/^[A-Z]{1,5}(\.[A-Z])?$/.test(c)) out.push(c.replace('.', '-'));
+    }
+    return [...new Set(out)];
+  }
+
+  /**
+   * Constituents of an index as Moomoo classifies it ("sp500", "ndx", "russell3000"): first by the index's own code, then by
+   * looking for a plate with a matching name among the US plates. Cached for 12 hours.
+   */
+  async universe(name: string): Promise<{ symbols: string[]; plate: string }> {
+    const hit = this.universeCache.get(name);
+    if (hit && Date.now() - hit.at < 12 * 3600_000) return hit.value;
+    const spec: Record<string, { codes: string[]; names: RegExp; min: number }> = {
+      sp500: { codes: ['.SPX'], names: /s&p\s*500|sp\s*500|标普\s*500/i, min: 400 },
+      ndx: { codes: ['.NDX'], names: /nasdaq[\s-]*100|纳斯达克\s*100|纳指\s*100/i, min: 80 },
+      russell3000: { codes: ['.RUA'], names: /russell\s*3000|罗素\s*3000/i, min: 1500 },
+    };
+    const s = spec[name];
+    if (!s) throw new Error(`Unknown list ${name}`);
+    const t = await this.ensure();
+    const tried: string[] = [];
+    for (const code of s.codes) {
+      try {
+        const list = await this.plateTickers(t, code);
+        tried.push(`${code}: ${list.length}`);
+        if (list.length >= s.min) return this.remember(name, list, code);
+      } catch (e) {
+        tried.push(`${code}: ${errText(e)}`);
+      }
+    }
+    // not an index OpenD serves directly: look for a plate by name
+    const plates: { code: string; name: string }[] = [];
+    for (const type of [4, 3, 0]) {
+      try {
+        const res = await t.GetPlateSet({ c2s: { market: US_MARKET, plateSetType: type } });
+        for (const p of res?.s2c?.plateInfoList ?? []) if (!plates.some((x) => x.code === String(p.plate?.code))) plates.push({ code: String(p.plate?.code), name: String(p.name) });
+      } catch (e) {
+        tried.push(`plates(${type}): ${errText(e)}`);
+      }
+    }
+    for (const p of plates.filter((x) => s.names.test(x.name))) {
+      try {
+        const list = await this.plateTickers(t, p.code);
+        tried.push(`${p.name}: ${list.length}`);
+        if (list.length >= s.min) return this.remember(name, list, `${p.name} (${p.code})`);
+      } catch (e) {
+        tried.push(`${p.name}: ${errText(e)}`);
+      }
+    }
+    const near = plates.filter((x) => /index|constituent|500|100|russell|nasdaq|成分/i.test(x.name)).slice(0, 12).map((x) => x.name);
+    throw new Error(`Moomoo has no list for ${name} (${tried.join('; ') || 'nothing found'})${near.length ? `. Similar plates: ${near.join(', ')}` : ''}`);
+  }
+
+  private remember(name: string, symbols: string[], plate: string) {
+    const value = { symbols, plate };
+    this.universeCache.set(name, { at: Date.now(), value });
+    return value;
+  }
+
   /** Expiry dates (YYYY-MM-DD) with listed options for an underlying */
   async optionExpirations(code: string): Promise<string[]> {
     const t = await this.ensure();
@@ -519,6 +588,15 @@ export function withMoomoo(route: RouteFn, client: MoomooQuoteClient, cfg: Moomo
         status: 200,
         body: { enabled: true, protocol: cfg.protocol ?? 'tcp', host: cfg.host, port: cfg.port, moomooOnly: only, connected: client.connected, subscriptions: client.subscriptionCount, lastError: client.lastError || null, note: client.note || null, readOnly: true },
       };
+    }
+
+    if (p === 'universe') {
+      try {
+        const u = await client.universe(String(query.name ?? ''));
+        return { status: 200, body: { name: query.name, symbols: u.symbols, plate: u.plate, source: 'moomoo' }, cacheSeconds: 600 };
+      } catch (e) {
+        return { status: 404, body: { error: errText(e) } };
+      }
     }
 
     if (p === 'quote') {

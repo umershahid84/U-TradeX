@@ -24,6 +24,8 @@ export const CMD = {
   GET_SNAPSHOT: 3203,
   GET_OPTION_CHAIN: 3209,
   GET_OPTION_EXPIRATION: 3224,
+  GET_PLATE_SET: 3204,
+  GET_PLATE_SECURITY: 3205,
 } as const;
 
 // Pushes OpenD sends us after a subscription (we never send these ids): a new quote, a new order book
@@ -46,6 +48,9 @@ export interface QuoteTransport {
   GetSecuritySnapshot(req: unknown): Promise<any>;
   GetOptionChain(req: unknown): Promise<any>;
   GetOptionExpirationDate(req: unknown): Promise<any>;
+  /** Sector / index lists and the stocks in one (read-only market data) */
+  GetPlateSet(req: unknown): Promise<any>;
+  GetPlateSecurity(req: unknown): Promise<any>;
   close(): void;
 }
 
@@ -184,6 +189,8 @@ export class TcpTransport implements QuoteTransport {
       [CMD.GET_SNAPSHOT]: 'Qot_GetSecuritySnapshot',
       [CMD.GET_OPTION_CHAIN]: 'Qot_GetOptionChain',
       [CMD.GET_OPTION_EXPIRATION]: 'Qot_GetOptionExpirationDate',
+      [CMD.GET_PLATE_SET]: 'Qot_GetPlateSet',
+      [CMD.GET_PLATE_SECURITY]: 'Qot_GetPlateSecurity',
     };
     return names[cmd];
   }
@@ -238,6 +245,12 @@ export class TcpTransport implements QuoteTransport {
   }
   GetOptionExpirationDate(req: unknown) {
     return this.rpc(CMD.GET_OPTION_EXPIRATION, 'Qot_GetOptionExpirationDate', req);
+  }
+  GetPlateSet(req: unknown) {
+    return this.rpc(CMD.GET_PLATE_SET, 'Qot_GetPlateSet', req);
+  }
+  GetPlateSecurity(req: unknown) {
+    return this.rpc(CMD.GET_PLATE_SECURITY, 'Qot_GetPlateSecurity', req);
   }
 
   close() {
@@ -315,6 +328,12 @@ export class WsTransport implements QuoteTransport {
   }
   GetOptionExpirationDate(req: unknown) {
     return this.ws.GetOptionExpirationDate(req);
+  }
+  GetPlateSet(req: unknown) {
+    return this.ws.GetPlateSet(req);
+  }
+  GetPlateSecurity(req: unknown) {
+    return this.ws.GetPlateSecurity(req);
   }
   close() {
     try {
