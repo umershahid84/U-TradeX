@@ -1871,6 +1871,20 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           <div className="indicator-checkboxes">
             {renderCloudInstances()}
 
+            <div className="indicator-group auto-group my-indicators">
+              <h4>My indicators</h4>
+              {customIndicators.length === 0 && <small className="auto-hint">Scripts you add (Pine or JavaScript) are saved here for future use.</small>}
+              {customIndicators.map((ci) => (
+                <label key={ci.id} title={ci.language === 'pine' ? 'Pine Script' : 'JavaScript formula'}>
+                  <input type="checkbox" checked={ci.enabled} onChange={(e) => handleUpdateCustomIndicator(ci.id, { enabled: e.target.checked })} />
+                  {ci.name} <small className="auto-hint">{ci.language === 'pine' ? 'Pine' : 'JS'}</small>
+                </label>
+              ))}
+              <button type="button" className="my-ind-add" onClick={() => { setShowCustomPanel(true); setShowIndicatorPanel(false); }}>
+                ＋ Add or edit a script…
+              </button>
+            </div>
+
             <div className="indicator-group auto-group">
               <h4>Alpha Signals</h4>
               <label>
