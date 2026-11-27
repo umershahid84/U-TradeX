@@ -51,3 +51,8 @@
 
 .ag-src { font-size: 9.5px; padding: 0 5px; border-radius: 3px; background: #2a2e4f; color: #8a8fb5; }
 .ag-src.moomoo { background: rgba(38,166,154,.18); color: #26a69a; }
+
+.ag-head { gap: 8px; }
+.ag-head h3 { flex: 1; }
+.ag-dash { padding: 5px 10px; border-radius: 4px; border: 1px solid #3a3e6f; background: #1a1e3f; color: #c0c4e0; font-size: 12px; font-weight: 600; cursor: pointer; }
+.ag-dash:hover { border-color: #2962ff; color: #fff; }

@@ -21,6 +21,8 @@ interface Props {
   setRussell: (symbols: string[]) => void;
   activeSymbol: string;
   onSelect: (symbol: string) => void;
+  /** Opens the full-screen dashboard */
+  onOpenDashboard: () => void;
 }
 
 type View = 'top3' | 'top10' | 'all' | 'alerts';
@@ -61,7 +63,7 @@ const Row: React.FC<{ s: AirGapSetup; rank?: number; active: boolean; onSelect: 
  * Air Gap scanner: symbols whose price sits in front of a stretch of empty space before the next EMA cloud, ranked by room
  * to the target and the day's range left. Alerts (with sound) for new entries and target hits are kept in a board for the day.
  */
-export const AirGaps: React.FC<Props> = ({ settings, update, ranked, setupCount, progress, dataAsOf, updatedAt, board, clearBoard, listInfo, russell, setRussell, activeSymbol, onSelect }) => {
+export const AirGaps: React.FC<Props> = ({ settings, update, ranked, setupCount, progress, dataAsOf, updatedAt, board, clearBoard, listInfo, russell, setRussell, activeSymbol, onSelect, onOpenDashboard }) => {
   const [view, setView] = useState<View>('top10');
   const [paste, setPaste] = useState('');
   const [importMsg, setImportMsg] = useState('');
@@ -82,6 +84,7 @@ export const AirGaps: React.FC<Props> = ({ settings, update, ranked, setupCount,
     <div className="airgaps">
       <div className="ag-head">
         <h3>↕ Air gaps</h3>
+        <button type="button" className="ag-dash" onClick={onOpenDashboard} title="Full-screen dashboard: markets, top 3 cards, alerts and the ranked table">⤢ Dashboard</button>
         <button type="button" className={`ag-run ${settings.running ? 'on' : ''}`} onClick={() => { if (!settings.running) enableSound(); update({ running: !settings.running }); }}>
           {settings.running ? '■ Stop' : '▶ Start scan'}
         </button>

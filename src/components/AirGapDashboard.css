@@ -1,0 +1,95 @@
+.agd { position: fixed; inset: 0; z-index: 2500; background: #0a0e27; overflow-y: auto; padding: 12px 16px 24px; color: #c0c4e0; font-size: 12.5px; }
+.agd-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.agd-bar h2 { margin: 0; font-size: 18px; color: #fff; }
+.agd-status { font-size: 11.5px; color: #8a8fb5; }
+.agd-grow { flex: 1; }
+.agd-run { padding: 6px 14px; border-radius: 5px; border: 1px solid #ef5350; background: #ef5350; color: #fff; font-weight: 700; cursor: pointer; font-size: 12px; }
+.agd-run.on { background: transparent; color: #ef5350; }
+.agd-close { background: #1a1e3f; border: 1px solid #3a3e6f; color: #e0e0e0; border-radius: 5px; width: 32px; height: 30px; cursor: pointer; }
+.agd-controls { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 8px 10px; background: #141938; border: 1px solid #2a2e4f; border-radius: 8px; margin-bottom: 8px; }
+.agd-controls label { display: flex; align-items: center; gap: 5px; color: #8a8fb5; font-size: 11.5px; }
+.agd-controls select, .agd-controls input[type=number] { background: #1a1e3f; border: 1px solid #2a2e4f; border-radius: 4px; color: #e0e0e0; padding: 3px 5px; font-size: 12px; }
+.agd-controls input[type=number] { width: 54px; }
+.agd-chips { display: flex; gap: 4px; flex-wrap: wrap; }
+.agd-chips button { padding: 4px 11px; border-radius: 14px; border: 1px solid #3a3e6f; background: #1a1e3f; color: #c0c4e0; font-size: 11.5px; font-weight: 600; cursor: pointer; }
+.agd-chips button.on { background: #ef5350; border-color: #ef5350; color: #fff; }
+.agd-source { font-size: 11px; color: #ffca28; margin: 0 2px 8px; }
+.agd-source.moomoo { color: #26a69a; }
+.agd-grid { display: grid; gap: 12px; align-items: start; }
+.agd-grid.full { grid-template-columns: 280px minmax(0, 1fr) 380px; grid-template-areas: "markets top3 alerts" "table table alerts"; }
+.agd-grid.focus { grid-template-columns: minmax(0, 1fr) 380px; grid-template-areas: "top3 alerts"; }
+.agd-grid.table { grid-template-columns: minmax(0, 1fr) 380px; grid-template-areas: "table alerts"; }
+.agd-markets { grid-area: markets; } .agd-top3 { grid-area: top3; } .agd-alerts { grid-area: alerts; } .agd-table { grid-area: table; }
+.agd-panel { background: #141938; border: 1px solid #2a2e4f; border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.agd-panel h3 { margin: 0 0 8px; font-size: 13.5px; color: #fff; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.agd-panel h3 small { font-size: 10.5px; color: #8a8fb5; font-weight: 500; }
+.agd-more { margin-left: auto; background: none; border: 1px solid #3a3e6f; border-radius: 4px; color: #c0c4e0; font-size: 11px; padding: 2px 8px; cursor: pointer; }
+.agd-empty { padding: 14px 4px; color: #8a8fb5; line-height: 1.4; }
+.up { color: #26a69a; } .down { color: #ef5350; }
+
+.agd-mrow { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; padding: 5px 0; border-bottom: 1px solid #1a1e3f; font-variant-numeric: tabular-nums; }
+.agd-mrow b { color: #e0e0e0; }
+.agd-breadth { margin-top: 10px; }
+.agd-breadth-head { display: flex; justify-content: space-between; margin-bottom: 4px; } .agd-breadth-head b { color: #e0e0e0; }
+.agd-breadth-bar { height: 6px; background: #ef5350; border-radius: 3px; overflow: hidden; margin-bottom: 4px; }
+.agd-breadth-bar i { display: block; height: 100%; background: #26a69a; }
+.agd-breadth small { color: #8a8fb5; font-size: 10.5px; }
+
+.agd-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.agd-card { background: #10142f; border: 1px solid #2a2e4f; border-top: 3px solid #3a3e6f; border-radius: 8px; padding: 10px; min-width: 0; }
+.agd-card.long { border-top-color: #26a69a; } .agd-card.short { border-top-color: #ef5350; }
+.agd-card-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.agd-card-head > b { color: #ef5350; font-size: 14px; }
+.agd-sym { background: none; border: none; color: #fff; font-size: 17px; font-weight: 800; cursor: pointer; padding: 0; }
+.agd-pill { font-size: 9.5px; font-weight: 700; padding: 1px 6px; border-radius: 3px; background: #2a2e4f; color: #c0c4e0; white-space: nowrap; }
+.agd-pill.long { background: rgba(38,166,154,.18); color: #26a69a; } .agd-pill.short { background: rgba(239,83,80,.18); color: #ef5350; }
+.agd-pill.state.entry { background: rgba(41,98,255,.25); color: #7aa2ff; } .agd-pill.state.running { background: rgba(255,202,40,.15); color: #ffca28; }
+.agd-pill.warn { background: rgba(255,202,40,.15); color: #ffca28; }
+.agd-src { font-size: 9.5px; padding: 0 5px; border-radius: 3px; background: #2a2e4f; color: #8a8fb5; }
+.agd-src.moomoo { background: rgba(38,166,154,.18); color: #26a69a; }
+.agd-boxes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 8px 0 6px; }
+.agd-boxes > div { background: #141938; border-radius: 6px; padding: 5px 7px; display: flex; flex-direction: column; }
+.agd-boxes small { font-size: 9px; letter-spacing: .4px; color: #8a8fb5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agd-boxes b { font-size: 14px; color: #e0e0e0; font-variant-numeric: tabular-nums; }
+.agd-stats { display: flex; justify-content: space-between; gap: 6px; flex-wrap: wrap; font-size: 10.5px; color: #8a8fb5; }
+.agd-stats b { color: #e0e0e0; }
+.agd-track { position: relative; height: 5px; background: #1f2450; border-radius: 3px; margin: 10px 0 18px; }
+.agd-fill { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, #2962ff, #26a69a); border-radius: 3px; }
+.agd-now { position: absolute; top: -3px; width: 11px; height: 11px; margin-left: -5px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 2px #2962ff; }
+.agd-track-labels { position: absolute; left: 0; right: 0; top: 10px; display: flex; justify-content: space-between; font-size: 9px; color: #6a6e90; }
+.agd-why { padding: 7px 8px; background: #141938; border-radius: 6px; font-size: 11px; line-height: 1.4; color: #d5d8f0; }
+.agd-details { margin-top: 6px; font-size: 10.5px; color: #8a8fb5; }
+.agd-details summary { cursor: pointer; color: #8fb4ff; }
+.agd-clouds { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+
+.agd-counts { display: flex; gap: 14px; align-items: center; margin-bottom: 8px; font-size: 11.5px; }
+.agd-counts b { color: #e0e0e0; font-size: 14px; }
+.agd-counts button { margin-left: auto; background: none; border: none; color: #8a8fb5; text-decoration: underline; cursor: pointer; font-size: 11px; }
+.agd-alist { display: flex; flex-direction: column; gap: 6px; max-height: 520px; overflow-y: auto; }
+.agd-alert { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; text-align: left; padding: 7px 9px; background: #10142f; border: 1px solid #2a2e4f; border-left: 3px solid #2962ff; border-radius: 6px; color: #c0c4e0; cursor: pointer; }
+.agd-alert.target { border-left-color: #26a69a; }
+.agd-alert b { color: #fff; font-size: 13px; }
+.agd-at { color: #8a8fb5; font-size: 10.5px; }
+.agd-asub { font-size: 11px; color: #8a8fb5; }
+.agd-live { flex-basis: 100%; font-size: 10.5px; font-weight: 700; }
+
+.agd-scroll { overflow-x: auto; }
+.agd-table table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.agd-table th { text-align: left; font-size: 10px; letter-spacing: .4px; text-transform: uppercase; color: #8a8fb5; padding: 4px 8px; white-space: nowrap; }
+.agd-table td { padding: 6px 8px; border-top: 1px solid #1a1e3f; white-space: nowrap; }
+.agd-table tbody tr { cursor: pointer; } .agd-table tbody tr:hover { background: #1a1e3f; }
+.agd-table small, .agd-table em { color: #8a8fb5; font-style: normal; font-size: 10.5px; }
+.agd-note { margin-top: 12px; font-size: 10.5px; color: #6a6e90; }
+
+@media (max-width: 1280px) {
+  .agd-grid.full { grid-template-columns: minmax(0, 1fr) 340px; grid-template-areas: "markets alerts" "top3 alerts" "table table"; }
+  .agd-cards { grid-template-columns: 1fr; }
+}
+@media (max-width: 900px) {
+  .agd { padding: 8px 10px 80px; }
+  .agd-grid.full, .agd-grid.focus, .agd-grid.table { grid-template-columns: minmax(0, 1fr); }
+  .agd-grid.full { grid-template-areas: "markets" "top3" "alerts" "table"; }
+  .agd-grid.focus { grid-template-areas: "top3" "alerts"; }
+  .agd-grid.table { grid-template-areas: "alerts" "table"; }
+  .agd-controls select, .agd-controls input[type=number] { font-size: 16px; }
+}

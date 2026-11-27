@@ -18,7 +18,8 @@ import { LateDayChip } from './components/LateDayChip';
 import { Scanner } from './components/Scanner';
 import { Politicians } from './components/Politicians';
 import { AirGaps } from './components/AirGaps';
-import { useAirGapScanner } from './hooks/useAirGapScanner';
+import { AirGapDashboard } from './components/AirGapDashboard';
+import { GapAlert, useAirGapScanner } from './hooks/useAirGapScanner';
 import { BotLab } from './components/BotLab';
 import { useOrbBot } from './hooks/useOrbBot';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -699,15 +700,30 @@ function App() {
   };
 
   // Air gap scanner: keeps running in the background whichever tab is open, and raises alerts
+  const gapToasts = useRef<GapAlert[]>([]);
+  const gapToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gap = useAirGapScanner({
     watchlist: readWatchlistSymbols(),
-    onAlert: (a) =>
-      pushToast(
-        a.type === 'entry' ? `↕ Air gap ${a.side === 'long' ? 'long' : 'short'}: ${a.symbol}` : `🎯 Air gap target hit: ${a.symbol}`,
-        a.type === 'entry' ? `Entry $${a.entry.toFixed(2)} → ${a.targetLabel} $${a.target.toFixed(2)} (${a.roomAtr.toFixed(1)} ATR of room)` : `Reached $${a.target.toFixed(2)} (${a.targetLabel})`,
-        a.symbol
-      ),
+    onAlert: (a) => {
+      // a first scan can raise dozens at once: toast the first few, then one summary (every alert is still on the board)
+      gapToasts.current.push(a);
+      if (gapToastTimer.current) return;
+      gapToastTimer.current = setTimeout(() => {
+        const list = gapToasts.current.splice(0);
+        gapToastTimer.current = null;
+        const one = (x: GapAlert) =>
+          pushToast(
+            x.type === 'entry' ? `↕ Air gap ${x.side === 'long' ? 'long' : 'short'}: ${x.symbol}` : `🎯 Air gap target hit: ${x.symbol}`,
+            x.type === 'entry' ? `Entry $${x.entry.toFixed(2)} → ${x.targetLabel} $${x.target.toFixed(2)} (${x.roomAtr.toFixed(1)} ATR of room)` : `Reached $${x.target.toFixed(2)} (${x.targetLabel})`,
+            x.symbol
+          );
+        list.slice(0, 3).forEach(one);
+        if (list.length > 3) pushToast(`↕ ${list.length - 3} more air gap alerts`, 'See the Alerts board in the AirGap tab', list[3].symbol);
+      }, 6000);
+    },
   });
+
+  const [gapDashOpen, setGapDashOpen] = useState(false);
 
   const bot = useOrbBot({ equity: account.totalValue, cash: account.balance, positions: account.positions, pushToast, place: placeOrderWithLevels });
 
@@ -742,6 +758,7 @@ function App() {
           setRussell={gap.setRussell}
           activeSymbol={symbol}
           onSelect={(s) => { handleSymbolChange(s); if (isMobile) setMobileView('chart'); }}
+          onOpenDashboard={() => setGapDashOpen(true)}
         />
       )}
       {activeTab === 'politicians' && <Politicians activeSymbol={symbol} onSelect={(s) => { handleSymbolChange(s); if (isMobile) setMobileView('chart'); }} />}
@@ -913,6 +930,23 @@ function App() {
         )}
       </div>
 
+      {gapDashOpen && (
+        <AirGapDashboard
+          settings={gap.settings}
+          update={gap.update}
+          ranked={gap.ranked}
+          setups={gap.setups}
+          progress={gap.progress}
+          updatedAt={gap.updatedAt}
+          dataAsOf={Object.values(gap.setups).reduce((m, s) => Math.max(m, s.asOf), 0)}
+          breadth={gap.breadth}
+          board={gap.board}
+          clearBoard={gap.clearBoard}
+          listInfo={gap.listInfo}
+          onSelect={(s) => { handleSymbolChange(s); setGapDashOpen(false); if (isMobile) setMobileView('chart'); }}
+          onClose={() => setGapDashOpen(false)}
+        />
+      )}
       <Toasts toasts={toasts} onDismiss={dismissToast} onSelectSymbol={handleSymbolChange} />
 
       {isMobile && (

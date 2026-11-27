@@ -69,6 +69,9 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
   const [setups, setSetups] = useState<Record<string, AirGapSetup>>({});
   const [progress, setProgress] = useState({ done: 0, total: 0, failed: 0 });
   const [updatedAt, setUpdatedAt] = useState(0);
+  // how many of the scanned symbols are up / down on the day (the dashboard's breadth line)
+  const [breadth, setBreadth] = useState({ up: 0, down: 0, total: 0 });
+  const changes = useRef<Record<string, number>>({});
   const [board, setBoard] = useState<GapAlert[]>(loadBoard);
   const [russell, setRussellState] = useState<string[]>(loadRussell);
   // index lists as Moomoo classifies them (when the app runs locally with Moomoo); the built-in ones are the fallback
@@ -129,6 +132,13 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
     const { bars, source } = await market.fetchChartWithSource(symbol, interval, interval === '5m' ? '5d' : '1mo', false, hot ? 'scan' : 'yahoo');
     const day = etClock(Date.now()).date;
     let d = daily.current.get(symbol);
+    // the day's change, for the breadth line: last price against the previous session's close
+    if (bars.length > 1) {
+      const lastDay = etClock(bars[bars.length - 1].time).date;
+      let k = bars.length - 1;
+      while (k >= 0 && etClock(bars[k].time).date === lastDay) k--;
+      if (k >= 0 && bars[k].close > 0) changes.current[symbol] = (bars[bars.length - 1].close / bars[k].close - 1) * 100;
+    }
     // most symbols have no air gap at all: the day's usual range is only fetched for the ones that do
     if ((!d || d.day !== day) && !findAirGap(symbol, bars, null, {}, source)) return null;
     if (!d || d.day !== day) {
@@ -194,6 +204,8 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
         lastFlush = Date.now();
         setSetups({ ...live.current });
         setUpdatedAt(Date.now());
+        const vals = Object.values(changes.current);
+        setBreadth({ up: vals.filter((v) => v > 0).length, down: vals.filter((v) => v < 0).length, total: vals.length });
         if (full) setProgress({ done, total: symbols.length, failed });
       };
       const worker = async () => {
@@ -221,6 +233,7 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
       await loadLists();
       if (cancelled) return;
       live.current = {};
+      changes.current = {};
       setSetups({});
       let lastFull = 0;
       let fullEvery = FULL_EVERY_MS;
@@ -267,5 +280,5 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
     [setups, settings.minRoomAtr]
   );
 
-  return { settings, update, setups, ranked, progress, updatedAt, board, clearBoard, russell, setRussell, listInfo };
+  return { settings, update, setups, ranked, progress, updatedAt, board, clearBoard, russell, setRussell, listInfo, breadth };
 }
