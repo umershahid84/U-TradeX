@@ -50,7 +50,27 @@ import { attachSessionBands, SessionBandsPrimitive } from '../plugins/sessionBan
 import { buildSessionLayout, sessionAt, SESSION_COLOR } from '../utils/marketSessions';
 import './TradingChart.css';
 
+/** A command from the side menu to a chart tool */
+export interface ChartUiCommand {
+  id: 'indicators' | 'alerts' | 'style' | 'plan' | 'autoplan' | 'politicians' | 'fibonacci';
+  n: number;
+}
+export interface ChartUiState {
+  indicators: boolean;
+  alerts: boolean;
+  style: boolean;
+  plan: boolean;
+  autoplan: boolean;
+  politicians: boolean;
+  fibonacci: boolean;
+  alertCount: number;
+}
+
 interface TradingChartProps {
+  /** The tool buttons live in the side menu: hide the toolbar over the chart */
+  hideToolbar?: boolean;
+  uiCommand?: ChartUiCommand;
+  onUiState?: (s: ChartUiState) => void;
   symbol: string;
   timeframe: TimeFrame;
   data: ChartData[];
@@ -132,6 +152,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   onRemoveAlert,
   onClearTriggeredAlerts,
   onSelectSymbol,
+  hideToolbar,
+  uiCommand,
+  onUiState,
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -202,7 +225,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     }
   });
   const [polStatus, setPolStatus] = useState('');
-  const toolsActive = [planOpen, autoPlanOpen, polOn, showFibonacci, showCustomPanel].filter(Boolean).length;
+  const toolsActive = [planOpen, autoPlanOpen, polOn, showFibonacci].filter(Boolean).length;
   useEffect(() => {
     try {
       localStorage.setItem('politicianMarkers', polOn ? '1' : '0');
@@ -1756,6 +1779,32 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     setHtfTick((v) => v + 1);
   }, [symbol, includeAfterHours]);
 
+  // Commands from the side menu: the same actions the toolbar buttons used to have
+  const lastCmd = useRef(uiCommand?.n ?? 0);
+  useEffect(() => {
+    if (!uiCommand || uiCommand.n === lastCmd.current) return;
+    lastCmd.current = uiCommand.n;
+    switch (uiCommand.id) {
+      case 'indicators': setShowIndicatorPanel((v) => !v); break;
+      case 'alerts': setShowAlertsPanel((v) => !v); break;
+      case 'style': setShowStylePopover((v) => !v); break;
+      case 'plan': setPlanOpen((v) => !v); setAutoPlanOpen(false); break;
+      case 'autoplan': setAutoPlanOpen((v) => !v); setPlanOpen(false); break;
+      case 'politicians': setPolOn((v) => !v); break;
+      case 'fibonacci': addFibonacciLevels(); break;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uiCommand]);
+
+  // tell the side menu which tools are open
+  useEffect(() => {
+    onUiState?.({
+      indicators: showIndicatorPanel, alerts: showAlertsPanel, style: showStylePopover, plan: planOpen,
+      autoplan: autoPlanOpen, politicians: polOn, fibonacci: showFibonacci, alertCount: activeAlertCount,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showIndicatorPanel, showAlertsPanel, showStylePopover, planOpen, autoPlanOpen, polOn, showFibonacci, activeAlertCount]);
+
   // Render custom (Pine Script / JavaScript) indicators. They live in their own manager,
   // so toggling built-in indicators never removes them and removed ones are cleaned up.
   useEffect(() => {
@@ -1777,7 +1826,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   }, [customIndicators]);
 
   return (
-    <div ref={rootRef} className={`trading-chart-container ${expanded ? 'expanded' : ''}`} data-chart-theme={chartStyle.theme}>
+    <div ref={rootRef} className={`trading-chart-container ${expanded ? 'expanded' : ''} ${hideToolbar ? 'no-toolbar' : ''}`} data-chart-theme={chartStyle.theme}>
       <DrawingTools
         selectedTool={selectedTool}
         onToolSelect={handleToolSelect}
@@ -1794,6 +1843,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       <div className="chart-top-controls">
         <div className="chart-control-buttons">
           <div className="button-row">
+            {!hideToolbar && (
+            <>
             <button
               className="indicator-toggle"
               onClick={() => setShowIndicatorPanel(!showIndicatorPanel)}
@@ -1821,7 +1872,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                 onClick={() => setToolsOpen((v) => !v)}
                 aria-haspopup="menu"
                 aria-expanded={toolsOpen}
-                title="Trade plan, Auto plan, politicians' trades, Fibonacci and custom indicators"
+                title="Trade plan, Auto plan, politicians' trades and Fibonacci"
               >
                 🧰 Tools{toolsActive ? ` · ${toolsActive}` : ''} ▾
               </button>
@@ -1839,12 +1890,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                   <button role="menuitem" className={showFibonacci ? 'on' : ''} onClick={() => { addFibonacciLevels(); setToolsOpen(false); }}>
                     <span>🔢</span><b>{showFibonacci ? 'Hide' : 'Add'} Fibonacci</b><small>Retracement levels for the visible range</small>
                   </button>
-                  <button role="menuitem" className={showCustomPanel ? 'on' : ''} onClick={() => { setShowCustomPanel(!showCustomPanel); setToolsOpen(false); }}>
-                    <span>🔧</span><b>Custom indicators</b><small>Pine Script or JavaScript</small>
-                  </button>
                 </div>
               )}
             </div>
+
+            </>
+            )}
 
             {clouds.some((i) => i.kind === 'ripster' && i.enabled && !isHidden(i.id) && isVisibleOn(i, chartMs) && i.clouds.some((c) => c.enabled)) && (
               <div className={`trend-indicator trend-${ripsterTrend}`}>

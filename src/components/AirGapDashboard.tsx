@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AirGapSetup } from '../utils/airGap';
+import { AirGapSetup, CurlSetup } from '../utils/airGap';
 import { UNIVERSES } from '../utils/universes';
 import { GapAlert, GapSettings } from '../hooks/useAirGapScanner';
 import { enableSound, playAlert } from '../utils/alertSound';
@@ -16,6 +16,7 @@ interface Props {
   updatedAt: number;
   dataAsOf: number;
   breadth: { up: number; down: number; total: number };
+  curls: CurlSetup[];
   board: GapAlert[];
   clearBoard: () => void;
   listInfo: Record<string, { source: 'moomoo' | 'fallback'; count: number; note?: string }>;
@@ -33,16 +34,16 @@ const LAYOUT_KEY = 'airGapDashLayout';
 const LOCK_KEY = 'airGapDashLocked';
 const ROW_H = 32;
 
-type PanelId = 'markets' | 'top3' | 'alerts' | 'table';
-const PANEL_TITLES: Record<PanelId, string> = { markets: 'Markets', top3: 'Top 3 right now', alerts: "Today's alerts", table: 'Ranked table' };
+type PanelId = 'markets' | 'top3' | 'alerts' | 'table' | 'curl';
+const PANEL_TITLES: Record<PanelId, string> = { markets: 'Markets', top3: 'Top 3 right now', alerts: "Today's alerts", table: 'Ranked table', curl: 'Possible 5/12 curl' };
 
 /** Starting arrangement of each layout, in grid units (12 columns, rows of 32 px) */
 const DEFAULTS: Record<Layout, Rects> = {
-  full: { markets: { x: 0, y: 0, w: 2, h: 10 }, top3: { x: 2, y: 0, w: 7, h: 12 }, alerts: { x: 9, y: 0, w: 3, h: 22 }, table: { x: 0, y: 12, w: 9, h: 11 } },
-  focus: { top3: { x: 0, y: 0, w: 9, h: 13 }, alerts: { x: 9, y: 0, w: 3, h: 13 } },
-  table: { table: { x: 0, y: 0, w: 9, h: 22 }, alerts: { x: 9, y: 0, w: 3, h: 22 } },
+  full: { markets: { x: 0, y: 0, w: 2, h: 10 }, top3: { x: 2, y: 0, w: 7, h: 12 }, alerts: { x: 9, y: 0, w: 3, h: 12 }, curl: { x: 9, y: 12, w: 3, h: 11 }, table: { x: 0, y: 12, w: 9, h: 11 } },
+  focus: { top3: { x: 0, y: 0, w: 9, h: 13 }, alerts: { x: 9, y: 0, w: 3, h: 7 }, curl: { x: 9, y: 7, w: 3, h: 6 } },
+  table: { table: { x: 0, y: 0, w: 9, h: 22 }, alerts: { x: 9, y: 0, w: 3, h: 12 }, curl: { x: 9, y: 12, w: 3, h: 10 } },
 };
-const MIN: Record<PanelId, { w: number; h: number }> = { markets: { w: 2, h: 6 }, top3: { w: 4, h: 8 }, alerts: { w: 2, h: 6 }, table: { w: 4, h: 6 } };
+const MIN: Record<PanelId, { w: number; h: number }> = { markets: { w: 2, h: 6 }, top3: { w: 4, h: 8 }, alerts: { w: 2, h: 6 }, table: { w: 4, h: 6 }, curl: { w: 2, h: 5 } };
 
 const watchlist = (): string[] => {
   try {
@@ -110,7 +111,7 @@ const Card: React.FC<{ s: AirGapSetup; n: number; onSelect: (sym: string) => voi
  * A full-screen air gap dashboard: markets and breadth, the best three setups as cards, today's alerts with live status,
  * and the ranked table. Panels can be switched between Full, Focus (cards and alerts) and Table layouts.
  */
-export const AirGapDashboard: React.FC<Props> = ({ settings, update, ranked, setups, progress, updatedAt, dataAsOf, breadth, board, clearBoard, listInfo, onSelect, onClose }) => {
+export const AirGapDashboard: React.FC<Props> = ({ settings, update, ranked, setups, progress, updatedAt, dataAsOf, breadth, curls, board, clearBoard, listInfo, onSelect, onClose }) => {
   const [direction, setDirection] = useState<Direction>('all');
   const [layout, setLayout] = useState<Layout>(() => {
     try {
@@ -260,6 +261,9 @@ export const AirGapDashboard: React.FC<Props> = ({ settings, update, ranked, set
         <label>Min room
           <input type="number" min={0.5} max={6} step={0.5} value={settings.minRoomAtr} onChange={(e) => update({ minRoomAtr: Math.max(0.5, Math.min(6, parseFloat(e.target.value) || 1.5)) })} /> ATR
         </label>
+        <label className="agd-check" title="A soft beep when a symbol newly shows a possible 5/12 curl">
+          <input type="checkbox" checked={settings.curlSound} onChange={(e) => { update({ curlSound: e.target.checked }); if (e.target.checked) { enableSound(); playAlert('curl'); } }} /> ∿ Curl sound
+        </label>
         <label className="agd-check">
           <input type="checkbox" checked={settings.sound} onChange={(e) => { update({ sound: e.target.checked }); if (e.target.checked) { enableSound(); playAlert('entry'); } }} /> 🔔 Sound
         </label>
@@ -289,7 +293,27 @@ export const AirGapDashboard: React.FC<Props> = ({ settings, update, ranked, set
           onPointerUp: endDrag,
           onPointerCancel: endDrag,
         });
+        const curlList = curls.filter((c) => (direction === 'all' ? true : direction === 'long' ? c.side === 'up' : direction === 'short' ? c.side === 'down' : mine.has(c.symbol)));
         const bodies: Record<PanelId, React.ReactNode> = {
+          curl: (
+            <>
+              <h3 {...grab('curl')}>Possible 5/12 curl <small>{curlList.length} this bar{settings.curlSound ? ' · curl sound on' : ''}</small></h3>
+              {curlList.length === 0 ? (
+                <div className="agd-empty">{settings.running ? 'No symbol has a 5 and 12 EMA about to cross right now.' : 'Press Scan now. Symbols whose 5 and 12 EMA are about to cross are listed here.'}</div>
+              ) : (
+                <div className="agd-curls">
+                  {curlList.map((c) => (
+                    <button key={c.symbol} type="button" className={`agd-curl ${c.side}`} onClick={() => onSelect(c.symbol)} title="Open the chart">
+                      <b>{c.symbol}</b>
+                      <span className={`agd-pill ${c.side === 'up' ? 'long' : 'short'}`}>{c.side === 'up' ? '▲ curling up' : '▼ curling down'}</span>
+                      <span className="agd-csub">${money(c.price)} · gap {c.gapAtr.toFixed(2)} ATR{c.eta !== null ? ` · cross in ~${c.eta} bar${c.eta === 1 ? '' : 's'}` : ''}</span>
+                      <span className={`agd-src ${c.source}`}>{c.source === 'moomoo' ? 'Moomoo' : 'Yahoo'}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          ),
       markets: (
         <>
             <h3 {...grab('markets')}>Markets</h3>
@@ -377,7 +401,7 @@ export const AirGapDashboard: React.FC<Props> = ({ settings, update, ranked, set
         </>
       ),
         };
-        const visible: PanelId[] = layout === 'full' ? ['markets', 'top3', 'alerts', 'table'] : layout === 'focus' ? ['top3', 'alerts'] : ['table', 'alerts'];
+        const visible: PanelId[] = layout === 'full' ? ['markets', 'top3', 'alerts', 'curl', 'table'] : layout === 'focus' ? ['top3', 'alerts', 'curl'] : ['table', 'alerts', 'curl'];
         const canMove = free && !locked;
         return (
           <>

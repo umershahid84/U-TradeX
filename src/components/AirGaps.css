@@ -11,7 +11,7 @@
 .ag-progress { margin-bottom: 8px; font-size: 11px; color: #8a8fb5; }
 .ag-prog-bar { height: 4px; background: #1a1e3f; border-radius: 2px; overflow: hidden; margin-bottom: 4px; }
 .ag-prog-bar i { display: block; height: 100%; background: #2962ff; transition: width .3s; }
-.ag-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 8px; }
+.ag-tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 8px; }
 .ag-tabs button { padding: 5px 2px; background: #1a1e3f; border: 1px solid #2a2e4f; border-radius: 4px; color: #8a8fb5; font-size: 11px; font-weight: 600; cursor: pointer; }
 .ag-tabs button.active { background: #2962ff; border-color: #2962ff; color: #fff; }
 .ag-list { display: flex; flex-direction: column; gap: 6px; }

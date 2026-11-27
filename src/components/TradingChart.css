@@ -453,3 +453,7 @@ body.chart-expanded { overflow: hidden; }
 
 .my-indicators .my-ind-add { margin-top: 6px; padding: 5px 8px; background: transparent; border: 1px dashed #3a3e6f; border-radius: 4px; color: #8fb4ff; font-size: 11.5px; cursor: pointer; text-align: left; }
 .my-indicators .my-ind-add:hover { border-color: #2962ff; color: #fff; }
+
+/* the tool buttons live in the side menu: panels open from the top of the chart */
+.trading-chart-container.no-toolbar .indicator-panel { top: 10px; }
+.trading-chart-container.no-toolbar .chart-top-controls:empty { display: none; }

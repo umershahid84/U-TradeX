@@ -14,11 +14,11 @@ export const enableSound = (): boolean => {
   }
 };
 
-/** entry: two rising tones; target: three quick ones */
-export const playAlert = (kind: 'entry' | 'target') => {
+/** entry: two rising tones; target: three quick ones; curl: two soft low beeps */
+export const playAlert = (kind: 'entry' | 'target' | 'curl') => {
   if (!ctx || ctx.state === 'closed') return;
   try {
-    const tones = kind === 'entry' ? [660, 880] : [880, 1100, 1320];
+    const tones = kind === 'entry' ? [660, 880] : kind === 'curl' ? [520, 520] : [880, 1100, 1320];
     const t0 = ctx.currentTime + 0.02;
     tones.forEach((f, i) => {
       const osc = ctx!.createOscillator();

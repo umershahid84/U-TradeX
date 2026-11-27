@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RealMarketDataService } from '../services/realMarketData';
-import { AirGapSetup, dailyRange, findAirGap } from '../utils/airGap';
+import { AirGapSetup, CurlSetup, dailyRange, findAirGap, findCurl } from '../utils/airGap';
 import { MoomooLists, UniverseId, loadRussell, saveRussell, universeSymbols } from '../utils/universes';
 import { enableSound, playAlert } from '../utils/alertSound';
 import { etClock } from '../utils/lateDay';
@@ -24,10 +24,12 @@ export interface GapSettings {
   /** Fewest ATRs of empty space for an entry to count (and alert) */
   minRoomAtr: number;
   sound: boolean;
+  /** A soft beep when a symbol newly shows a possible 5/12 curl */
+  curlSound: boolean;
   running: boolean;
 }
 
-const DEFAULTS: GapSettings = { universe: 'ndx', interval: '5m', minRoomAtr: 1.5, sound: true, running: false };
+const DEFAULTS: GapSettings = { universe: 'ndx', interval: '5m', minRoomAtr: 1.5, sound: true, curlSound: false, running: false };
 const KEY = 'airGapSettings';
 const CONCURRENCY = 6;
 const REFRESH_MS = 30_000;
@@ -72,6 +74,10 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
   // how many of the scanned symbols are up / down on the day (the dashboard's breadth line)
   const [breadth, setBreadth] = useState({ up: 0, down: 0, total: 0 });
   const changes = useRef<Record<string, number>>({});
+  // symbols whose 5 and 12 EMA are about to cross
+  const [curls, setCurls] = useState<CurlSetup[]>([]);
+  const curlMap = useRef<Record<string, CurlSetup>>({});
+  const curlSeen = useRef(new Set<string>());
   const [board, setBoard] = useState<GapAlert[]>(loadBoard);
   const [russell, setRussellState] = useState<string[]>(loadRussell);
   // index lists as Moomoo classifies them (when the app runs locally with Moomoo); the built-in ones are the fallback
@@ -139,6 +145,20 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
       while (k >= 0 && etClock(bars[k].time).date === lastDay) k--;
       if (k >= 0 && bars[k].close > 0) changes.current[symbol] = (bars[bars.length - 1].close / bars[k].close - 1) * 100;
     }
+    // a possible 5/12 curl, for every symbol (cheap): a new one beeps when curl sound is on and the data is live
+    const curl = findCurl(symbol, bars, source);
+    if (curl) {
+      curlMap.current[symbol] = curl;
+      const key = `${symbol}|${curl.side}`;
+      if (!curlSeen.current.has(key)) {
+        curlSeen.current.add(key);
+        if (settingsRef.current.curlSound && Date.now() - curl.asOf < 8 * 300_000) playAlert('curl');
+      }
+    } else {
+      delete curlMap.current[symbol];
+      curlSeen.current.delete(`${symbol}|up`);
+      curlSeen.current.delete(`${symbol}|down`);
+    }
     // most symbols have no air gap at all: the day's usual range is only fetched for the ones that do
     if ((!d || d.day !== day) && !findAirGap(symbol, bars, null, {}, source)) return null;
     if (!d || d.day !== day) {
@@ -203,6 +223,7 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
         if (!force && Date.now() - lastFlush < 700) return;
         lastFlush = Date.now();
         setSetups({ ...live.current });
+        setCurls(Object.values(curlMap.current).sort((a, b) => a.gapAtr - b.gapAtr));
         setUpdatedAt(Date.now());
         const vals = Object.values(changes.current);
         setBreadth({ up: vals.filter((v) => v > 0).length, down: vals.filter((v) => v < 0).length, total: vals.length });
@@ -234,7 +255,10 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
       if (cancelled) return;
       live.current = {};
       changes.current = {};
+      curlMap.current = {};
+      curlSeen.current.clear();
       setSetups({});
+      setCurls([]);
       let lastFull = 0;
       let fullEvery = FULL_EVERY_MS;
       while (!cancelled) {
@@ -246,10 +270,12 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
           fullEvery = Math.max(FULL_EVERY_MS, (Date.now() - now) * 1.5);
         } else {
           // the best candidates and anything already in play
-          const hot = Object.values(live.current)
-            .sort((a, b) => b.score - a.score)
-            .slice(0, 40)
-            .map((s) => s.symbol);
+          const hot = [
+            ...new Set([
+              ...Object.values(live.current).sort((a, b) => b.score - a.score).slice(0, 40).map((s) => s.symbol),
+              ...Object.values(curlMap.current).slice(0, 20).map((c) => c.symbol),
+            ]),
+          ];
           await pass(hot, false);
         }
         await sleep(REFRESH_MS);
@@ -280,5 +306,5 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
     [setups, settings.minRoomAtr]
   );
 
-  return { settings, update, setups, ranked, progress, updatedAt, board, clearBoard, russell, setRussell, listInfo, breadth };
+  return { settings, update, setups, ranked, progress, updatedAt, board, clearBoard, russell, setRussell, listInfo, breadth, curls };
 }

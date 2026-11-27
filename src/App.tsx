@@ -22,6 +22,7 @@ import { AirGapDashboard } from './components/AirGapDashboard';
 import { Workspace } from './components/Workspace';
 import { LayoutMenu } from './components/LayoutMenu';
 import { LeftNav } from './components/LeftNav';
+import type { ChartUiCommand, ChartUiState } from './components/TradingChart';
 import type { Rects } from './utils/gridLayout';
 import { GapAlert, useAirGapScanner } from './hooks/useAirGapScanner';
 import { BotLab } from './components/BotLab';
@@ -772,6 +773,9 @@ function App() {
   };
   const [wsReset, setWsReset] = useState(0);
   const useWs = !isMobile;
+  // the chart tools (Indicators, Alerts, Style, Plan ...) are buttons of the side menu on a computer
+  const [chartCmd, setChartCmd] = useState<ChartUiCommand>({ id: 'indicators', n: 0 });
+  const [chartUi, setChartUi] = useState<ChartUiState | null>(null);
 
   const bot = useOrbBot({ equity: account.totalValue, cash: account.balance, positions: account.positions, pushToast, place: placeOrderWithLevels });
 
@@ -800,6 +804,7 @@ function App() {
           dataAsOf={Object.values(gap.setups).reduce((m, s) => Math.max(m, s.asOf), 0)}
           updatedAt={gap.updatedAt}
           board={gap.board}
+          curls={gap.curls}
           clearBoard={gap.clearBoard}
           russell={gap.russell}
           listInfo={gap.listInfo}
@@ -899,6 +904,9 @@ function App() {
 
             <ErrorBoundary label="the chart" resetKey={symbol} settingsKeys={['cloudConfig', 'autoChart', 'customIndicators']}>
             <TradingChart
+              hideToolbar={useWs}
+              uiCommand={chartCmd}
+              onUiState={setChartUi}
               symbol={symbol}
               timeframe={timeframe}
               data={chartData}
@@ -973,7 +981,7 @@ function App() {
       </Navbar>
 
       <div className="app-body">
-      {useWs && <LeftNav active={tab} onSelect={selectTab} airGapAlerts={gap.board.length} onOpenDashboard={() => setGapDashOpen(true)} />}
+      {useWs && <LeftNav active={tab} onSelect={selectTab} airGapAlerts={gap.board.length} onOpenDashboard={() => setGapDashOpen(true)} chartUi={chartUi} onChartTool={(id) => setChartCmd((c) => ({ id, n: c.n + 1 }))} />}
       <div className={`main-content ${useWs ? 'ws-mode' : ''}`}>
         {useWs ? (
           <Workspace
@@ -1023,6 +1031,7 @@ function App() {
           updatedAt={gap.updatedAt}
           dataAsOf={Object.values(gap.setups).reduce((m, s) => Math.max(m, s.asOf), 0)}
           breadth={gap.breadth}
+          curls={gap.curls}
           board={gap.board}
           clearBoard={gap.clearBoard}
           listInfo={gap.listInfo}

@@ -174,3 +174,54 @@ export const findAirGap = (symbol: string, bars: ChartData[], dailyAtr: number |
     clouds: clouds.map(({ idx: _i, ...c }) => c),
   };
 };
+
+/** How close the 5 and 12 EMA must be, in ATRs, to call a curl possible */
+export const CURL_MAX_GAP_ATR = 1.0;
+
+export interface CurlSetup {
+  symbol: string;
+  /** up: the 5 EMA is turning up under the 12 EMA (a bullish cross may follow); down: the reverse */
+  side: 'up' | 'down';
+  price: number;
+  /** Distance between the 5 and 12 EMA, in ATRs */
+  gapAtr: number;
+  /** Rough number of candles until they cross at the current closing speed (null when they are not closing) */
+  eta: number | null;
+  source: 'moomoo' | 'yahoo';
+  asOf: number;
+}
+
+/**
+ * A possible 5/12 curl: the fast EMAs are about to cross. The 5 EMA sits on the wrong side of the 12 EMA, has recently turned
+ * toward it and the two are within about one ATR and closing, so the 5/12 cloud may flip direction.
+ * It is an early warning, earlier than a close through the cloud, and fails more often.
+ */
+export const findCurl = (symbol: string, bars: ChartData[], source: 'moomoo' | 'yahoo' = 'yahoo'): CurlSetup | null => {
+  const n = bars.length;
+  if (n < 40) return null;
+  const hl2 = bars.map((b) => sourceValue(b, 'hl2'));
+  const e5 = movingAverage(hl2, 5, 'EMA');
+  const e12 = movingAverage(hl2, 12, 'EMA');
+  const atr = atrOf(bars);
+  if (!(atr > 0)) return null;
+  const d = (i: number) => e5[i] - e12[i];
+  const now = d(n - 1);
+  if (now === 0) return null;
+  const up = now < 0;
+  const gap = Math.abs(now);
+  // the 5 EMA turned toward the 12 EMA within the last five candles and is moving that way now
+  const toward = (i: number) => (up ? e5[i] > e5[i - 1] : e5[i] < e5[i - 1]);
+  const away = (i: number) => (up ? e5[i] <= e5[i - 1] : e5[i] >= e5[i - 1]);
+  const turned = toward(n - 1) && [2, 3, 4, 5].some((k) => away(n - k));
+  const closing = Math.abs(d(n - 2)) > gap;
+  if (!turned || !closing || gap > atr * CURL_MAX_GAP_ATR) return null;
+  // not just a flat tape: the 5 and 12 EMA were really apart a few candles ago, and the 5 EMA is actually moving now
+  let peak = 0;
+  for (let k = 0; k < 10; k++) if (d(n - 1 - k) * now > 0) peak = Math.max(peak, Math.abs(d(n - 1 - k)));
+  if (peak < atr * 0.8 || gap < atr * 0.05 || Math.abs(e5[n - 1] - e5[n - 2]) < atr * 0.03) return null;
+  const speed = (Math.abs(d(n - 3)) - gap) / 2;
+  return {
+    symbol, side: up ? 'up' : 'down', price: bars[n - 1].close, gapAtr: gap / atr,
+    eta: speed > 0 ? Math.min(20, Math.max(1, Math.round(gap / speed))) : null, source, asOf: bars[n - 1].time,
+  };
+};

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AirGapSetup } from '../utils/airGap';
+import { AirGapSetup, CurlSetup } from '../utils/airGap';
 import { UNIVERSES, parseSymbolList } from '../utils/universes';
 import { GapAlert, GapSettings } from '../hooks/useAirGapScanner';
 import { playAlert, enableSound } from '../utils/alertSound';
@@ -15,6 +15,7 @@ interface Props {
   dataAsOf: number;
   updatedAt: number;
   board: GapAlert[];
+  curls: CurlSetup[];
   clearBoard: () => void;
   listInfo: Record<string, { source: 'moomoo' | 'fallback'; count: number; note?: string }>;
   russell: string[];
@@ -25,7 +26,7 @@ interface Props {
   onOpenDashboard: () => void;
 }
 
-type View = 'top3' | 'top10' | 'all' | 'alerts';
+type View = 'top3' | 'top10' | 'all' | 'alerts' | 'curl';
 
 const money = (n: number) => n.toFixed(2);
 const time = (ms: number) => new Date(ms).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
@@ -63,7 +64,7 @@ const Row: React.FC<{ s: AirGapSetup; rank?: number; active: boolean; onSelect: 
  * Air Gap scanner: symbols whose price sits in front of a stretch of empty space before the next EMA cloud, ranked by room
  * to the target and the day's range left. Alerts (with sound) for new entries and target hits are kept in a board for the day.
  */
-export const AirGaps: React.FC<Props> = ({ settings, update, ranked, setupCount, progress, dataAsOf, updatedAt, board, clearBoard, listInfo, russell, setRussell, activeSymbol, onSelect, onOpenDashboard }) => {
+export const AirGaps: React.FC<Props> = ({ settings, update, ranked, setupCount, progress, dataAsOf, updatedAt, board, curls, clearBoard, listInfo, russell, setRussell, activeSymbol, onSelect, onOpenDashboard }) => {
   const [view, setView] = useState<View>('top10');
   const [paste, setPaste] = useState('');
   const [importMsg, setImportMsg] = useState('');
@@ -105,6 +106,10 @@ export const AirGaps: React.FC<Props> = ({ settings, update, ranked, setupCount,
         <label title="Fewest ATRs of empty space for a setup to be listed and alert">Min room
           <input type="number" min={0.5} max={6} step={0.5} value={settings.minRoomAtr} onChange={(e) => update({ minRoomAtr: Math.max(0.5, Math.min(6, parseFloat(e.target.value) || 1.5)) })} />
           <small>ATR</small>
+        </label>
+        <label className="ag-sound" title="A soft beep when a symbol newly shows a possible 5/12 curl">
+          <input type="checkbox" checked={settings.curlSound} onChange={(e) => { update({ curlSound: e.target.checked }); if (e.target.checked) { enableSound(); playAlert('curl'); } }} />
+          ∿ Curl sound
         </label>
         <label className="ag-sound">
           <input type="checkbox" checked={settings.sound} onChange={(e) => { update({ sound: e.target.checked }); if (e.target.checked) { enableSound(); playAlert('entry'); } }} />
@@ -158,12 +163,26 @@ export const AirGaps: React.FC<Props> = ({ settings, update, ranked, setupCount,
       )}
 
       <div className="ag-tabs">
-        {([['top3', 'Top 3'], ['top10', 'Top 10'], ['all', 'All'], ['alerts', `Alerts ${board.length}`]] as [View, string][]).map(([id, label]) => (
+        {([['top3', 'Top 3'], ['top10', 'Top 10'], ['all', 'All'], ['alerts', `Alerts ${board.length}`], ['curl', `Curl ${curls.length}`]] as [View, string][]).map(([id, label]) => (
           <button key={id} type="button" className={view === id ? 'active' : ''} onClick={() => setView(id)}>{label}</button>
         ))}
       </div>
 
-      {view === 'alerts' ? (
+      {view === 'curl' ? (
+        <div className="ag-list">
+          {curls.length === 0 ? (
+            <div className="ag-empty">{settings.running ? 'No symbol has a 5 and 12 EMA about to cross right now.' : 'Press Start scan. Symbols whose 5 and 12 EMA are about to cross are listed here.'}</div>
+          ) : (
+            curls.map((c) => (
+              <button key={c.symbol} type="button" className={`ag-alert ${c.side === 'up' ? 'long' : 'short'}`} onClick={() => onSelect(c.symbol)}>
+                <b>{c.symbol}</b>
+                <span className={`ag-side ${c.side === 'up' ? 'long' : 'short'}`}>{c.side === 'up' ? '▲ curling up' : '▼ curling down'}</span>
+                <span>${money(c.price)} · gap {c.gapAtr.toFixed(2)} ATR{c.eta !== null ? ` · cross in ~${c.eta} bar${c.eta === 1 ? '' : 's'}` : ''}</span>
+              </button>
+            ))
+          )}
+        </div>
+      ) : view === 'alerts' ? (
         <div className="ag-list">
           {board.length === 0 ? (
             <div className="ag-empty">No alerts yet today. New entries and target hits appear here, with a sound if it is on.</div>
