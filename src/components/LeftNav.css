@@ -1,0 +1,18 @@
+/* the menu down the left side (computers) */
+.app-body { flex: 1 1 0; display: flex; min-height: 0; min-width: 0; }
+.left-nav { flex: 0 0 184px; width: 184px; display: flex; flex-direction: column; gap: 6px; padding: 10px 8px; background: #0d1130; border-right: 1px solid #1f2450; overflow-y: auto; overflow-x: hidden; transition: flex-basis .15s ease, width .15s ease; }
+.left-nav.collapsed { flex-basis: 54px; width: 54px; align-items: center; padding: 10px 6px; }
+.ln-collapse { align-self: flex-end; width: 26px; height: 24px; background: #1a1e3f; border: 1px solid #2a2e4f; border-radius: 6px; color: #8a8fb5; font-size: 10px; cursor: pointer; }
+.ln-collapse:hover { color: #fff; border-color: #3a3e6f; }
+.left-nav.collapsed .ln-collapse { align-self: center; }
+.ln-list { display: flex; flex-direction: column; gap: 2px; width: 100%; }
+.ln-item { position: relative; display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; background: transparent; border: none; border-left: 3px solid transparent; border-radius: 6px; color: #aab0d6; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer; white-space: nowrap; }
+.ln-item:hover { background: #1a1e3f; color: #fff; }
+.ln-item.on { background: linear-gradient(90deg, rgba(41, 98, 255, .28), rgba(41, 98, 255, .08)); border-left-color: #2962ff; color: #fff; }
+.ln-icon { flex: 0 0 22px; width: 22px; text-align: center; font-size: 16px; }
+.ln-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.ln-badge { margin-left: auto; min-width: 20px; padding: 1px 6px; border-radius: 10px; background: #ef5350; color: #fff; font-size: 10.5px; font-weight: 700; text-align: center; }
+.left-nav.collapsed .ln-item { justify-content: center; padding: 9px 4px; border-left-width: 0; }
+.left-nav.collapsed .ln-item.on { box-shadow: inset 3px 0 0 #2962ff; }
+.left-nav.collapsed .ln-badge { position: absolute; top: 2px; right: 0; margin: 0; min-width: 16px; padding: 0 4px; font-size: 9px; }
+.ln-sep { height: 1px; background: #1f2450; margin: 4px 4px; width: 100%; }

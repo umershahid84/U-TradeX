@@ -21,6 +21,7 @@ import { AirGaps } from './components/AirGaps';
 import { AirGapDashboard } from './components/AirGapDashboard';
 import { Workspace } from './components/Workspace';
 import { LayoutMenu } from './components/LayoutMenu';
+import { LeftNav } from './components/LeftNav';
 import type { Rects } from './utils/gridLayout';
 import { GapAlert, useAirGapScanner } from './hooks/useAirGapScanner';
 import { BotLab } from './components/BotLab';
@@ -946,7 +947,7 @@ function App() {
   );
   const sidebarInner = (
     <>
-      {!isMobile && <SidebarTabs active={tab} onChange={selectTab} onCollapse={useWs ? undefined : toggleRightSidebar} />}
+      {!isMobile && !useWs && <SidebarTabs active={tab} onChange={selectTab} onCollapse={toggleRightSidebar} />}
       <div className="sidebar-content">
         <ErrorBoundary label="this panel" resetKey={`${symbol}-${activeTab}`}>{tabContent}</ErrorBoundary>
       </div>
@@ -971,6 +972,8 @@ function App() {
         </div>
       </Navbar>
 
+      <div className="app-body">
+      {useWs && <LeftNav active={tab} onSelect={selectTab} airGapAlerts={gap.board.length} onOpenDashboard={() => setGapDashOpen(true)} />}
       <div className={`main-content ${useWs ? 'ws-mode' : ''}`}>
         {useWs ? (
           <Workspace
@@ -978,7 +981,7 @@ function App() {
             panels={[
               { id: 'chart', title: 'Chart', min: { w: 4, h: 8 }, node: chartAreaNode },
               { id: 'positions', title: 'Positions · Orders · Stats', min: { w: 3, h: 3 }, node: stripNode },
-              { id: 'sidebar', title: 'Watchlist · Scanner · AirGap · …', min: { w: 2, h: 6 }, node: sidebarNode },
+              { id: 'sidebar', title: TAB_META.find((t) => t.id === tab)?.label ?? 'Panel', min: { w: 2, h: 6 }, node: sidebarNode },
               { id: 'trade', title: 'Quick trade', min: { w: 2, h: 3 }, node: <QuickTrade symbol={symbol} currentPrice={currentPrice} onPlaceOrder={placeOrderWithLevels} /> },
             ]}
             defaults={WS_DEFAULTS[wsPreset]}
@@ -1007,6 +1010,7 @@ function App() {
             )}
           </>
         )}
+      </div>
       </div>
 
       {gapDashOpen && (
