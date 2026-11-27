@@ -19,6 +19,9 @@ import { Scanner } from './components/Scanner';
 import { Politicians } from './components/Politicians';
 import { AirGaps } from './components/AirGaps';
 import { AirGapDashboard } from './components/AirGapDashboard';
+import { Workspace } from './components/Workspace';
+import { LayoutMenu } from './components/LayoutMenu';
+import type { Rects } from './utils/gridLayout';
 import { GapAlert, useAirGapScanner } from './hooks/useAirGapScanner';
 import { BotLab } from './components/BotLab';
 import { useOrbBot } from './hooks/useOrbBot';
@@ -38,6 +41,15 @@ import './App.css';
 import './largeScreen.css';
 
 const marketData = RealMarketDataService.getInstance();
+
+// The whole-app workspace: arrangements of the four panels on a 12-column grid that is 24 rows tall
+export type WsPreset = 'standard' | 'chart' | 'wide';
+const WS_ROWS = 24;
+const WS_DEFAULTS: Record<WsPreset, Rects> = {
+  standard: { chart: { x: 0, y: 0, w: 9, h: 17 }, positions: { x: 0, y: 17, w: 9, h: 7 }, sidebar: { x: 9, y: 0, w: 3, h: 19 }, trade: { x: 9, y: 19, w: 3, h: 5 } },
+  chart: { chart: { x: 0, y: 0, w: 10, h: 18 }, positions: { x: 0, y: 18, w: 10, h: 6 }, sidebar: { x: 10, y: 0, w: 2, h: 19 }, trade: { x: 10, y: 19, w: 2, h: 5 } },
+  wide: { chart: { x: 0, y: 0, w: 7, h: 17 }, positions: { x: 0, y: 17, w: 7, h: 7 }, sidebar: { x: 7, y: 0, w: 5, h: 19 }, trade: { x: 7, y: 19, w: 5, h: 5 } },
+};
 
 const readWatchlistSymbols = (): string[] => {
   try {
@@ -725,6 +737,41 @@ function App() {
 
   const [gapDashOpen, setGapDashOpen] = useState(false);
 
+  // workspace layout (computers): which arrangement, locked or not, and a counter that resets it to the default
+  const [wsPreset, setWsPresetState] = useState<WsPreset>(() => {
+    try {
+      const v = localStorage.getItem('wsPreset');
+      return v === 'chart' || v === 'wide' ? v : 'standard';
+    } catch {
+      return 'standard';
+    }
+  });
+  const setWsPreset = (p: WsPreset) => {
+    setWsPresetState(p);
+    try {
+      localStorage.setItem('wsPreset', p);
+    } catch {
+      /* storage unavailable */
+    }
+  };
+  const [wsLocked, setWsLockedState] = useState(() => {
+    try {
+      return localStorage.getItem('wsLocked') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const setWsLocked = (v: boolean) => {
+    setWsLockedState(v);
+    try {
+      localStorage.setItem('wsLocked', v ? '1' : '0');
+    } catch {
+      /* storage unavailable */
+    }
+  };
+  const [wsReset, setWsReset] = useState(0);
+  const useWs = !isMobile;
+
   const bot = useOrbBot({ equity: account.totalValue, cash: account.balance, positions: account.positions, pushToast, place: placeOrderWithLevels });
 
   const setLevel = (sym: string, kind: 'takeProfit' | 'stopLoss', price?: number) =>
@@ -785,24 +832,8 @@ function App() {
     </>
   );
 
-  return (
-    <div className="app">
-      <Navbar
-        symbol={symbol}
-        timeframe={timeframe}
-        timeRange={timeRange}
-        onSymbolChange={handleSymbolChange}
-        onTimeframeChange={handleTimeframeChange}
-        onTimeRangeChange={handleTimeRangeChange}
-      >
-        <div className="navbar-widgets">
-          <FearGreedChip market={marketFearGreed} onClick={openSentiment} />
-          <PortfolioBar account={account} onReset={resetAccount} />
-        </div>
-      </Navbar>
-
-      <div className="main-content">
-        <div className="center-column" style={showChartOnMobile ? undefined : { display: 'none' }}>
+  // The pieces of the screen. On a computer they are panels of a draggable workspace; on a phone they keep the stacked layout.
+  const chartAreaNode = (
           <div className="chart-area">
             <div className="chart-header">
               <div className="symbol-info">
@@ -900,10 +931,11 @@ function App() {
             />
             </ErrorBoundary>
           </div>
-
+  );
+  const stripNode = (
           <PositionsStrip
             account={account}
-            open={stripOpen}
+            open={stripOpen || useWs}
             onToggle={toggleStrip}
             onSelectSymbol={handleSymbolChange}
             onClosePosition={closePosition}
@@ -911,22 +943,69 @@ function App() {
             onSellOption={sellOption}
             onClearHistory={clearClosedTrades}
           />
+  );
+  const sidebarInner = (
+    <>
+      {!isMobile && <SidebarTabs active={tab} onChange={selectTab} onCollapse={useWs ? undefined : toggleRightSidebar} />}
+      <div className="sidebar-content">
+        <ErrorBoundary label="this panel" resetKey={`${symbol}-${activeTab}`}>{tabContent}</ErrorBoundary>
+      </div>
+    </>
+  );
+  const sidebarNode = <div className="right-sidebar">{sidebarInner}</div>;
+
+  return (
+    <div className="app">
+      <Navbar
+        symbol={symbol}
+        timeframe={timeframe}
+        timeRange={timeRange}
+        onSymbolChange={handleSymbolChange}
+        onTimeframeChange={handleTimeframeChange}
+        onTimeRangeChange={handleTimeRangeChange}
+      >
+        <div className="navbar-widgets">
+          <FearGreedChip market={marketFearGreed} onClick={openSentiment} />
+          <PortfolioBar account={account} onReset={resetAccount} />
+          {!isMobile && <LayoutMenu preset={wsPreset} onPreset={setWsPreset} locked={wsLocked} onLock={setWsLocked} onReset={() => setWsReset((n) => n + 1)} />}
         </div>
+      </Navbar>
 
-        {(rightVisible || (isMobile && mobileView !== 'chart')) && (
-          <div className="right-sidebar">
-            {!isMobile && <SidebarTabs active={tab} onChange={selectTab} onCollapse={toggleRightSidebar} />}
-            <div className="sidebar-content">
-              <ErrorBoundary label="this panel" resetKey={`${symbol}-${activeTab}`}>{tabContent}</ErrorBoundary>
+      <div className={`main-content ${useWs ? 'ws-mode' : ''}`}>
+        {useWs ? (
+          <Workspace
+            storageKey={`appGrid:${wsPreset}`}
+            panels={[
+              { id: 'chart', title: 'Chart', min: { w: 4, h: 8 }, node: chartAreaNode },
+              { id: 'positions', title: 'Positions · Orders · Stats', min: { w: 3, h: 3 }, node: stripNode },
+              { id: 'sidebar', title: 'Watchlist · Scanner · AirGap · …', min: { w: 2, h: 6 }, node: sidebarNode },
+              { id: 'trade', title: 'Quick trade', min: { w: 2, h: 3 }, node: <QuickTrade symbol={symbol} currentPrice={currentPrice} onPlaceOrder={placeOrderWithLevels} /> },
+            ]}
+            defaults={WS_DEFAULTS[wsPreset]}
+            rows={WS_ROWS}
+            locked={wsLocked}
+            resetToken={wsReset}
+          />
+        ) : (
+          <>
+            <div className="center-column" style={showChartOnMobile ? undefined : { display: 'none' }}>
+              {chartAreaNode}
+              {stripNode}
             </div>
-            {!isMobile && <QuickTrade symbol={symbol} currentPrice={currentPrice} onPlaceOrder={placeOrderWithLevels} />}
-          </div>
-        )}
 
-        {!rightVisible && !isMobile && (
-          <button className="sidebar-toggle-collapsed right" onClick={toggleRightSidebar} title="Show sidebar">
-            ◀
-          </button>
+            {(rightVisible || (isMobile && mobileView !== 'chart')) && (
+              <div className="right-sidebar">
+                {sidebarInner}
+                {!isMobile && <QuickTrade symbol={symbol} currentPrice={currentPrice} onPlaceOrder={placeOrderWithLevels} />}
+              </div>
+            )}
+
+            {!rightVisible && !isMobile && (
+              <button className="sidebar-toggle-collapsed right" onClick={toggleRightSidebar} title="Show sidebar">
+                ◀
+              </button>
+            )}
+          </>
         )}
       </div>
 
