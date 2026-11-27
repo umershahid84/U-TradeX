@@ -88,7 +88,7 @@ export interface PineResult {
   boxes: PineBox[];
   labels: PineLabel[];
   /** Longer timeframes the script asked for with request.security (so the app can load real candles for them) */
-  securityTfs: string[];
+  securityReqs: { sym: string; tf: string }[];
   /** bgcolor(): the background colour of each candle (undefined where none) */
   bg: (string | undefined)[];
   /** The Pine version from //@version=N (5 when the script does not say) */
@@ -112,7 +112,7 @@ const COLORS: Record<string, string> = {
 
 const NAMESPACES_AS_STRING = new Set([
   'shape', 'location', 'size', 'plot', 'hline', 'display', 'format', 'extend', 'line', 'label',
-  'xloc', 'yloc', 'scale', 'position', 'text', 'font', 'alert', 'barmerge', 'currency', 'session',
+  'xloc', 'yloc', 'scale', 'position', 'text', 'font', 'alert', 'barmerge', 'currency', 'session', 'earnings', 'dividends', 'splits',
 ]);
 
 const IGNORED = new Set([
@@ -121,6 +121,13 @@ const IGNORED = new Set([
   'line.set_xy2', 'line.delete', 'box.new', 'box.delete', 'table.new', 'table.cell', 'log.info',
   'log.warning', 'log.error', 'runtime.error', 'max_bars_back', 'timeframe.change',
 ]);
+
+/** "AMEX:SPY" -> "SPY", "TVC:VIX" -> "^VIX": the Yahoo-style symbol the app can load */
+const normalizeSecuritySymbol = (sym: string): string => {
+  const s = (sym.includes(':') ? sym.slice(sym.indexOf(':') + 1) : sym).trim().toUpperCase();
+  const map: Record<string, string> = { VIX: '^VIX', SPX: '^GSPC', NDX: '^NDX', DJI: '^DJI', IXIC: '^IXIC', RUT: '^RUT', DXY: 'DX-Y.NYB', TNX: '^TNX', US10Y: '^TNX' };
+  return map[s] ?? s;
+};
 
 const nyParts = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/New_York', year: 'numeric', month: 'numeric', day: 'numeric',
@@ -198,8 +205,10 @@ class Interp {
   declSrc = new Map<string, Stmt>();
   secCache = new Map<string, { vals: Val[]; map: number[]; last: boolean[] }>();
   isSub = false;
+  /** The chart's symbol, for syminfo.ticker */
+  symbol = '';
   /** Real candles for the longer timeframes (base candles to build each timeframe from), when the app has loaded them */
-  htfData: Record<string, PineBar[]> = {};
+  htfData: Record<string, PineBar[]> = {};  // keyed "SYMBOL|TIMEFRAME" (empty symbol = the chart's own)
   drawings = new Map<number, { kind: 'line' | 'box' | 'label'; d: any }>();
   nextDraw = 1;
   tableList = new Map<number, PineTable & { deleted?: boolean }>();
@@ -212,7 +221,7 @@ class Interp {
 
   result: PineResult = {
     title: 'Custom Indicator', overlay: false, plots: [], hlines: [], fills: [],
-    markers: [], inputs: [], warnings: [], tables: [], lines: [], boxes: [], labels: [], bg: [], securityTfs: [], version: 5,
+    markers: [], inputs: [], warnings: [], tables: [], lines: [], boxes: [], labels: [], bg: [], securityReqs: [], version: 5,
   };
   plotById = new Map<number, PinePlot>();
   hlineById = new Map<number, number>();
@@ -546,8 +555,8 @@ class Interp {
     if (name === 'barstate.isfirst') return this.i === 0;
     if (name === 'barstate.isconfirmed' || name === 'barstate.ishistory') return true;
     if (name === 'barstate.isrealtime' || name === 'barstate.isnew') return false;
-    if (name === 'syminfo.tickerid' || name === 'syminfo.ticker') return 'SYMBOL';
-    if (name === 'syminfo.root') return 'SYMBOL';
+    if (name === 'syminfo.tickerid') return this.symbol ? `NASDAQ:${this.symbol}` : 'SYMBOL';
+    if (name === 'syminfo.ticker' || name === 'syminfo.root') return this.symbol || 'SYMBOL';
     if (name === 'syminfo.type') return 'stock';
     if (name === 'syminfo.pointvalue') return 1;
     if (name === 'syminfo.mintick') return 0.01;
@@ -675,10 +684,10 @@ class Interp {
    * Candles of a longer timeframe, built from base candles: real loaded ones when the app supplied them, otherwise the
    * chart's own. `map` gives each chart candle's higher-timeframe candle and `last` marks the chart candle that closes it.
    */
-  private higherBars(tf: string): { bars: PineBar[]; map: number[]; last: boolean[]; real: boolean } | null {
+  private higherBars(tf: string, baseOverride?: PineBar[]): { bars: PineBar[]; map: number[]; last: boolean[]; real: boolean } | null {
     const key = this.bucketKey(tf);
     if (!key) return null;
-    const real = this.htfData[tf.trim().toUpperCase()] ?? this.htfData[tf.trim()];
+    const real = baseOverride ?? this.htfData[`|${tf.trim().toUpperCase()}`];
     const base = real && real.length ? real : this.bars;
     const bars: PineBar[] = [];
     const idx = new Map<string, number>();
@@ -722,21 +731,42 @@ class Interp {
     const lookahead = String(named('lookahead') ? this.eval(named('lookahead')!) : 'barmerge.lookahead_off').includes('on');
     const nas = (): Val => (exprNode.k === 'arr' ? exprNode.items.map(() => null) : null);
 
-    const own = sym === '' || sym === 'SYMBOL' || sym === 'syminfo.tickerid';
-    if (!own) {
-      this.warn(`request.security() for another symbol (${sym}) is not available here, so it returns na`);
-      return nas();
-    }
-    if (tf === 'chart' || tf === '') return this.eval(exprNode);
+    const own = sym === '' || sym === 'SYMBOL' || sym === 'syminfo.tickerid' || (!!this.symbol && (sym === this.symbol || sym.replace(/^[A-Z]+:/, '') === this.symbol));
+    const symKey = own ? '' : normalizeSecuritySymbol(sym);
+    const tfKey = tf === 'chart' || tf === '' ? 'CHART' : tf.trim().toUpperCase();
+    if (own && tfKey === 'CHART') return this.eval(exprNode);
+    if (!this.result.securityReqs.some((r) => r.sym === symKey && r.tf === tfKey)) this.result.securityReqs.push({ sym: symKey, tf: tfKey });
 
-    const key = this.callPath.join('>') + '|' + e.id;
+    const key = this.callPath.join('>') + '|' + e.id + '|' + symKey + '|' + tfKey;
     let res = this.secCache.get(key);
     if (!res) {
-      const hb = this.higherBars(tf);
-      if (!this.result.securityTfs.includes(tf)) this.result.securityTfs.push(tf);
-      if (!hb) {
-        this.warn(`request.security() timeframe "${tf}" is not longer than the chart's, so the chart's own candles were used`);
-        return this.eval(exprNode);
+      let hb: { bars: PineBar[]; map: number[]; last: boolean[]; real: boolean } | null = null;
+      if (own) {
+        hb = this.higherBars(tf);
+        if (!hb) {
+          this.warn(`request.security() timeframe "${tf}" is not longer than the chart's, so the chart's own candles were used`);
+          return this.eval(exprNode);
+        }
+      } else {
+        // another symbol: its candles are loaded by the chart on request; until they arrive the result is na
+        const base = this.htfData[`${symKey}|${tfKey}`];
+        if (!base || !base.length) {
+          this.warn(`request.security(${sym}) is waiting for that symbol's candles (na until they load, or na for good if the symbol cannot be loaded)`);
+          return nas();
+        }
+        if (tfKey === 'CHART') {
+          // same timeframe as the chart: each chart candle takes the other symbol's candle at the same time (or the latest before)
+          const map: number[] = [];
+          let k = 0;
+          this.bars.forEach((cb, i) => {
+            while (k + 1 < base.length && base[k + 1].time <= cb.time) k++;
+            map[i] = base[k].time <= cb.time ? k : -1;
+          });
+          hb = { bars: base, map, last: this.bars.map(() => true), real: true };
+        } else {
+          hb = this.higherBars(tf, base);
+          if (!hb) return nas();
+        }
       }
       // run the expression over every candle of that timeframe once, with the script's own definitions available
       const sub = new Interp(hb.bars, this.userInputs);
@@ -744,6 +774,7 @@ class Interp {
       sub.declSrc = this.declSrc;
       sub.fnDefs = this.fnDefs;
       sub.result.version = this.result.version;
+      sub.symbol = this.symbol;
       const vals: Val[] = [];
       for (sub.i = 0; sub.i < hb.bars.length; sub.i++) vals.push(sub.eval(exprNode));
       res = { vals, map: hb.map, last: hb.last };
@@ -1366,6 +1397,42 @@ for (const [fn, prop] of [['cell_set_text', 'text'], ['cell_set_text_color', 'te
   });
 }
 
+// request.earnings: earnings dates are not available here, so it returns na (scripts treat that as "no data")
+def('request.earnings', ['symbol', 'field'], (c) => { c.warn('request.earnings() has no data here and returns na'); return null; });
+def('request.dividends', ['symbol', 'field'], (c) => { c.warn('request.dividends() has no data here and returns na'); return null; });
+def('request.splits', ['symbol', 'field'], (c) => { c.warn('request.splits() has no data here and returns na'); return null; });
+
+/** Milliseconds of a wall-clock time in a time zone (default New York, the exchange clock) */
+const zonedTime = (y: number, mo: number, d: number, h: number, mi: number, s: number, tz = 'America/New_York'): number => {
+  const guess = Date.UTC(y, mo - 1, d, h, mi, s);
+  try {
+    const f = new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: false });
+    const p: Record<string, string> = {};
+    f.formatToParts(new Date(guess)).forEach((x) => (p[x.type] = x.value));
+    const shown = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
+    return guess - (shown - guess);
+  } catch {
+    return guess;
+  }
+};
+// timestamp("2026-01-01 00:00"), timestamp(2026, 1, 1, 0, 0), timestamp("America/New_York", 2026, 1, 1, 0, 0)
+LIB['timestamp'] = {
+  params: [],
+  pre: (a, r) => { a.r = r; },
+  fn: (c, a) => {
+    const r: Val[] = a.r;
+    if (r.length === 1 && typeof r[0] === 'string') {
+      const m = /^\s*(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?\s*$/.exec(r[0]);
+      if (!m) return c.err(`timestamp(): cannot read the date "${r[0]}" (use YYYY-MM-DD HH:MM)`);
+      return zonedTime(+m[1], +m[2], +m[3], +(m[4] ?? 0), +(m[5] ?? 0), +(m[6] ?? 0));
+    }
+    const tz = typeof r[0] === 'string' ? r[0] : undefined;
+    const n = (tz ? r.slice(1) : r).map((v) => (isNum(v) ? v : 0));
+    if (n.length < 3) return c.err('timestamp() needs a date string or year, month, day');
+    return zonedTime(n[0], n[1], n[2], n[3] ?? 0, n[4] ?? 0, n[5] ?? 0, tz);
+  },
+};
+
 // request.security: only the chart's own symbol and timeframe are available here, so only that form is accepted
 def('request.security', ['symbol', 'timeframe', 'expression', 'gaps', 'lookahead'], (c, a) => {
   const tf = String(a.timeframe ?? '');
@@ -1377,12 +1444,15 @@ export function runPine(
   source: string,
   bars: PineBar[],
   userInputs: Record<string, number | boolean | string> = {},
-  /** Real candles for longer timeframes ("60", "D" ...), used by request.security when present */
-  htfData: Record<string, PineBar[]> = {}
+  /** Real candles for request.security, keyed "SYMBOL|TIMEFRAME" (empty symbol = the chart's own; timeframe CHART = the chart's) */
+  htfData: Record<string, PineBar[]> = {},
+  /** About the chart: its symbol (syminfo.ticker) */
+  meta: { symbol?: string } = {}
 ): PineResult {
   const program = parse(source);
   const interp = new Interp(bars, userInputs);
-  interp.htfData = Object.fromEntries(Object.entries(htfData).map(([k, v]) => [k.trim().toUpperCase(), v]));
+  interp.htfData = htfData;
+  interp.symbol = meta.symbol ?? '';
   // the version comment: 4, 5 and 6 are accepted
   const ver = /^\s*\/\/\s*@version\s*=\s*(\d+)/m.exec(source);
   if (ver) {

@@ -197,10 +197,13 @@ export class CustomIndicatorManager {
   // Real candles for the longer timeframes scripts ask for with request.security (loaded by the chart on request)
   private htf: Record<string, PineBar[]> = {};
   private htfAsked = new Set<string>();
-  onNeedHtf: ((tf: string) => void) | null = null;
+  /** The chart's symbol (syminfo.ticker for scripts) */
+  symbol = '';
+  onNeedHtf: ((req: { sym: string; tf: string }) => void) | null = null;
 
-  setHtf(tf: string, bars: PineBar[]) {
-    this.htf[tf.trim().toUpperCase()] = bars;
+  /** Candles for a script's request.security: symbol "" is the chart's own, timeframe "CHART" the chart's */
+  setHtf(req: { sym: string; tf: string }, bars: PineBar[]) {
+    this.htf[`${req.sym}|${req.tf}`] = bars;
     this.runCache.clear();
   }
 
@@ -222,12 +225,12 @@ export class CustomIndicatorManager {
       result = hit.result;
     } else {
       const t0 = Date.now();
-      result = runPine(ind.source, data, ind.inputValues ?? {}, this.htf);
-      for (const tf of result.securityTfs) {
-        const k = tf.trim().toUpperCase();
+      result = runPine(ind.source, data, ind.inputValues ?? {}, this.htf, { symbol: this.symbol });
+      for (const req of result.securityReqs) {
+        const k = `${req.sym}|${req.tf}`;
         if (!this.htf[k] && !this.htfAsked.has(k)) {
           this.htfAsked.add(k);
-          this.onNeedHtf?.(tf);
+          this.onNeedHtf?.(req);
         }
       }
       this.runCache.set(ind.id, { key, at: Date.now(), ms: Date.now() - t0, result });
