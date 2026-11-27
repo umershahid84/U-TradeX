@@ -165,6 +165,26 @@ export class RealMarketDataService {
     return data.bars;
   }
 
+  /** Candles and where they came from: 'moomoo' when Moomoo's live candles are laid over Yahoo's history */
+  async fetchChartWithSource(
+    symbol: string,
+    interval: string,
+    range: string,
+    includePrePost: boolean,
+    /** 'yahoo' skips Moomoo (a full scan); 'scan' lets Moomoo serve a limited number of symbols */
+    mode: 'yahoo' | 'scan'
+  ): Promise<{ bars: ChartData[]; source: 'moomoo' | 'yahoo' }> {
+    const data = await this.apiGet<{ bars: ChartData[]; source?: string }>('chart', {
+      symbol: this.normalizeSymbol(symbol),
+      interval,
+      range,
+      prepost: String(includePrePost),
+      ...(mode === 'yahoo' ? { yahoo: '1' } : { scan: '1' }),
+    });
+    if (!Array.isArray(data.bars) || data.bars.length === 0) throw new Error(`No market data returned for ${symbol}`);
+    return { bars: data.bars, source: data.source && data.source.includes('moomoo') ? 'moomoo' : 'yahoo' };
+  }
+
   // Get current quote for a symbol. Throws if no live price could be fetched
   // (callers keep showing the last known real price instead of a made-up one).
   async getCurrentPrice(symbol: string, includePrePost: boolean = true): Promise<number> {

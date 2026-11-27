@@ -48,3 +48,6 @@
 
 .ag-source { margin-bottom: 8px; font-size: 11px; color: #ffca28; line-height: 1.35; }
 .ag-source.moomoo { color: #26a69a; }
+
+.ag-src { font-size: 9.5px; padding: 0 5px; border-radius: 3px; background: #2a2e4f; color: #8a8fb5; }
+.ag-src.moomoo { background: rgba(38,166,154,.18); color: #26a69a; }

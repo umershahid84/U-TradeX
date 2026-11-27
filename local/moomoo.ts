@@ -28,6 +28,10 @@ const US_MARKET = 11; // Qot_Common.QotMarket_US_Security
 const SUB_BASIC = 1; // Qot_Common.SubType_Basic
 const SUB_ORDERBOOK = 2; // Qot_Common.SubType_OrderBook
 const MAX_SUBSCRIPTIONS = 60;
+// the Air Gap scanner may hold this many candle subscriptions at once; the rest of its symbols use Yahoo
+const SCAN_SLOTS = 25;
+// OpenD only lets a subscription be cancelled a minute after it was made
+const MIN_SUB_AGE_MS = 65_000;
 const RETRY_AFTER_FAILURE_MS = 15000;
 
 type Query = Record<string, string | undefined>;
@@ -327,12 +331,46 @@ export class MoomooQuoteClient {
   }
 
   /** The most recent candles for a code at an API interval ('5m', '1h', ...); null if that interval is not offered */
-  async candles(code: string, interval: string, extended: boolean): Promise<{ bars: Bar[]; ms: number } | null> {
+  private scanSubs: { code: string; subType: number; extended: boolean; at: number }[] = [];
+
+  /** Cancel a subscription (read-only housekeeping: it frees one of the account's quote slots) */
+  private async unsubscribe(t: QuoteTransport, code: string, subType: number, extended: boolean) {
+    try {
+      await t.Sub({ c2s: { securityList: this.securities([code]), subTypeList: [subType], isSubOrUnSub: false, isRegOrUnRegPush: false, ...(extended ? { extendedTime: true } : {}) } });
+    } finally {
+      this.subscribed.delete(`${code}|${subType}|${extended ? 1 : 0}`);
+    }
+  }
+
+  /**
+   * The most recent candles. With `scan` the request comes from the Air Gap scanner, which may only hold SCAN_SLOTS
+   * subscriptions: when they are all taken the oldest is cancelled for the new symbol, and if none is old enough yet the
+   * answer is null (the caller uses Yahoo for that symbol).
+   */
+  async candles(code: string, interval: string, extended: boolean, opts: { scan?: boolean } = {}): Promise<{ bars: Bar[]; ms: number } | null> {
     const spec = KL[interval];
     if (!spec) return null;
     const t = await this.ensure();
+    if (opts.scan) {
+      const known = this.scanSubs.find((s) => s.code === code && s.subType === spec.subType && s.extended === extended);
+      if (!known) {
+        if (this.scanSubs.length >= SCAN_SLOTS) {
+          const oldest = this.scanSubs[0];
+          if (Date.now() - oldest.at < MIN_SUB_AGE_MS) return null;
+          this.scanSubs.shift();
+          try {
+            await this.unsubscribe(t, oldest.code, oldest.subType, oldest.extended);
+          } catch {
+            /* the slot is reused anyway */
+          }
+        }
+      }
+    }
     const ok = await this.subscribe(t, [code], spec.subType, extended);
     if (!ok.length) return null;
+    if (opts.scan && !this.scanSubs.some((s) => s.code === code && s.subType === spec.subType && s.extended === extended)) {
+      this.scanSubs.push({ code, subType: spec.subType, extended, at: Date.now() });
+    }
     const res = await t.GetKL({ c2s: { rehabType: 1, klType: spec.klType, security: this.securities([code])[0], reqNum: 1000 } });
     return { bars: klToBars(res?.s2c?.klList), ms: spec.ms };
   }
@@ -741,11 +779,11 @@ export function withMoomoo(route: RouteFn, client: MoomooQuoteClient, cfg: Moomo
     if (p === 'chart') {
       const code = toMoomooCode(query.symbol ?? '');
       const base = await route(path, query);
-      // scans ask for Yahoo only: a few hundred symbols must not use up Moomoo's limited subscriptions
+      // a full scan asks for Yahoo only: hundreds of symbols must not use up Moomoo's limited subscriptions
       if (query.yahoo === '1') return base;
       if (!code || !KL[query.interval ?? '5m']) return base;
       try {
-        const live = await client.candles(code, query.interval ?? '5m', query.prepost === 'true');
+        const live = await client.candles(code, query.interval ?? '5m', query.prepost === 'true', { scan: query.scan === '1' });
         if (live && live.bars.length) {
           const yahooBars: Bar[] = base.status === 200 ? (base.body as any).bars : [];
           const merged = trimDays(mergeBars(yahooBars, live.bars, live.ms), query.range ?? '1d');

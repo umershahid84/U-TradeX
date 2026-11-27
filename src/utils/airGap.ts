@@ -53,6 +53,8 @@ export interface AirGapSetup {
   gapFrom: number;
   gapTo: number;
   score: number;
+  /** Where the candles came from: Moomoo's live candles, or Yahoo (delayed) */
+  source: 'moomoo' | 'yahoo';
   /** Time of the newest candle used (a closed market shows the last session) */
   asOf: number;
   clouds: GapCloud[];
@@ -84,7 +86,7 @@ export const DEFAULT_GAP_OPTS: AirGapOpts = { freshBars: 6 };
  * cloud (above: long, below: short; inside it, the trend between the fast and slow clouds), and the target is the near
  * edge of the next cloud that way. Returns null when no cloud lies ahead or there is too little history.
  */
-export const findAirGap = (symbol: string, bars: ChartData[], dailyAtr: number | null, opts: Partial<AirGapOpts> = {}): AirGapSetup | null => {
+export const findAirGap = (symbol: string, bars: ChartData[], dailyAtr: number | null, opts: Partial<AirGapOpts> = {}, source: 'moomoo' | 'yahoo' = 'yahoo'): AirGapSetup | null => {
   const o = { ...DEFAULT_GAP_OPTS, ...opts };
   const n = bars.length;
   if (n < 60) return null;
@@ -168,7 +170,7 @@ export const findAirGap = (symbol: string, bars: ChartData[], dailyAtr: number |
     stop: long ? fast.bottom - atr * 0.1 : fast.top + atr * 0.1,
     target, targetLabel, room, roomPct: (room / price) * 100, roomAtr, reach, aligned, state,
     breakTime: breakIdx >= 0 ? bars[breakIdx].time : null,
-    gapFrom, gapTo: target, score, asOf: bars[n - 1].time,
+    gapFrom, gapTo: target, score, source, asOf: bars[n - 1].time,
     clouds: clouds.map(({ idx: _i, ...c }) => c),
   };
 };

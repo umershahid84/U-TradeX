@@ -122,14 +122,15 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
   }, []);
 
   // one symbol: candles and the day's usual range, then its air gap
-  const scanSymbol = useCallback(async (symbol: string): Promise<AirGapSetup | null> => {
+  const scanSymbol = useCallback(async (symbol: string, hot: boolean): Promise<AirGapSetup | null> => {
     const market = RealMarketDataService.getInstance();
     const { interval } = settingsRef.current;
-    const bars = await market.fetchChartData(symbol, interval, interval === '5m' ? '5d' : '1mo', false, true);
+    // a full pass uses Yahoo (hundreds of symbols); the best candidates are re-read from Moomoo's live candles when it is connected
+    const { bars, source } = await market.fetchChartWithSource(symbol, interval, interval === '5m' ? '5d' : '1mo', false, hot ? 'scan' : 'yahoo');
     const day = etClock(Date.now()).date;
     let d = daily.current.get(symbol);
     // most symbols have no air gap at all: the day's usual range is only fetched for the ones that do
-    if ((!d || d.day !== day) && !findAirGap(symbol, bars, null)) return null;
+    if ((!d || d.day !== day) && !findAirGap(symbol, bars, null, {}, source)) return null;
     if (!d || d.day !== day) {
       let value: number | null = null;
       try {
@@ -140,7 +141,7 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
       d = { day, value };
       daily.current.set(symbol, d);
     }
-    return findAirGap(symbol, bars, d.value);
+    return findAirGap(symbol, bars, d.value, {}, source);
   }, []);
 
   const handle = useCallback(
@@ -200,7 +201,7 @@ export function useAirGapScanner({ watchlist, onAlert }: Options) {
           const sym = queue.shift();
           if (!sym) return;
           try {
-            const s = await scanSymbol(sym);
+            const s = await scanSymbol(sym, !full);
             if (s) {
               live.current[sym] = s;
               handle(s, barMs);

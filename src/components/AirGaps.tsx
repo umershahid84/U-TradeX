@@ -51,6 +51,7 @@ const Row: React.FC<{ s: AirGapSetup; rank?: number; active: boolean; onSelect: 
         {s.atrLeft === null ? 'ATR left —' : `ATR left $${money(s.atrLeft)}`}
         {s.reach !== null && <b className={s.reach >= 1 ? 'up' : 'down'}> {s.reach >= 1 ? '✓ covers' : '✗ short'}</b>}
       </span>
+      <span className={`ag-src ${s.source}`} title={s.source === 'moomoo' ? "Candles from your Moomoo OpenD (live)" : 'Candles from Yahoo (can be delayed)'}>{s.source === 'moomoo' ? 'Moomoo live' : 'Yahoo'}</span>
       {!s.aligned && <span className="ag-warn">against trend</span>}
     </div>
   </button>
@@ -191,8 +192,9 @@ export const AirGaps: React.FC<Props> = ({ settings, update, ranked, setupCount,
       <div className="ag-note">
         Air gap: empty space between two EMA clouds (5/12, 34/50, 72/89, 180/200). When price is on the far side of its own cloud and
         the next cloud is far away, nothing stands in the way, and that cloud's near edge is the target. Ranked by room (in ATRs) and
-        how much of the day's usual range is left. The lists are approximate index membership, data is Yahoo's (delayed) and a
-        pass over the Nasdaq 100 and S&amp;P 500 takes a minute or two. A rule-based screen, not a prediction or advice.
+        how much of the day's usual range is left. Lists come from Moomoo when it is connected. Candles: a full pass reads Yahoo (delayed) for every
+        symbol; the best candidates are then re-read from Moomoo's live candles (a limited number at a time, so your live
+        prices are not starved). Each row says which it used. A pass over the Nasdaq 100 and S&amp;P 500 takes a minute or two. A rule-based screen, not a prediction or advice.
       </div>
     </div>
   );
