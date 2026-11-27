@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AirGapSetup } from '../utils/airGap';
 import { UNIVERSES } from '../utils/universes';
 import { GapAlert, GapSettings } from '../hooks/useAirGapScanner';
 import { enableSound, playAlert } from '../utils/alertSound';
 import { RealMarketDataService, WatchQuote } from '../services/realMarketData';
+import { COLS, Rect, Rects, compact, loadRects, rowsOf, saveRects } from '../utils/gridLayout';
 import './AirGapDashboard.css';
 
 interface Props {
@@ -29,6 +30,19 @@ const money = (n: number) => n.toFixed(2);
 const clock = (ms: number) => new Date(ms).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
 const MARKETS = ['SPY', 'QQQ', 'IWM', '^VIX'];
 const LAYOUT_KEY = 'airGapDashLayout';
+const LOCK_KEY = 'airGapDashLocked';
+const ROW_H = 32;
+
+type PanelId = 'markets' | 'top3' | 'alerts' | 'table';
+const PANEL_TITLES: Record<PanelId, string> = { markets: 'Markets', top3: 'Top 3 right now', alerts: "Today's alerts", table: 'Ranked table' };
+
+/** Starting arrangement of each layout, in grid units (12 columns, rows of 32 px) */
+const DEFAULTS: Record<Layout, Rects> = {
+  full: { markets: { x: 0, y: 0, w: 2, h: 10 }, top3: { x: 2, y: 0, w: 7, h: 12 }, alerts: { x: 9, y: 0, w: 3, h: 22 }, table: { x: 0, y: 12, w: 9, h: 11 } },
+  focus: { top3: { x: 0, y: 0, w: 9, h: 13 }, alerts: { x: 9, y: 0, w: 3, h: 13 } },
+  table: { table: { x: 0, y: 0, w: 9, h: 22 }, alerts: { x: 9, y: 0, w: 3, h: 22 } },
+};
+const MIN: Record<PanelId, { w: number; h: number }> = { markets: { w: 2, h: 6 }, top3: { w: 4, h: 8 }, alerts: { w: 2, h: 6 }, table: { w: 4, h: 6 } };
 
 const watchlist = (): string[] => {
   try {
@@ -107,10 +121,34 @@ export const AirGapDashboard: React.FC<Props> = ({ settings, update, ranked, set
     }
   });
   const [tableAll, setTableAll] = useState(false);
+  // draggable panels: where each one is (per layout), whether the arrangement is locked, and the drag in progress
+  const [rects, setRects] = useState<Rects>(() => loadRects(`airGapDashGrid:${layout}`, DEFAULTS[layout]));
+  const [locked, setLocked] = useState(() => {
+    try {
+      return localStorage.getItem(LOCK_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [drag, setDrag] = useState<{ id: PanelId; mode: 'move' | 'resize'; px: number; py: number; orig: Rect; dx: number; dy: number } | null>(null);
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(1200);
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
+    ro.observe(el);
+    setWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+  // narrow screens stack the panels instead
+  const free = width >= 900;
+  const cellW = width / COLS;
   const [quotes, setQuotes] = useState<WatchQuote[]>([]);
 
   const pickLayout = (l: Layout) => {
     setLayout(l);
+    setRects(loadRects(`airGapDashGrid:${l}`, DEFAULTS[l]));
     try {
       localStorage.setItem(LAYOUT_KEY, l);
     } catch {
@@ -141,6 +179,50 @@ export const AirGapDashboard: React.FC<Props> = ({ settings, update, ranked, set
     () => ranked.filter((s) => (direction === 'all' ? true : direction === 'long' ? s.side === 'long' : direction === 'short' ? s.side === 'short' : mine.has(s.symbol))),
     [ranked, direction, mine]
   );
+  const toggleLock = () => {
+    setLocked((v) => {
+      try {
+        localStorage.setItem(LOCK_KEY, v ? '0' : '1');
+      } catch {
+        /* storage unavailable */
+      }
+      return !v;
+    });
+  };
+  const resetLayout = () => {
+    setRects(DEFAULTS[layout]);
+    saveRects(`airGapDashGrid:${layout}`, DEFAULTS[layout]);
+  };
+
+  /** Where every panel is right now: the stored arrangement, or the one a drag in progress would produce */
+  const shown: Rects = useMemo(() => {
+    if (!drag) return rects;
+    const o = drag.orig;
+    const next: Rect =
+      drag.mode === 'move'
+        ? { ...o, x: Math.max(0, Math.min(COLS - o.w, Math.round(o.x + drag.dx / cellW))), y: Math.max(0, Math.round(o.y + drag.dy / ROW_H)) }
+        : { ...o, w: Math.max(MIN[drag.id].w, Math.min(COLS - o.x, Math.round(o.w + drag.dx / cellW))), h: Math.max(MIN[drag.id].h, Math.round(o.h + drag.dy / ROW_H)) };
+    return compact({ ...rects, [drag.id]: next }, drag.id);
+  }, [rects, drag, cellW]);
+
+  const startDrag = (id: PanelId, mode: 'move' | 'resize') => (e: React.PointerEvent) => {
+    if (locked || !free || e.button > 0) return;
+    if ((e.target as HTMLElement).closest('button, a, input, select, summary')) return;
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    setDrag({ id, mode, px: e.clientX, py: e.clientY, orig: rects[id], dx: 0, dy: 0 });
+  };
+  const moveDrag = (e: React.PointerEvent) => {
+    if (drag) setDrag({ ...drag, dx: e.clientX - drag.px, dy: e.clientY - drag.py });
+  };
+  const endDrag = () => {
+    if (!drag) return;
+    const done = compact(shown);
+    setRects(done);
+    saveRects(`airGapDashGrid:${layout}`, done);
+    setDrag(null);
+  };
+
   const scanning = settings.running && progress.total > 0 && progress.done < progress.total;
   const entries = board.filter((a) => a.type === 'entry').length;
   const targets = board.filter((a) => a.type === 'target').length;
@@ -198,10 +280,19 @@ export const AirGapDashboard: React.FC<Props> = ({ settings, update, ranked, set
         </div>
       )}
 
-      <div className={`agd-grid ${layout}`}>
-        {layout === 'full' && (
-          <section className="agd-panel agd-markets">
-            <h3>Markets</h3>
+      {(() => {
+        const grab = (id: PanelId) => ({
+          className: locked || !free ? '' : 'agd-grab',
+          title: locked || !free ? undefined : 'Drag to move this panel',
+          onPointerDown: startDrag(id, 'move'),
+          onPointerMove: moveDrag,
+          onPointerUp: endDrag,
+          onPointerCancel: endDrag,
+        });
+        const bodies: Record<PanelId, React.ReactNode> = {
+      markets: (
+        <>
+            <h3 {...grab('markets')}>Markets</h3>
             {MARKETS.map((m) => {
               const q = quotes.find((x) => x.symbol.toUpperCase() === m);
               return (
@@ -217,22 +308,21 @@ export const AirGapDashboard: React.FC<Props> = ({ settings, update, ranked, set
               <div className="agd-breadth-bar" title={`${upPct}% of scanned stocks are up today`}><i style={{ width: `${upPct}%` }} /></div>
               <small>{breadth.total ? `${upPct}% of the ${breadth.total.toLocaleString()} stocks scanned are up` : 'Start a scan to measure breadth'}</small>
             </div>
-          </section>
-        )}
-
-        {layout !== 'table' && (
-          <section className="agd-panel agd-top3">
-            <h3>Top 3 right now <small>rows 1–3 of the top {Math.min(10, list.length)}</small></h3>
+        </>
+      ),
+      top3: (
+        <>
+            <h3 {...grab('top3')}>Top 3 right now <small>rows 1–3 of the top {Math.min(10, list.length)}</small></h3>
             {list.length === 0 ? (
               <div className="agd-empty">{settings.running ? (scanning ? 'Scanning…' : `No setup with at least ${settings.minRoomAtr} ATR of room right now.`) : 'Press Scan now. The best three air gaps appear here as cards.'}</div>
             ) : (
               <div className="agd-cards">{list.slice(0, 3).map((s, i) => <Card key={s.symbol} s={s} n={i + 1} onSelect={onSelect} />)}</div>
             )}
-          </section>
-        )}
-
-        <section className="agd-panel agd-alerts">
-          <h3>Today's alerts</h3>
+        </>
+      ),
+      alerts: (
+        <>
+          <h3 {...grab('alerts')}>Today's alerts</h3>
           <div className="agd-counts">
             <span>Entries <b>{entries}</b></span>
             <span>Targets hit <b className="up">{targets}</b></span>
@@ -254,11 +344,11 @@ export const AirGapDashboard: React.FC<Props> = ({ settings, update, ranked, set
               );
             })}
           </div>
-        </section>
-
-        {layout !== 'focus' && (
-          <section className="agd-panel agd-table">
-            <h3>
+        </>
+      ),
+      table: (
+        <>
+            <h3 {...grab('table')}>
               {tableAll ? 'All setups' : 'Top 10'} <small>sorted by setup strength · click a row for the chart</small>
               <button type="button" className="agd-more" onClick={() => setTableAll((v) => !v)}>{tableAll ? 'Show top 10' : 'Show all'}</button>
             </h3>
@@ -284,9 +374,52 @@ export const AirGapDashboard: React.FC<Props> = ({ settings, update, ranked, set
                 </tbody>
               </table>
             </div>
-          </section>
-        )}
-      </div>
+        </>
+      ),
+        };
+        const visible: PanelId[] = layout === 'full' ? ['markets', 'top3', 'alerts', 'table'] : layout === 'focus' ? ['top3', 'alerts'] : ['table', 'alerts'];
+        const canMove = free && !locked;
+        return (
+          <>
+            <div className="agd-tools">
+              <button type="button" onClick={toggleLock} title={locked ? 'Unlock to drag and resize the panels' : 'Lock the arrangement'}>{locked ? '🔒 Locked' : '🔓 Unlocked'}</button>
+              <button type="button" onClick={resetLayout}>↺ Reset layout</button>
+              <span>{free ? (locked ? 'Unlock to rearrange the panels.' : 'Drag a panel by its title, resize it from its bottom-right corner. Saved for each layout.') : 'Panels stack on a narrow screen.'}</span>
+            </div>
+            <div
+              ref={canvasRef}
+              className={`agd-canvas ${free ? 'free' : 'stack'} ${drag ? 'dragging' : ''}`}
+              style={free ? { height: Math.max(rowsOf(shown) * ROW_H, 200) + 8 } : undefined}
+            >
+              {visible.map((id) => {
+                const r = shown[id] ?? DEFAULTS[layout][id];
+                const moving = drag?.id === id && drag.mode === 'move';
+                const style: React.CSSProperties = free
+                  ? {
+                      left: moving ? drag!.orig.x * cellW + drag!.dx : r.x * cellW,
+                      top: moving ? drag!.orig.y * ROW_H + drag!.dy : r.y * ROW_H,
+                      width: r.w * cellW,
+                      height: r.h * ROW_H,
+                    }
+                  : {};
+                return (
+                  <React.Fragment key={id}>
+                    {moving && <div className="agd-ghost" style={{ left: r.x * cellW, top: r.y * ROW_H, width: r.w * cellW, height: r.h * ROW_H }} />}
+                    <div className={`agd-cell ${moving ? 'moving' : ''}`} style={style} data-panel={id}>
+                      <section className={`agd-panel agd-${id}`} aria-label={PANEL_TITLES[id]}>
+                        {bodies[id]}
+                      </section>
+                      {canMove && (
+                        <div className="agd-resize" title="Drag to resize" onPointerDown={startDrag(id, 'resize')} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} />
+                      )}
+                    </div>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          </>
+        );
+      })()}
 
       <div className="agd-note">
         Air gap: empty space between two EMA clouds. A rule-based screen of Moomoo and Yahoo candles (Yahoo can be delayed). Educational, not a prediction or advice.
