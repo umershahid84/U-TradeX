@@ -67,7 +67,7 @@ export const ChartLegend: React.FC<Props> = ({ items }) => {
                   </button>
                 )}
                 {it.onSettings && <button type="button" onClick={it.onSettings} title="Settings" aria-label="Settings">⚙</button>}
-                {it.onRemove && <button type="button" onClick={it.onRemove} title="Remove" aria-label="Remove">✕</button>}
+                {it.onRemove && <button type="button" onClick={it.onRemove} title="Remove from chart" aria-label="Remove from chart">✕</button>}
               </span>
             </li>
           ))}

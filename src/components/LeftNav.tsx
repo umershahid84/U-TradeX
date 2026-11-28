@@ -16,7 +16,6 @@ interface Props {
 
 const CHART_TOOLS: { id: ChartUiCommand['id']; icon: string; label: string; hint: string }[] = [
   { id: 'indicators', icon: '📊', label: 'Indicators', hint: 'Indicators, clouds and your saved scripts' },
-  { id: 'myindicators', icon: '🧩', label: 'My indicators', hint: 'Your saved Pine scripts: add, edit, remove' },
   { id: 'alerts', icon: '🔔', label: 'Alerts', hint: 'Price alerts' },
   { id: 'style', icon: '🎨', label: 'Style', hint: 'Candle style, theme and colours' },
   { id: 'plan', icon: '📐', label: 'Trade plan', hint: 'Drag entry, stop and target' },

@@ -1615,7 +1615,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       onRemove: () => setAutoChart((a) => ({ ...a, enabled: false })),
     });
   }
-  customIndicators.forEach((ci) => {
+  customIndicators.filter((ci) => ci.enabled).forEach((ci) => {
     legendItems.push({
       id: `custom-${ci.id}`,
       name: ci.name,
@@ -1624,7 +1624,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       hidden: !ci.enabled || isHidden(`custom-${ci.id}`),
       onToggle: () => toggleHidden(`custom-${ci.id}`),
       onSettings: () => setShowCustomPanel(true),
-      onRemove: () => handleRemoveCustomIndicator(ci.id),
+      // ✕ takes it off the chart only; the script stays in My indicators (delete it there)
+      onRemove: () => { handleUpdateCustomIndicator(ci.id, { enabled: false }); setHiddenIds((prev) => prev.filter((x) => x !== `custom-${ci.id}`)); },
     });
   });
 
