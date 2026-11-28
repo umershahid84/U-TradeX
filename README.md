@@ -859,3 +859,10 @@ npm run dev
 ```
 
 Deploy by importing the repo into Vercel (Vite preset); no environment variables are needed.
+
+## Backtest, Draw menu and draggable panels
+
+- **Backtest** (left menu → Views): replays the Air Gap entry or the 5/12 curl over ~3 months of Yahoo 5-minute candles (regular hours), with min room, stop/target in ATRs (or cloud edge / next cloud), side and trend filters and a per-trade cost. Shows win/stop/target rates, average result after costs, profit factor, drawdown, an equity curve, first-half vs second-half and a **control** (the opposite side with the same stop and target). It is a short in-sample window: it cannot prove an edge.
+- **Draw** group in the left menu: Cursor, Trend line, Horizontal line, Rectangle, Fib retracement and Clear drawings (the rail on the chart is hidden). **My indicators** is a left-menu item too.
+- The Indicators panel, My indicators editor, Alerts and Chart style windows can be dragged by their grip bar (position is remembered). Saving a script closes its window and stores it immediately.
+- The Positions panel shrinks to its header when folded with the ▾ arrow, and the panels below move up.

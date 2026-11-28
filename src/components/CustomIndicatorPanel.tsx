@@ -11,6 +11,8 @@ interface CustomIndicatorPanelProps {
   onAddIndicator: (indicator: CustomIndicator) => void;
   onUpdateIndicator: (id: string, patch: Partial<CustomIndicator>) => void;
   onRemoveIndicator: (id: string) => void;
+  /** Called after a script is saved or added, so the window can close */
+  onDone?: () => void;
 }
 
 const JS_EXAMPLE = 'prices.map((p, i) => i < 19 ? NaN : prices.slice(i - 19, i + 1).reduce((a, b) => a + b, 0) / 20)';
@@ -21,6 +23,7 @@ export const CustomIndicatorPanel: React.FC<CustomIndicatorPanelProps> = ({
   onAddIndicator,
   onUpdateIndicator,
   onRemoveIndicator,
+  onDone,
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null); // 'new' or an indicator id
   const [name, setName] = useState('');
@@ -66,6 +69,7 @@ export const CustomIndicatorPanel: React.FC<CustomIndicatorPanelProps> = ({
       onUpdateIndicator(editingId, { name: finalName, language, source, color, lineWidth, inputValues: {} });
     }
     setEditingId(null);
+    onDone?.();
   };
 
   // Tab inserts two spaces in the code editor instead of moving focus

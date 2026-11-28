@@ -7,6 +7,8 @@ export interface PanelDef {
   title: string;
   node: React.ReactNode;
   min: { w: number; h: number };
+  /** When set the panel is folded: it shrinks to this many rows (the panels below move up) and its saved size is kept */
+  collapsedH?: number;
 }
 
 interface Props {
@@ -61,32 +63,42 @@ export const Workspace: React.FC<Props> = ({ storageKey, panels, defaults, rows,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetToken]);
 
+  const base: Rects = useMemo(() => {
+    const fold = panels.filter((p) => p.collapsedH && rects[p.id]);
+    if (!fold.length) return rects;
+    const next = { ...rects };
+    fold.forEach((p) => { next[p.id] = { ...rects[p.id], h: Math.min(rects[p.id].h, p.collapsedH!) }; });
+    return compact(next);
+  }, [rects, panels]);
   const [drag, setDrag] = useState<{ id: string; mode: 'move' | 'resize'; px: number; py: number; orig: Rect; dx: number; dy: number } | null>(null);
   const minOf = (id: string) => panels.find((p) => p.id === id)?.min ?? { w: 2, h: 3 };
 
   const shown: Rects = useMemo(() => {
-    if (!drag) return rects;
+    if (!drag) return base;
     const o = drag.orig;
     const next: Rect =
       drag.mode === 'move'
         ? { ...o, x: Math.max(0, Math.min(COLS - o.w, Math.round(o.x + drag.dx / cellW))), y: Math.max(0, Math.round(o.y + drag.dy / rowH)) }
         : { ...o, w: Math.max(minOf(drag.id).w, Math.min(COLS - o.x, Math.round(o.w + drag.dx / cellW))), h: Math.max(minOf(drag.id).h, Math.round(o.h + drag.dy / rowH)) };
-    return compact({ ...rects, [drag.id]: next }, drag.id);
+    return compact({ ...base, [drag.id]: next }, drag.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rects, drag, cellW, rowH]);
+  }, [base, drag, cellW, rowH]);
 
   const start = (id: string, mode: 'move' | 'resize') => (e: React.PointerEvent) => {
     if (locked || e.button > 0) return;
     e.preventDefault();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    setDrag({ id, mode, px: e.clientX, py: e.clientY, orig: rects[id], dx: 0, dy: 0 });
+    setDrag({ id, mode, px: e.clientX, py: e.clientY, orig: base[id], dx: 0, dy: 0 });
   };
   const move = (e: React.PointerEvent) => {
     if (drag) setDrag({ ...drag, dx: e.clientX - drag.px, dy: e.clientY - drag.py });
   };
   const end = () => {
     if (!drag) return;
-    const done = compact(shown);
+    const folded = panels.filter((p) => p.collapsedH && !(drag.id === p.id && drag.mode === 'resize'));
+    const keep = { ...shown };
+    folded.forEach((p) => { if (rects[p.id]) keep[p.id] = { ...keep[p.id], h: rects[p.id].h }; });
+    const done = compact(keep, drag.id);
     setRects(done);
     saveRects(storageKey, done);
     setDrag(null);

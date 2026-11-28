@@ -18,6 +18,7 @@ import { LateDayChip } from './components/LateDayChip';
 import { Scanner } from './components/Scanner';
 import { Politicians } from './components/Politicians';
 import { AirGaps } from './components/AirGaps';
+import { Backtest } from './components/Backtest';
 import { AirGapDashboard } from './components/AirGapDashboard';
 import { Workspace } from './components/Workspace';
 import { LayoutMenu } from './components/LayoutMenu';
@@ -164,7 +165,7 @@ const INTERVAL_NAME: Record<string, string> = {
   '10m': '10-minute', '15m': '15-minute', '30m': '30-minute', '1h': 'hourly', '4h': '4-hour', '1d': 'daily', '1wk': 'weekly', '1mo': 'monthly', '3mo': 'quarterly',
 };
 
-const TAB_IDS: SidebarTab[] = ['watchlist', 'scanner', 'bots', 'trade', 'options', 'sentiment', 'politicians', 'airgaps'];
+const TAB_IDS: SidebarTab[] = ['watchlist', 'scanner', 'bots', 'trade', 'options', 'sentiment', 'politicians', 'airgaps', 'backtest'];
 
 const loadTab = (): SidebarTab => {
   const saved = getStorageValue('sidebarTab', 'watchlist');
@@ -794,6 +795,7 @@ function App() {
     <>
       {activeTab === 'watchlist' && <Watchlist activeSymbol={symbol} onSelect={(s) => { handleSymbolChange(s); if (isMobile) setMobileView('chart'); }} />}
       {activeTab === 'scanner' && <Scanner activeSymbol={symbol} onSelect={(s) => { handleSymbolChange(s); if (isMobile) setMobileView('chart'); }} />}
+      {activeTab === 'backtest' && <Backtest />}
       {activeTab === 'airgaps' && (
         <AirGaps
           settings={gap.settings}
@@ -988,7 +990,7 @@ function App() {
             storageKey={`appGrid:${wsPreset}`}
             panels={[
               { id: 'chart', title: 'Chart', min: { w: 4, h: 8 }, node: chartAreaNode },
-              { id: 'positions', title: 'Positions · Orders · Stats', min: { w: 3, h: 3 }, node: stripNode },
+              { id: 'positions', title: 'Positions · Orders · Stats', min: { w: 3, h: 2 }, collapsedH: stripOpen ? undefined : 2, node: stripNode },
               { id: 'sidebar', title: TAB_META.find((t) => t.id === tab)?.label ?? 'Panel', min: { w: 2, h: 6 }, node: sidebarNode },
               { id: 'trade', title: 'Quick trade', min: { w: 2, h: 3 }, node: <QuickTrade symbol={symbol} currentPrice={currentPrice} onPlaceOrder={placeOrderWithLevels} /> },
             ]}

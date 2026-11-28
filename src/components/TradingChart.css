@@ -457,3 +457,6 @@ body.chart-expanded { overflow: hidden; }
 /* the tool buttons live in the side menu: panels open from the top of the chart */
 .trading-chart-container.no-toolbar .indicator-panel { top: 10px; }
 .trading-chart-container.no-toolbar .chart-top-controls:empty { display: none; }
+
+.fp-grip { margin: -4px -4px 8px; padding: 3px 8px; font-size: 10.5px; font-weight: 600; letter-spacing: .3px; color: #8a8fb5; background: rgba(16, 20, 47, .85); border-bottom: 1px solid #2a2e4f; border-radius: 4px 4px 0 0; cursor: grab; user-select: none; touch-action: none; }
+.fp-grip:hover { color: #e0e0e0; }

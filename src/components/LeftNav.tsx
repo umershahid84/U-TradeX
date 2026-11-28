@@ -16,12 +16,21 @@ interface Props {
 
 const CHART_TOOLS: { id: ChartUiCommand['id']; icon: string; label: string; hint: string }[] = [
   { id: 'indicators', icon: '📊', label: 'Indicators', hint: 'Indicators, clouds and your saved scripts' },
+  { id: 'myindicators', icon: '🧩', label: 'My indicators', hint: 'Your saved Pine scripts: add, edit, remove' },
   { id: 'alerts', icon: '🔔', label: 'Alerts', hint: 'Price alerts' },
   { id: 'style', icon: '🎨', label: 'Style', hint: 'Candle style, theme and colours' },
   { id: 'plan', icon: '📐', label: 'Trade plan', hint: 'Drag entry, stop and target' },
   { id: 'autoplan', icon: '🧭', label: 'Auto plan', hint: 'Entry, stop and targets from the EMA clouds' },
   { id: 'politicians', icon: '🏛', label: 'Congress marks', hint: 'Congress trades marked on the chart' },
-  { id: 'fibonacci', icon: '🔢', label: 'Fibonacci', hint: 'Retracement levels' },
+  { id: 'fibonacci', icon: '🔢', label: 'Auto Fibonacci', hint: 'Retracement levels from the visible swing' },
+];
+
+const DRAW_TOOLS: { id: ChartUiCommand['id']; tool: string; icon: string; label: string; hint: string }[] = [
+  { id: 'tool:none', tool: 'none', icon: '🖱️', label: 'Cursor', hint: 'Normal cursor (stop drawing)' },
+  { id: 'tool:trendline', tool: 'trendline', icon: '📈', label: 'Trend line', hint: 'Click two points on the chart' },
+  { id: 'tool:horizontal', tool: 'horizontal', icon: '➖', label: 'Horizontal line', hint: 'Click a price' },
+  { id: 'tool:rectangle', tool: 'rectangle', icon: '▭', label: 'Rectangle', hint: 'Click two corners' },
+  { id: 'tool:fibonacci', tool: 'fibonacci', icon: '🔢', label: 'Fib retracement', hint: 'Draw a Fibonacci between two points' },
 ];
 
 const KEY = 'leftNavCollapsed';
@@ -63,7 +72,13 @@ export const LeftNav: React.FC<Props> = ({ active, onSelect, airGapAlerts, onOpe
       </button>
       <div className="ln-head">{collapsed ? '' : 'Chart'}</div>
       <div className="ln-list">
-        {CHART_TOOLS.map((t) => item(`tool-${t.id}`, t.icon, t.label, !!chartUi?.[t.id], () => onChartTool(t.id), t.id === 'alerts' ? chartUi?.alertCount : undefined, t.hint))}
+        {CHART_TOOLS.map((t) => item(`tool-${t.id}`, t.icon, t.label, !!(chartUi as unknown as Record<string, unknown> | null)?.[t.id], () => onChartTool(t.id), t.id === 'alerts' ? chartUi?.alertCount : undefined, t.hint))}
+      </div>
+      <div className="ln-sep" />
+      <div className="ln-head">{collapsed ? '' : 'Draw'}</div>
+      <div className="ln-list">
+        {DRAW_TOOLS.map((t) => item(`draw-${t.id}`, t.icon, t.label, (chartUi?.tool ?? 'none') === t.tool, () => onChartTool(t.id), undefined, t.hint))}
+        {item('draw-clear', '🗑️', 'Clear drawings', false, () => onChartTool('clear'), undefined, 'Remove all drawings from the chart')}
       </div>
       <div className="ln-sep" />
       <div className="ln-head">{collapsed ? '' : 'Views'}</div>

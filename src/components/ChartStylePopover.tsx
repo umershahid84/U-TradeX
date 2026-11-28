@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { CHART_TYPES, ChartStyleSettings, ChartTheme, ChartType } from '../utils/chartStyle';
+import { useDraggable } from '../hooks/useDraggable';
 import './ChartStylePopover.css';
 
 interface Props {
@@ -87,8 +88,10 @@ export const ChartStylePopover: React.FC<Props> = ({ settings, onChange, onClose
     };
   }, [onClose]);
 
+  const drag = useDraggable('stylePopover');
   return (
-    <div className="style-popover" ref={ref} role="dialog" aria-label="Chart style">
+    <div className="style-popover" ref={(el) => { ref.current = el; drag.ref.current = el; }} style={drag.style} role="dialog" aria-label="Chart style">
+      <div className="fp-grip" {...drag.handleProps}>⠿ Chart style</div>
       <h4>Chart type</h4>
       <div className="style-types">
         {CHART_TYPES.map((t) => (

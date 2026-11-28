@@ -44,6 +44,7 @@ import { RealMarketDataService } from '../services/realMarketData';
 import { DrawingTools, DrawingTool } from './DrawingTools';
 import { IndicatorPanels } from './IndicatorPanels';
 import { CustomIndicatorPanel } from './CustomIndicatorPanel';
+import { useDraggable } from '../hooks/useDraggable';
 import { CustomIndicatorManager } from './customIndicatorManager';
 import { CloudSeries } from '../plugins/cloudSeries';
 import { attachSessionBands, SessionBandsPrimitive } from '../plugins/sessionBands';
@@ -52,11 +53,14 @@ import './TradingChart.css';
 
 /** A command from the side menu to a chart tool */
 export interface ChartUiCommand {
-  id: 'indicators' | 'alerts' | 'style' | 'plan' | 'autoplan' | 'politicians' | 'fibonacci';
+  id: 'indicators' | 'myindicators' | 'alerts' | 'style' | 'plan' | 'autoplan' | 'politicians' | 'fibonacci' | 'tool:none' | 'tool:trendline' | 'tool:horizontal' | 'tool:rectangle' | 'tool:fibonacci' | 'clear';
   n: number;
 }
 export interface ChartUiState {
   indicators: boolean;
+  myindicators: boolean;
+  /** The drawing tool in use ('none' = cursor) */
+  tool: DrawingTool;
   alerts: boolean;
   style: boolean;
   plan: boolean;
@@ -187,7 +191,11 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   // Higher-timeframe bars for clouds whose timeframe differs from the chart's, keyed by timeframe
   const [htfBars, setHtfBars] = useState<Partial<Record<CloudTf, ChartData[]>>>({});
   const [htfLoading, setHtfLoading] = useState(false);
-  const indicatorPanelRef = useRef<HTMLDivElement>(null);
+  const indicatorPanelRef = useRef<HTMLDivElement | null>(null);
+  // the floating panels over the chart can be dragged by their grip bar (their position is remembered)
+  const dragIndicators = useDraggable('indicatorPanel');
+  const dragAlerts = useDraggable('alertsPanel');
+  const dragCustom = useDraggable('customPanel');
   const [showFibonacci, setShowFibonacci] = useState(false);
   const [selectedTool, setSelectedTool] = useState<DrawingTool>('none');
   const [ripsterTrend, setRipsterTrend] = useState<'bullish' | 'bearish' | 'neutral'>('neutral');
@@ -1722,16 +1730,21 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     setIndicators(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
+  // Saved at once (not only by the effect), so a reload right after Save cannot lose the script
+  const commitCustom = (next: CustomIndicator[]) => {
+    try { localStorage.setItem('customIndicators', JSON.stringify(next)); } catch { /* storage unavailable */ }
+    return next;
+  };
   const handleAddCustomIndicator = (indicator: CustomIndicator) => {
-    setCustomIndicators(prev => [...prev, indicator]);
+    setCustomIndicators(prev => commitCustom([...prev, indicator]));
   };
 
   const handleUpdateCustomIndicator = (id: string, patch: Partial<CustomIndicator>) => {
-    setCustomIndicators(prev => prev.map(ind => (ind.id === id ? { ...ind, ...patch } : ind)));
+    setCustomIndicators(prev => commitCustom(prev.map(ind => (ind.id === id ? { ...ind, ...patch } : ind))));
   };
 
   const handleRemoveCustomIndicator = (id: string) => {
-    setCustomIndicators(prev => prev.filter(ind => ind.id !== id));
+    setCustomIndicators(prev => commitCustom(prev.filter(ind => ind.id !== id)));
   };
 
   // Constants for drawing
@@ -1786,6 +1799,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     lastCmd.current = uiCommand.n;
     switch (uiCommand.id) {
       case 'indicators': setShowIndicatorPanel((v) => !v); break;
+      case 'myindicators': setShowCustomPanel((v) => !v); break;
+      case 'tool:none': case 'tool:trendline': case 'tool:horizontal': case 'tool:rectangle': case 'tool:fibonacci': handleToolSelect(uiCommand.id.slice(5) as DrawingTool); break;
+      case 'clear': handleClearAllDrawings(); break;
       case 'alerts': setShowAlertsPanel((v) => !v); break;
       case 'style': setShowStylePopover((v) => !v); break;
       case 'plan': setPlanOpen((v) => !v); setAutoPlanOpen(false); break;
@@ -1799,11 +1815,11 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   // tell the side menu which tools are open
   useEffect(() => {
     onUiState?.({
-      indicators: showIndicatorPanel, alerts: showAlertsPanel, style: showStylePopover, plan: planOpen,
+      indicators: showIndicatorPanel, myindicators: showCustomPanel, tool: selectedTool, alerts: showAlertsPanel, style: showStylePopover, plan: planOpen,
       autoplan: autoPlanOpen, politicians: polOn, fibonacci: showFibonacci, alertCount: activeAlertCount,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showIndicatorPanel, showAlertsPanel, showStylePopover, planOpen, autoPlanOpen, polOn, showFibonacci, activeAlertCount]);
+  }, [showIndicatorPanel, showCustomPanel, selectedTool, showAlertsPanel, showStylePopover, planOpen, autoPlanOpen, polOn, showFibonacci, activeAlertCount]);
 
   // Render custom (Pine Script / JavaScript) indicators. They live in their own manager,
   // so toggling built-in indicators never removes them and removed ones are cleaned up.
@@ -1828,6 +1844,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   return (
     <div ref={rootRef} className={`trading-chart-container ${expanded ? 'expanded' : ''} ${hideToolbar ? 'no-toolbar' : ''}`} data-chart-theme={chartStyle.theme}>
       <DrawingTools
+        hidden={hideToolbar}
         selectedTool={selectedTool}
         onToolSelect={handleToolSelect}
         onClearAll={handleClearAllDrawings}
@@ -1917,7 +1934,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       <ChartLegend items={legendItems} />
 
       {showIndicatorPanel && (
-        <div className="indicator-panel" ref={indicatorPanelRef}>
+        <div className="indicator-panel" ref={(el) => { indicatorPanelRef.current = el; dragIndicators.ref.current = el; }} style={dragIndicators.style}>
+          <div className="fp-grip" {...dragIndicators.handleProps}>⠿ Indicators</div>
           <button className="panel-close" onClick={() => setShowIndicatorPanel(false)} title="Close menu (indicators stay on the chart)">✕</button>
           <div className="indicator-checkboxes">
             {renderCloudInstances()}
@@ -2097,7 +2115,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       )}
 
       {showAlertsPanel && (
-        <div className="custom-panel-overlay alerts-overlay">
+        <div className="custom-panel-overlay alerts-overlay" ref={dragAlerts.ref} style={dragAlerts.style}>
+          <div className="fp-grip" {...dragAlerts.handleProps}>⠿ Alerts</div>
           <AlertsPanel
             symbol={symbol}
             currentPrice={data.length ? data[data.length - 1].close : 0}
@@ -2159,13 +2178,15 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       )}
 
       {showCustomPanel && (
-        <div className="custom-panel-overlay">
+        <div className="custom-panel-overlay" ref={dragCustom.ref} style={dragCustom.style}>
+          <div className="fp-grip" {...dragCustom.handleProps}>⠿ My indicators</div>
           <CustomIndicatorPanel
             indicators={customIndicators}
             statuses={customStatuses}
             onAddIndicator={handleAddCustomIndicator}
             onUpdateIndicator={handleUpdateCustomIndicator}
             onRemoveIndicator={handleRemoveCustomIndicator}
+            onDone={() => setShowCustomPanel(false)}
           />
         </div>
       )}

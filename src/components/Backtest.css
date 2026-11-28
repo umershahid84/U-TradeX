@@ -1,0 +1,13 @@
+.backtest { background: #141938; border: 1px solid #2a2e4f; border-radius: 8px; padding: 12px; color: #cfd2e8; font-size: 12px; }
+.bt-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.bt-f { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: #8a8fb5; }
+.bt-f input, .bt-f select { background: #0d1030; color: #e0e0e0; border: 1px solid #2a2e4f; border-radius: 4px; padding: 4px 6px; font-size: 12px; }
+.bt-chk { grid-column: 1 / -1; font-size: 12px; }
+.bt-prog { margin: 6px 0; color: #ffb74d; }
+.bt-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin: 8px 0; }
+.bt-grid div { background: #0d1030; border-radius: 6px; padding: 6px 8px; display: flex; flex-direction: column; }
+.bt-grid b { font-size: 14px; color: #e0e0e0; } .bt-grid span { font-size: 10px; color: #8a8fb5; }
+.bt-grid .pos b, .pos { color: #26a69a; } .bt-grid .neg b, .neg { color: #ef5350; }
+.bt-curve { width: 100%; height: 90px; background: #0d1030; border-radius: 6px; }
+.bt-tbl { width: 100%; border-collapse: collapse; margin: 8px 0; } .bt-tbl td, .bt-tbl th { padding: 3px 4px; text-align: left; border-bottom: 1px solid #22264a; font-weight: 400; }
+.bt-note { color: #8a8fb5; font-size: 11px; line-height: 1.4; }

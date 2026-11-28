@@ -12,9 +12,11 @@ interface DrawingToolsProps {
   onToolSelect: (tool: DrawingTool) => void;
   selectedTool: DrawingTool;
   onClearAll: () => void;
+  /** The tools are buttons of the side menu instead */
+  hidden?: boolean;
 }
 
-const TOOLS: { id: DrawingTool; label: string; icon: string }[] = [
+export const DRAWING_TOOLS: { id: DrawingTool; label: string; icon: string }[] = [
   { id: 'none', label: 'Cursor', icon: '🖱️' },
   { id: 'trendline', label: 'Trend Line', icon: '📈' },
   { id: 'horizontal', label: 'Horizontal Line', icon: '➖' },
@@ -23,9 +25,10 @@ const TOOLS: { id: DrawingTool; label: string; icon: string }[] = [
 ];
 
 /** Slim vertical tool rail along the left edge of the chart */
-export const DrawingTools: React.FC<DrawingToolsProps> = ({ onToolSelect, selectedTool, onClearAll }) => (
+export const DrawingTools: React.FC<DrawingToolsProps> = ({ onToolSelect, selectedTool, onClearAll, hidden }) =>
+  hidden ? null : (
   <div className="drawing-rail" role="toolbar" aria-label="Drawing tools">
-    {TOOLS.map((tool) => (
+    {DRAWING_TOOLS.map((tool) => (
       <button
         key={tool.id}
         className={`rail-btn ${selectedTool === tool.id ? 'active' : ''}`}
