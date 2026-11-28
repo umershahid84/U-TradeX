@@ -565,6 +565,8 @@ class Interp {
     if (name === 'syminfo.pointvalue') return 1;
     if (name === 'syminfo.mintick') return 0.01;
     if (name === 'timeframe.period') return 'chart';
+    if (name === 'timeframe.multiplier') return this.barMs() < 20 * 3600 * 1000 ? Math.max(1, Math.round(this.barMs() / 60000)) : 1;
+    if (name === 'timeframe.in_seconds') return Math.round(this.barMs() / 1000);
     if (name === 'timeframe.isintraday') return this.barMs() < 20 * 3600 * 1000;
     if (name === 'timeframe.isdaily') return this.barMs() >= 20 * 3600 * 1000 && this.barMs() < 6 * 86400000;
     if (name === 'timeframe.isweekly') return this.barMs() >= 6 * 86400000 && this.barMs() < 27 * 86400000;
@@ -1475,6 +1477,37 @@ LIB['timestamp'] = {
     const n = (tz ? r.slice(1) : r).map((v) => (isNum(v) ? v : 0));
     if (n.length < 3) return c.err('timestamp() needs a date string or year, month, day');
     return zonedTime(n[0], n[1], n[2], n[3] ?? 0, n[4] ?? 0, n[5] ?? 0, tz);
+  },
+};
+
+// time(timeframe [, session [, timezone]]): the open time of the bar's period on that timeframe, or na when the bar is
+// outside the session ("0930-1600"). Markets are read in New York time.
+LIB['time'] = {
+  params: ['timeframe', 'session', 'timezone'],
+  fn: (c, a) => {
+    const t: number = c.series('time', 0) as number;
+    const tf = String(a.timeframe ?? 'chart');
+    const p: Record<string, string> = {};
+    nyParts.formatToParts(new Date(t)).forEach((x) => (p[x.type] = x.value));
+    if (typeof a.session === 'string' && a.session) {
+      const m = /^(\d{2})(\d{2})-(\d{2})(\d{2})/.exec(a.session);
+      if (m) {
+        const mins = (+p.hour % 24) * 60 + +p.minute, from = +m[1] * 60 + +m[2], to = +m[3] * 60 + +m[4];
+        const inside = from <= to ? mins >= from && mins < to : mins >= from || mins < to;
+        if (!inside) return null;
+      }
+    }
+    const y = +p.year, mo = +p.month, d = +p.day;
+    if (tf === 'chart' || tf === '') return t;
+    if (tf === 'D' || tf === '1D') return zonedTime(y, mo, d, 0, 0, 0);
+    if (tf === 'W' || tf === '1W') {
+      const back = (WEEKDAYS[p.weekday] + 5) % 7; // days since Monday
+      return zonedTime(y, mo, d - back, 0, 0, 0);
+    }
+    if (tf === 'M' || tf === '1M') return zonedTime(y, mo, 1, 0, 0, 0);
+    const n = /^(\d+)$/.exec(tf);
+    if (n) { const ms = +n[1] * 60_000; return Math.floor(t / ms) * ms; }
+    return t;
   },
 };
 
