@@ -207,6 +207,11 @@ export class CustomIndicatorManager {
     this.runCache.clear();
   }
 
+  /** A request that failed: let the next run ask for it again */
+  forgetAsked(req: { sym: string; tf: string }) {
+    this.htfAsked.delete(`${req.sym}|${req.tf}`);
+  }
+
   clearHtf() {
     this.htf = {};
     this.htfAsked.clear();

@@ -866,3 +866,9 @@ Deploy by importing the repo into Vercel (Vite preset); no environment variables
 - **Draw** group in the left menu: Cursor, Trend line, Horizontal line, Rectangle, Fib retracement and Clear drawings (the rail on the chart is hidden). **My indicators** is a left-menu item too.
 - The Indicators panel, My indicators editor, Alerts and Chart style windows can be dragged by their grip bar (position is remembered). Saving a script closes its window and stores it immediately.
 - The Positions panel shrinks to its header when folded with the ▾ arrow, and the panels below move up.
+
+### Drawing tools and side menu (update)
+- Drawing fixes: the **Rectangle** never drew (its sides repeated the same time, which the chart rejects), **Fib retracement** drew nothing, clicks past the last candle were ignored and a second click to the left of the first failed. All four work now; **Esc** drops the tool and **Undo last drawing** takes back the last one.
+- The side menu groups (Chart, Drawing, Views) fold up and remember it. **Auto Fibonacci** moved into the Indicators panel.
+- Pine: `request.security` periods newer than the loaded candles (today's day, this week) are built from the chart's own candles, so Daily pivots no longer come out `NaN`; script history is fetched from Yahoo and retried if it fails.
+- The legend (indicator list) sits at the top of the chart now that the toolbar is hidden.

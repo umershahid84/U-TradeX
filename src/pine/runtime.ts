@@ -711,6 +711,26 @@ class Interp {
         h.volume += b.volume;
       }
     });
+    // loaded candles can lag behind the chart (the newest day or week not in yet): build those periods from the chart's own candles
+    if (real && real.length) {
+      const lastReal = real[real.length - 1].time;
+      const realCount = bars.length;
+      this.bars.forEach((b) => {
+        if (b.time <= lastReal) return;
+        const k = key(b.time);
+        const at = idx.get(k);
+        if (at === undefined) {
+          idx.set(k, bars.length);
+          bars.push({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume });
+        } else if (at >= realCount) {
+          const h = bars[at];
+          h.high = Math.max(h.high, b.high);
+          h.low = Math.min(h.low, b.low);
+          h.close = b.close;
+          h.volume += b.volume;
+        }
+      });
+    }
     const map: number[] = [];
     let prev = -1;
     this.bars.forEach((b, i) => {

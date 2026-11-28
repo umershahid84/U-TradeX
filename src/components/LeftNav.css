@@ -19,3 +19,7 @@
 
 .ln-head { font-size: 10px; letter-spacing: .6px; text-transform: uppercase; color: #5a5f88; padding: 4px 10px 0; min-height: 4px; width: 100%; }
 .left-nav.collapsed .ln-head { padding: 0; }
+
+.ln-fold { background: none; border: none; text-align: left; cursor: pointer; font-family: inherit; }
+.ln-fold:hover { color: #c0c4e0; }
+.ln-caret { display: inline-block; width: 10px; }

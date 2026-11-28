@@ -53,7 +53,7 @@ import './TradingChart.css';
 
 /** A command from the side menu to a chart tool */
 export interface ChartUiCommand {
-  id: 'indicators' | 'myindicators' | 'alerts' | 'style' | 'plan' | 'autoplan' | 'politicians' | 'fibonacci' | 'tool:none' | 'tool:trendline' | 'tool:horizontal' | 'tool:rectangle' | 'tool:fibonacci' | 'clear';
+  id: 'indicators' | 'myindicators' | 'alerts' | 'style' | 'plan' | 'autoplan' | 'politicians' | 'fibonacci' | 'tool:none' | 'tool:trendline' | 'tool:horizontal' | 'tool:rectangle' | 'tool:fibonacci' | 'clear' | 'undo';
   n: number;
 }
 export interface ChartUiState {
@@ -129,6 +129,8 @@ interface DrawingObject {
   id: string;
   type: DrawingTool;
   series?: ISeriesApi<'Line'>;
+  /** Parts of one drawing (a rectangle has four lines, a Fibonacci one per level) share a group */
+  group?: string;
   data: LineData[];
   startPoint?: { time: Time; price: number };
   endPoint?: { time: Time; price: number };
@@ -462,6 +464,13 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     const drawingId = `${type}-${Date.now()}`;
     let series: ISeriesApi<'Line'> | undefined;
     let lineData: LineData[] = [];
+    // a line series needs strictly rising times: put the earlier click first and keep the two apart
+    if (Number(startPoint.time) > Number(endPoint.time)) [startPoint, endPoint] = [endPoint, startPoint];
+    if (Number(startPoint.time) === Number(endPoint.time)) {
+      const d = dataRef.current;
+      const step = d.length > 1 ? Math.max(1, Math.round((d[d.length - 1].time - d[0].time) / 1000 / (d.length - 1))) : 60;
+      endPoint = { ...endPoint, time: (Number(endPoint.time) + step) as Time };
+    }
 
     switch (type) {
       case 'trendline':
@@ -510,7 +519,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         const rectMaxPrice = Math.max(startPoint.price, endPoint.price);
 
         // Get all data points within the time range for better rendering
-        const timeStep = (rectMaxTime - rectMinTime) / RECTANGLE_SEGMENTS;
         
         // Top line
         const topSeries = chartRef.current.addSeries(LineSeries, {
@@ -520,13 +528,10 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           priceLineVisible: false,
           lastValueVisible: false,
         });
-        const topLineData: LineData[] = [];
-        for (let i = 0; i <= RECTANGLE_SEGMENTS; i++) {
-          topLineData.push({
-            time: (rectMinTime + i * timeStep) as Time,
-            value: rectMaxPrice,
-          });
-        }
+        const topLineData: LineData[] = [
+          { time: rectMinTime as Time, value: rectMaxPrice },
+          { time: rectMaxTime as Time, value: rectMaxPrice },
+        ];
         topSeries.setData(topLineData);
 
         // Bottom line
@@ -536,13 +541,10 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           priceLineVisible: false,
           lastValueVisible: false,
         });
-        const bottomLineData: LineData[] = [];
-        for (let i = 0; i <= RECTANGLE_SEGMENTS; i++) {
-          bottomLineData.push({
-            time: (rectMinTime + i * timeStep) as Time,
-            value: rectMinPrice,
-          });
-        }
+        const bottomLineData: LineData[] = [
+          { time: rectMinTime as Time, value: rectMinPrice },
+          { time: rectMaxTime as Time, value: rectMinPrice },
+        ];
         bottomSeries.setData(bottomLineData);
 
         // Left line - need multiple time points to show as vertical
@@ -552,14 +554,11 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           priceLineVisible: false,
           lastValueVisible: false,
         });
-        const priceStep = (rectMaxPrice - rectMinPrice) / RECTANGLE_SEGMENTS;
-        const leftLineData: LineData[] = [];
-        for (let i = 0; i <= RECTANGLE_SEGMENTS; i++) {
-          leftLineData.push({
-            time: rectMinTime as Time,
-            value: rectMinPrice + i * priceStep,
-          });
-        }
+        // a line series cannot have two points at the same time, so the sides rise over one second (a vertical line on screen)
+        const leftLineData: LineData[] = [
+          { time: rectMinTime as Time, value: rectMinPrice },
+          { time: (rectMinTime + 1) as Time, value: rectMaxPrice },
+        ];
         leftSeries.setData(leftLineData);
 
         // Right line
@@ -569,23 +568,44 @@ export const TradingChart: React.FC<TradingChartProps> = ({
           priceLineVisible: false,
           lastValueVisible: false,
         });
-        const rightLineData: LineData[] = [];
-        for (let i = 0; i <= RECTANGLE_SEGMENTS; i++) {
-          rightLineData.push({
-            time: rectMaxTime as Time,
-            value: rectMinPrice + i * priceStep,
-          });
-        }
+        const rightLineData: LineData[] = [
+          { time: rectMaxTime as Time, value: rectMinPrice },
+          { time: (rectMaxTime + 1) as Time, value: rectMaxPrice },
+        ];
         rightSeries.setData(rightLineData);
 
         // Store all rectangle parts as separate drawings
         drawingsRef.current.push(
-          { id: `${drawingId}-top`, type: 'rectangle', series: topSeries, data: topLineData, startPoint, endPoint },
-          { id: `${drawingId}-bottom`, type: 'rectangle', series: bottomSeries, data: bottomLineData, startPoint, endPoint },
-          { id: `${drawingId}-left`, type: 'rectangle', series: leftSeries, data: leftLineData, startPoint, endPoint },
-          { id: `${drawingId}-right`, type: 'rectangle', series: rightSeries, data: rightLineData, startPoint, endPoint }
+          { id: `${drawingId}-top`, group: drawingId, type: 'rectangle', series: topSeries, data: topLineData, startPoint, endPoint },
+          { id: `${drawingId}-bottom`, group: drawingId, type: 'rectangle', series: bottomSeries, data: bottomLineData, startPoint, endPoint },
+          { id: `${drawingId}-left`, group: drawingId, type: 'rectangle', series: leftSeries, data: leftLineData, startPoint, endPoint },
+          { id: `${drawingId}-right`, group: drawingId, type: 'rectangle', series: rightSeries, data: rightLineData, startPoint, endPoint }
         );
         return; // Early return since we already added to drawingsRef
+
+      case 'fibonacci': {
+        // retracement between the two clicks: one line per level, running on to the right of the second click
+        const hi = Math.max(startPoint.price, endPoint.price), lo = Math.min(startPoint.price, endPoint.price);
+        const up = endPoint.price >= startPoint.price; // 0% at the end of the move
+        const d = dataRef.current;
+        const step = d.length > 1 ? Math.max(1, Math.round((d[d.length - 1].time - d[0].time) / 1000 / (d.length - 1))) : 60;
+        const t0 = Number(startPoint.time), t1 = Number(endPoint.time) + step * 20;
+        const levels: { r: number; c: string }[] = [
+          { r: 0, c: '#9e9e9e' }, { r: 0.236, c: '#ef5350' }, { r: 0.382, c: '#ff9800' }, { r: 0.5, c: '#fdd835' },
+          { r: 0.618, c: '#26a69a' }, { r: 0.786, c: '#42a5f5' }, { r: 1, c: '#9e9e9e' },
+        ];
+        levels.forEach((lv, k) => {
+          const price = up ? hi - (hi - lo) * lv.r : lo + (hi - lo) * lv.r;
+          const s2 = chartRef.current!.addSeries(LineSeries, {
+            color: lv.c, lineWidth: 1, lineStyle: lv.r === 0 || lv.r === 1 ? 0 : 2, title: `${(lv.r * 100).toFixed(1)}%`,
+            priceLineVisible: false, lastValueVisible: false,
+          });
+          const dt: LineData[] = [{ time: t0 as Time, value: price }, { time: t1 as Time, value: price }];
+          s2.setData(dt);
+          drawingsRef.current.push({ id: `fibdraw-${drawingId}-${k}`, type: 'fibonacci', series: s2, group: drawingId, data: dt, startPoint, endPoint });
+        });
+        return;
+      }
 
       default:
         return;
@@ -594,6 +614,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     if (series) {
       drawingsRef.current.push({
         id: drawingId,
+        group: drawingId,
         type,
         series,
         data: lineData,
@@ -675,12 +696,21 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         setAlertArmed(false);
         return;
       }
-      if (!param.time || !param.point) return;
-      
+      if (!param.point) return;
       const price = candleSeries.coordinateToPrice(param.point.y);
       if (!price) return;
-
-      handleChartClick(param.time as Time, price as number);
+      // clicks in the empty space past the newest (or before the oldest) candle have no time: work it out from the position
+      let t = param.time as Time | undefined;
+      if (!t) {
+        const logical = chart.timeScale().coordinateToLogical(param.point.x);
+        const d = dataRef.current;
+        if (logical === null || d.length < 2) return;
+        const step = Math.max(1, Math.round((d[d.length - 1].time - d[0].time) / 1000 / (d.length - 1)));
+        const last = d.length - 1;
+        const sec = logical > last ? d[last].time / 1000 + (logical - last) * step : d[0].time / 1000 + logical * step;
+        t = Math.round(sec) as Time;
+      }
+      handleChartClick(t, price as number);
     });
 
     // Handle resize. When the width changes (e.g. a sidebar is shown or hidden) refit the
@@ -1642,6 +1672,28 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     setIsDrawingMode(false);
   };
 
+  // Esc drops the tool in use (and a line half drawn)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || selectedToolRef.current === 'none') return;
+      selectedToolRef.current = 'none';
+      drawingStateRef.current = { isDrawing: false, startPoint: null };
+      setSelectedTool('none');
+      setIsDrawingMode(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // take back the last drawing (all its lines)
+  const handleUndoDrawing = () => {
+    const list = drawingsRef.current.filter((d) => d.group && !d.id.startsWith('fib-'));
+    const g = list[list.length - 1]?.group;
+    if (!g) return;
+    drawingsRef.current.filter((d) => d.group === g).forEach((d) => d.series && chartRef.current?.removeSeries(d.series));
+    drawingsRef.current = drawingsRef.current.filter((d) => d.group !== g);
+  };
+
   const handleClearAllDrawings = () => {
     // Remove all drawing series from the chart
     drawingsRef.current.forEach((drawing) => {
@@ -1650,6 +1702,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       }
     });
     drawingsRef.current = [];
+    setShowFibonacci(false);
+    drawingStateRef.current = { isDrawing: false, startPoint: null };
+    setIsDrawingMode(false);
     setSelectedTool('none');
     selectedToolRef.current = 'none';
   };
@@ -1717,14 +1772,15 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
   const removeFibonacciLevels = () => {
     // Remove only Fibonacci drawings
-    const fibDrawings = drawingsRef.current.filter(d => d.type === 'fibonacci');
+    const isAuto = (d: DrawingObject) => d.type === 'fibonacci' && !d.id.startsWith('fibdraw');
+    const fibDrawings = drawingsRef.current.filter(isAuto);
     fibDrawings.forEach((drawing) => {
       if (drawing.series && chartRef.current) {
         chartRef.current.removeSeries(drawing.series);
       }
     });
     // Keep only non-fibonacci drawings
-    drawingsRef.current = drawingsRef.current.filter(d => d.type !== 'fibonacci');
+    drawingsRef.current = drawingsRef.current.filter(d => !isAuto(d));
   };
 
   const toggleIndicator = (key: keyof IndicatorState) => {
@@ -1748,11 +1804,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     setCustomIndicators(prev => commitCustom(prev.filter(ind => ind.id !== id)));
   };
 
-  // Constants for drawing
-  const RECTANGLE_SEGMENTS = 10; // Number of segments for smooth rectangle rendering
-
   // A script's request.security(..., "60" / "D" ...) is answered with real candles of that timeframe, loaded here on request
   const [htfTick, setHtfTick] = useState(0);
+  const htfRetries = useRef<Record<string, number>>({});
   const loadScriptTfRef = useRef<(req: { sym: string; tf: string }) => void>(() => undefined);
   loadScriptTfRef.current = (req: { sym: string; tf: string }) => {
     const target = req.sym || symbol;
@@ -1778,13 +1832,20 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     }
     if (!interval) return;
     RealMarketDataService.getInstance()
-      .fetchChartData(target, interval, range, includeAfterHours && interval !== '1d')
+      // history for a script comes from Yahoo (it does not use up Moomoo's limited subscriptions)
+      .fetchChartData(target, interval, range, includeAfterHours && interval !== '1d', true)
       .then((raw) => {
         const bars = build ? build(raw) : raw;
         customManagerRef.current?.setHtf(req, bars.map((d) => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume })));
         setHtfTick((v) => v + 1);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        // try again shortly (up to three times) instead of leaving the script with na for good
+        const mgr = customManagerRef.current;
+        const tries = (htfRetries.current[`${req.sym}|${req.tf}`] ?? 0) + 1;
+        htfRetries.current[`${req.sym}|${req.tf}`] = tries;
+        if (mgr && tries <= 3) setTimeout(() => { mgr.forgetAsked(req); setHtfTick((v) => v + 1); }, 2000 * tries);
+      });
   };
   // another symbol (or extended hours switched) means other candles
   useEffect(() => {
@@ -1803,6 +1864,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       case 'myindicators': setShowCustomPanel((v) => !v); break;
       case 'tool:none': case 'tool:trendline': case 'tool:horizontal': case 'tool:rectangle': case 'tool:fibonacci': handleToolSelect(uiCommand.id.slice(5) as DrawingTool); break;
       case 'clear': handleClearAllDrawings(); break;
+      case 'undo': handleUndoDrawing(); break;
       case 'alerts': setShowAlertsPanel((v) => !v); break;
       case 'style': setShowStylePopover((v) => !v); break;
       case 'plan': setPlanOpen((v) => !v); setAutoPlanOpen(false); break;
@@ -1953,6 +2015,14 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               <button type="button" className="my-ind-add" onClick={() => { setShowCustomPanel(true); setShowIndicatorPanel(false); }}>
                 ＋ Add or edit a script…
               </button>
+            </div>
+
+            <div className="indicator-group auto-group">
+              <h4>Fibonacci</h4>
+              <label>
+                <input type="checkbox" checked={showFibonacci} onChange={() => addFibonacciLevels()} />
+                Auto Fibonacci levels
+              </label>
             </div>
 
             <div className="indicator-group auto-group">
