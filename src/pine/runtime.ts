@@ -1003,7 +1003,48 @@ def('ta.lowest', ['source', 'length'], () => null, (a) => {
   if (a.length === undefined && isNum(a.source)) { a.length = a.source; a.source = undefined; a.__low = true; }
 });
 LIB['ta.lowest'].fn = (c, a, _n, st) => lowestStep(st, num(a.__low ? c.series('low', 0) : a.source), a.length);
+// percentiles over the last `length` values (Pine ignores na values; fewer than `length` so far gives na)
+const sortedWin = (st: St, x: Val, n: number): number[] | null => {
+  (st.pbuf ||= []).push(num(x));
+  if (st.pbuf.length > n) st.pbuf.shift();
+  if (st.pbuf.length < n) return null;
+  const w = st.pbuf.filter((v: number | null) => v !== null) as number[];
+  return w.length ? w.sort((p: number, q: number) => p - q) : null;
+};
+def('ta.percentile_linear_interpolation', ['source', 'length', 'percentage'], (_c, a, _n, st) => {
+  const w = sortedWin(st, a.source, a.length);
+  if (!w) return null;
+  const pos = (Math.max(0, Math.min(100, a.percentage)) / 100) * (w.length - 1);
+  const lo = Math.floor(pos), hi = Math.ceil(pos);
+  return w[lo] + (w[hi] - w[lo]) * (pos - lo);
+});
+def('ta.percentile_nearest_rank', ['source', 'length', 'percentage'], (_c, a, _n, st) => {
+  const w = sortedWin(st, a.source, a.length);
+  if (!w) return null;
+  return w[Math.max(0, Math.min(w.length - 1, Math.ceil((a.percentage / 100) * w.length) - 1))];
+});
+def('ta.percentrank', ['source', 'length'], (_c, a, _n, st) => {
+  (st.rb ||= []).push(num(a.source));
+  if (st.rb.length > a.length + 1) st.rb.shift();
+  const cur = st.rb[st.rb.length - 1];
+  if (st.rb.length < a.length + 1 || cur === null) return null;
+  const prev = st.rb.slice(0, -1).filter((v: number | null) => v !== null) as number[];
+  return prev.length ? (prev.filter((v) => v <= cur).length / a.length) * 100 : null;
+});
 def('ta.sum', ['source', 'length'], (_c, a, _n, st) => { const w = win(st, num(a.source), a.length); return w ? w.reduce((x: number, y: number) => x + y, 0) : null; });
+LIB['math.sum'] = LIB['ta.sum'];
+def('ta.linreg', ['source', 'length', 'offset'], (_c, a, _n, st) => {
+  const n = a.length;
+  const w = win(st, num(a.source), n);
+  if (!w) return null;
+  // least squares line through the last n values; value at `offset` bars back from the newest
+  let sx = 0, sy = 0, sxy = 0, sxx = 0;
+  for (let k = 0; k < n; k++) { sx += k; sy += w[k]; sxy += k * w[k]; sxx += k * k; }
+  const den = n * sxx - sx * sx;
+  const slope = den ? (n * sxy - sx * sy) / den : 0;
+  const icpt = (sy - slope * sx) / n;
+  return icpt + slope * (n - 1 - (a.offset ?? 0));
+});
 def('ta.cum', ['source'], (_c, a, _n, st) => { st.v = (st.v ?? 0) + (num(a.source) ?? 0); return st.v; });
 def('ta.change', ['source', 'length'], (_c, a, _n, st) => {
   const n = a.length ?? 1;
