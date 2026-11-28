@@ -549,6 +549,10 @@ class Interp {
       const c = COLORS[name.slice(6)];
       if (c) return c;
     }
+    if (name.startsWith('dayofweek.')) {
+      const d = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].indexOf(name.slice(10));
+      if (d >= 0) return d + 1;
+    }
     if (name === 'math.pi') return Math.PI;
     if (name === 'math.e') return Math.E;
     if (name === 'barstate.islast') return this.i === this.bars.length - 1;
